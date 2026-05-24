@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -24,7 +23,7 @@ enum Pathway {
 model BatteryPack {
   id          String @id @default(uuid())
   packAadhaar String @unique @map("pack_aadhaar")
-
+  weightKg    Decimal? @db.Decimal(8, 2) @map("weight_kg")
   chemistry Chemistry
 
   manufacturer String?
@@ -113,6 +112,9 @@ model PathwayFactor {
 
   cellReplacementRate Decimal? @map("cell_replacement_rate")
 
+  ageCap      Int? @map("age_cap")
+  cycleCap      Int? @map("cycle_cap")
+
   testingRatePerKg Decimal? @map("testing_rate_per_kg")
 
   hydrometRatePerKg Decimal? @map("hydromet_rate_per_kg")
@@ -144,6 +146,10 @@ model PathwayDecision {
   factorConfigId String @map("factor_config_id")
 
   pathway Pathway
+
+  costBreakdown Json? @map("cost_breakdown")
+
+  revenueBreakdown Json? @map("revenue_breakdown")
 
   netRevenue Decimal? @db.Decimal(12, 2) @map("net_revenue")
 
