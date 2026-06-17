@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLBIPP — Vendor Side · Wireframes v2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F2EDE2; --paper-2:#E8E1D2; --paper-3:#DDD5C2;
+  --ink:#0E120E; --ink-2:#1F231F; --ink-3:#3B3F3B; --ink-4:#6B6F6B; --ink-5:#9CA09C;
+  --signal:#C5F050; --signal-deep:#8FB832;
+  --hazard:#FF5A1F; --charge:#1FA8FF; --amber:#F5B82E; --plum:#6B3FB8;
+  --line:rgba(14,18,14,.10);
+  --app-bg:#FBFAF6; --card:#FFFFFF;
+  --ok:#3FA45B; --recovered:#5E9E3F;
+  --shadow-sm:0 1px 2px rgba(14,18,14,.06);
+  --shadow-md:0 6px 18px -4px rgba(14,18,14,.12),0 2px 4px rgba(14,18,14,.05);
+  --shadow-lg:0 24px 48px -12px rgba(14,18,14,.18),0 4px 8px rgba(14,18,14,.06);
+  --r-sm:6px; --r-md:10px; --r-lg:16px; --r-xl:22px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Manrope',system-ui,sans-serif; background:var(--paper); color:var(--ink);
+  line-height:1.5; -webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(circle at 1px 1px,rgba(14,18,14,.045) 1px,transparent 0);
+  background-size:24px 24px;
+}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.mono{font-family:'JetBrains Mono',monospace}
+
+/* ===== PAGE FRAME ===== */
+.wrap{max-width:1280px;margin:0 auto;padding:56px 32px 96px}
+.masthead{border-bottom:2px solid var(--ink);padding-bottom:24px;margin-bottom:14px}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-4);font-weight:500}
+.eyebrow::before{content:'';display:inline-block;width:24px;height:1px;background:var(--ink-3);vertical-align:middle;margin-right:12px}
+h1.title{font-family:'Fraunces',serif;font-weight:500;font-size:46px;line-height:1.02;letter-spacing:-.01em;margin:14px 0 10px}
+.sub{color:var(--ink-3);font-size:15px;max-width:680px}
+.journey{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.journey .step{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:12px;font-weight:600;box-shadow:var(--shadow-sm)}
+.journey .step .n{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-4)}
+.journey .arrow{align-self:center;color:var(--ink-5);font-size:13px}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:26px;padding:16px 20px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-sm)}
+.legend .lg{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-3);font-weight:600}
+.legend .dot{width:9px;height:9px;border-radius:50%}
+
+/* interactive */
+.proto-band{margin:42px 0 12px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.proto-band .lead{max-width:560px}
+.proto-band h2{font-family:'Fraunces',serif;font-weight:500;font-size:26px;margin-bottom:4px}
+.proto-band p{font-size:13px;color:var(--ink-3)}
+.proto-hint{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-4);background:var(--paper-2);border:1px solid var(--line);border-radius:999px;padding:8px 14px}
+.proto-stage{display:flex;justify-content:center;padding:36px 0 8px}
+
+/* gallery */
+.section-tag{display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:var(--paper);padding:9px 18px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;margin:64px 0 8px}
+.section-tag .d{width:8px;height:8px;border-radius:50%;background:var(--signal)}
+.section-desc{font-size:13px;color:var(--ink-3);margin-bottom:30px;max-width:680px}
+.grid{display:flex;flex-wrap:wrap;gap:46px 40px}
+.cell{width:300px}
+.cell .clabel{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-4);letter-spacing:.14em;text-transform:uppercase;margin-bottom:7px}
+.cell .ctitle{font-family:'Fraunces',serif;font-size:17px;font-weight:500;margin-bottom:3px}
+.cell .ccap{font-size:12px;color:var(--ink-3);margin-bottom:16px;min-height:32px;line-height:1.45}
+
+/* ===== PHONE ===== */
+.phone{width:300px;height:632px;background:#0a0a0a;border-radius:40px;padding:7px;box-shadow:var(--shadow-lg);position:relative;flex-shrink:0}
+.phone.big{width:320px;height:674px;border-radius:44px;padding:8px}
+.phone-screen{width:100%;height:100%;background:var(--app-bg);border-radius:34px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.phone.big .phone-screen{border-radius:38px}
+.notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:84px;height:20px;background:#0a0a0a;border-radius:12px;z-index:30}
+.statusbar{display:flex;justify-content:space-between;align-items:center;padding:12px 20px 2px;font-size:10.5px;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--ink);flex-shrink:0}
+.statusbar .r{display:flex;gap:5px;align-items:center}
+
+/* app shell inside phone */
+.app{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.tbar{display:flex;align-items:center;gap:10px;padding:10px 16px 10px;flex-shrink:0}
+.tbar .ttl{font-weight:700;font-size:15px;letter-spacing:-.01em}
+.tbar .back,.tbar .ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--line);flex-shrink:0;cursor:pointer}
+.tbar .sp{flex:1}
+.body{flex:1;overflow:hidden;padding:4px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.body.scroll{overflow:auto}
+.body::-webkit-scrollbar{width:0}
+
+/* typography in app */
+.h-display{font-family:'Fraunces',serif;font-weight:500;font-size:22px;line-height:1.1;letter-spacing:-.01em}
+.h-sec{font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-4);font-weight:600}
+.muted{color:var(--ink-3);font-size:12.5px}
+.tiny{font-size:11px;color:var(--ink-4)}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:14px;box-shadow:var(--shadow-sm)}
+.card.flush{padding:0;overflow:hidden}
+
+/* buttons */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-radius:999px;font-size:13px;font-weight:700;font-family:'Manrope';border:none;cursor:pointer;width:100%;transition:transform .08s}
+.btn:active{transform:scale(.985)}
+.btn-signal{background:var(--signal);color:var(--ink)}
+.btn-ink{background:var(--ink);color:var(--paper)}
+.btn-ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
+.btn-sm{padding:9px 14px;font-size:12px;width:auto}
+.btn-text{background:none;border:none;font-weight:700;font-size:12.5px;color:var(--ink-4);cursor:pointer;padding:8px}
+.btn-text.danger{color:var(--hazard)}
+.row-btns{display:flex;gap:8px}
+.row-btns .btn{width:auto;flex:1}
+
+/* form fields */
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;font-weight:700;color:var(--ink-3);letter-spacing:.01em}
+.input{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 12px;font-size:13px;color:var(--ink);font-family:'Manrope';display:flex;align-items:center;justify-content:space-between}
+.input .ph{color:var(--ink-5)}
+.input.sel::after{content:'⌄';color:var(--ink-4);font-size:14px;margin-top:-4px}
+.upload{border:1.5px dashed var(--line);border-radius:var(--r-sm);padding:16px;text-align:center;font-size:12px;color:var(--ink-4);background:rgba(0,0,0,.012)}
+
+/* chips / status */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+.chip::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.requested{background:rgba(107,111,107,.14);color:#52564F}
+.chip.scheduled{background:rgba(31,168,255,.14);color:#0E6CA8}
+.chip.collected{background:rgba(14,18,14,.10);color:#1F231F}
+.chip.tested,.chip.processed{background:rgba(245,184,46,.20);color:#8A5A06}
+.chip.recovered{background:rgba(94,158,63,.18);color:#3F6E26}
+.chip.certified{background:rgba(143,184,50,.24);color:#4F6B16}
+.chip.cancelled{background:rgba(255,90,31,.14);color:#9A3412}
+
+/* stat cards */
+.stats{display:flex;gap:8px}
+.stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:11px 12px;box-shadow:var(--shadow-sm)}
+.stat .v{font-family:'Fraunces',serif;font-size:21px;font-weight:600;line-height:1}
+.stat .k{font-size:9.5px;color:var(--ink-4);font-family:'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-top:5px}
+
+/* list rows */
+.lrow{display:flex;align-items:center;gap:11px;padding:12px 13px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);cursor:pointer;box-shadow:var(--shadow-sm)}
+.lrow:active{background:var(--paper)}
+.lrow .ico{width:34px;height:34px;border-radius:9px;background:var(--paper-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ink-3)}
+.lrow .mid{flex:1;min-width:0}
+.lrow .t1{font-size:13px;font-weight:700;line-height:1.2}
+.lrow .t2{font-size:11px;color:var(--ink-4);margin-top:2px}
+.lrow .chev{color:var(--ink-5);flex-shrink:0}
+.list{display:flex;flex-direction:column;gap:8px}
+
+/* timeline */
+.tl{display:flex;flex-direction:column}
+.tl .node{display:flex;gap:12px;position:relative;padding-bottom:16px}
+.tl .node:last-child{padding-bottom:0}
+.tl .mark{width:18px;display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.tl .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--ink-5);background:var(--card);z-index:2;margin-top:1px}
+.tl .line{flex:1;width:2px;background:var(--line);margin:2px 0 -2px}
+.tl .node:last-child .line{display:none}
+.tl .node.done .dot{background:var(--signal-deep);border-color:var(--signal-deep)}
+.tl .node.done .line{background:var(--signal-deep)}
+.tl .node.active .dot{background:var(--signal);border-color:var(--signal-deep);box-shadow:0 0 0 4px rgba(197,240,80,.30)}
+.tl .meta{flex:1;padding-bottom:2px}
+.tl .meta .s1{font-size:13px;font-weight:700;line-height:1.2}
+.tl .node.todo .meta .s1{color:var(--ink-5)}
+.tl .meta .s2{font-size:10.5px;color:var(--ink-4);font-family:'JetBrains Mono',monospace;margin-top:2px}
+
+/* breakdown rows */
+.brk{display:flex;flex-direction:column;gap:0}
+.brk .r{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.brk .r:last-child{border-bottom:none}
+.brk .r.total{font-weight:800;border-top:1.5px solid var(--ink);border-bottom:none;margin-top:2px;padding-top:11px}
+.brk .r .lab{color:var(--ink-3)}
+.brk .r .val{font-weight:700;font-family:'JetBrains Mono',monospace}
+
+/* toggle */
+.toggle-head{display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ink-2);padding:2px 0}
+.toggle-head .cv{transition:transform .2s;color:var(--ink-4)}
+.toggle-target{display:none;margin-top:10px}
+.toggle.open .toggle-target{display:block}
+.toggle.open .toggle-head .cv{transform:rotate(180deg)}
+
+/* banners / notes */
+.banner{display:flex;gap:10px;align-items:flex-start;padding:12px 13px;border-radius:var(--r-md);font-size:12px;line-height:1.45}
+.banner.info{background:rgba(31,168,255,.08);border:1px solid rgba(31,168,255,.22);color:#0E5C90}
+.banner.ok{background:rgba(143,184,50,.12);border:1px solid rgba(143,184,50,.32);color:#46600F}
+.banner.lock{background:var(--paper-2);border:1px solid var(--line);color:var(--ink-3)}
+.banner .bi{flex-shrink:0;margin-top:1px}
+
+/* big confirm */
+.confirm{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:20px 22px}
+.confirm .seal{width:72px;height:72px;border-radius:50%;background:var(--signal);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px -6px rgba(143,184,50,.55)}
+.confirm h3{font-family:'Fraunces',serif;font-weight:600;font-size:23px}
+.confirm p{font-size:13px;color:var(--ink-3);max-width:230px;line-height:1.5}
+
+/* secure link row */
+.seclink{display:flex;align-items:center;gap:11px;padding:12px 13px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-sm)}
+.seclink .lk{width:32px;height:32px;border-radius:8px;background:rgba(143,184,50,.16);color:#4F6B16;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.seclink .mid{flex:1;min-width:0}
+.seclink .t1{font-size:12.5px;font-weight:700}
+.seclink .t2{font-size:10px;color:var(--ink-4);font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* certificate preview */
+.cert{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:0;overflow:hidden;box-shadow:var(--shadow-md)}
+.cert .top{background:var(--ink);color:var(--paper);padding:13px 14px;display:flex;align-items:center;justify-content:space-between}
+.cert .top .bm{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px}
+.cert .top .bm .sq{width:20px;height:20px;border-radius:5px;background:var(--signal);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+.cert .top .ty{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;opacity:.8}
+.cert .cbody{padding:14px}
+.cert .cgrid{display:flex;flex-direction:column;gap:0;margin-bottom:12px}
+.cert .cgrid .cr{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:11.5px}
+.cert .cgrid .cr .l{color:var(--ink-4)}
+.cert .cgrid .cr .v{font-weight:700;font-family:'JetBrains Mono',monospace}
+.cert .qr{display:flex;align-items:center;gap:12px;padding-top:4px}
+.cert .qrbox{width:64px;height:64px;border-radius:8px;background:
+  conic-gradient(from 0deg,#0a0a0a 25%,#fff 0 50%,#0a0a0a 0 75%,#fff 0);
+  background-size:16px 16px;border:3px solid #0a0a0a;flex-shrink:0}
+.cert .qr .qt{font-size:10.5px;color:var(--ink-4);line-height:1.4}
+
+/* filter chips */
+.filters{display:flex;gap:7px;flex-wrap:wrap}
+.fchip{font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-3);cursor:pointer}
+.fchip.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+/* tabbar */
+.tabbar{display:flex;border-top:1px solid var(--line);background:var(--card);flex-shrink:0;padding:7px 6px 9px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--ink-5);font-size:9px;font-weight:700;letter-spacing:.02em}
+.tab svg{width:21px;height:21px}
+.tab.on{color:var(--ink)}
+.tab.on svg{color:var(--signal-deep)}
+
+/* annotation under gallery phones */
+.anno{margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-4);line-height:1.5;border-left:2px solid var(--signal-deep);padding-left:11px}
+.anno b{color:var(--ink-2);font-weight:700}
+
+/* export mode: show single phone centered */
+body.export .wrap>*{display:none}
+body.export .wrap{padding:0}
+body.export #exportHost{display:flex !important;justify-content:center;align-items:flex-start;padding:0}
+
+footer.foot{margin-top:80px;border-top:2px solid var(--ink);padding-top:20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-4)}
+
+@media(max-width:560px){
+  .wrap{padding:32px 16px 64px}
+  h1.title{font-size:34px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="eyebrow">CLBIPP · Vendor Side · Wireframes v2.0</div>
+    <h1 class="title serif">The vendor experience,<br>screen by screen.</h1>
+    <p class="sub">Every vendor-facing screen rebuilt from the approved Vendor-Side Process Flows (V1–V6). The producer requests a pickup, receives an on-site estimated offer, tracks recovery, and collects EPR certificates for CPCB filing.</p>
+    <div class="journey" id="journey"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="proto-band">
+    <div class="lead">
+      <h2 class="serif">Clickable prototype</h2>
+      <p>Tap through the full journey, exactly as the vendor would. Buttons, tabs and pickup rows are live. Start at the login screen below.</p>
+    </div>
+    <div class="proto-hint">↳ tap to navigate · resets on reload</div>
+  </div>
+  <div class="proto-stage">
+    <div class="phone big" id="proto">
+      <div class="notch"></div>
+      <div class="phone-screen"><div class="statusbar"><span>9:41</span><span class="r">5G ▮▮▮ 100%</span></div><div class="app" id="proto-stage"></div></div>
+    </div>
+  </div>
+
+  <div id="gallery"></div>
+
+  <div id="exportHost" style="display:none"></div>
+
+  <footer class="foot">
+    <span>CLBIPP — Battery recovery &amp; EPR compliance</span>
+    <span>15 screens · V1–V6 · mobile PWA</span>
+  </footer>
+</div>
+
+<script>
+/* ============ ICONS ============ */
+const I = {
+  back:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  chev:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+  chevd:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  check:'<svg viewBox="0 0 24 24" width="30" fill="none" stroke="#0E120E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  batt:'<svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/><path d="M6 10v4"/></svg>',
+  info:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>',
+  doc:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+  dl:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-7 9 7v9a2 2 0 0 1-2 2h-3v-6H8v6H5a2 2 0 0 1-2-2z"/></svg>',
+  track:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>',
+  cert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><path d="M9 14l-1 7 4-2 4 2-1-7"/></svg>',
+  user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
+};
+
+/* ============ COMPONENT HELPERS ============ */
+const chip=(t,k)=>`<span class="chip ${k}">${t}</span>`;
+const tbar=(title,{back,bell}={})=>`<div class="tbar">${back?`<div class="back" data-go="${back}">${I.back}</div>`:''}<div class="ttl">${title}</div><div class="sp"></div>${bell?`<div class="ic">${I.bell}</div>`:''}</div>`;
+const field=(label,val,{ph,sel}={})=>`<div class="field"><label>${label}</label><div class="input ${sel?'sel':''}"><span class="${ph?'ph':''}">${val}</span></div></div>`;
+const tab=(icon,label,go,on)=>`<div class="tab ${on?'on':''}" data-go="${go}">${icon}<span>${label}</span></div>`;
+const tabbar=(active)=>`<div class="tabbar">
+  ${tab(I.home,'Home','dashboard',active==='home')}
+  ${tab(I.track,'Track','track-progress',active==='track')}
+  ${tab(I.cert,'Certificates','compliance',active==='cert')}
+  ${tab(I.user,'Profile','profile',active==='profile')}
+</div>`;
+function timeline(stages){ // stages: [{s, ts, state}]
+  return `<div class="tl">`+stages.map(n=>`<div class="node ${n.state}"><div class="mark"><div class="dot"></div><div class="line"></div></div><div class="meta"><div class="s1">${n.s}</div>${n.ts?`<div class="s2">${n.ts}</div>`:''}</div></div>`).join('')+`</div>`;
+}
+function pickupRow(id,type,statusLabel,statusKind,go){
+  return `<div class="lrow" data-go="${go}"><div class="ico">${I.batt}</div><div class="mid"><div class="t1">${id}</div><div class="t2">${type}</div></div>${chip(statusLabel,statusKind)}<div class="chev">${I.chev}</div></div>`;
+}
+
+/* ============ SCREENS ============ */
+const S = {};
+
+S.login = `
+${tbar('')}
+<div class="body" style="justify-content:center;gap:18px">
+  <div style="text-align:center;margin-bottom:6px">
+    <div style="width:52px;height:52px;border-radius:14px;background:var(--ink);color:var(--signal);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;margin-bottom:12px">B2</div>
+    <div class="h-display serif">Back2Basics</div>
+    <div class="muted" style="margin-top:4px">Battery recovery &amp; EPR compliance</div>
+  </div>
+  ${field('Email','you@company.com',{ph:1})}
+  ${field('Password','••••••••',{ph:1})}
+  <button class="btn btn-signal" data-go="dashboard">Log in</button>
+  <button class="btn btn-ghost" data-go="signup">Create account</button>
+  <div style="text-align:center"><button class="btn-text">Forgot password?</button></div>
+</div>`;
+
+S.signup = `
+${tbar('Create account',{back:'login'})}
+<div class="body scroll">
+  <div class="muted" style="margin:-2px 0 4px">Register your company to start offloading batteries and earning EPR certificates.</div>
+  ${field('Company name','Altigreen Propulsion',{ph:1})}
+  ${field('Contact person','Full name',{ph:1})}
+  ${field('Email','you@company.com',{ph:1})}
+  ${field('Password','Create a password',{ph:1})}
+  ${field('EPR / Producer registration ID','EPR-PRO-XXXXXX',{ph:1})}
+  <button class="btn btn-signal" data-go="dashboard" style="margin-top:4px">Create account</button>
+  <div style="text-align:center"><button class="btn-text" data-go="login">Already have an account? Log in</button></div>
+</div>`;
+
+S['dashboard-empty'] = `
+${tbar('Back2Basics',{bell:1})}
+<div class="body" style="justify-content:center;text-align:center;align-items:center;gap:16px">
+  <div style="width:80px;height:80px;border-radius:20px;background:var(--paper-2);display:flex;align-items:center;justify-content:center;color:var(--ink-4)">${I.batt.replace('width="17"','width="34"')}</div>
+  <div class="h-display serif">No pickups yet</div>
+  <p class="muted" style="max-width:220px">Request your first battery pickup to start recovering materials and earning EPR certificates.</p>
+  <button class="btn btn-signal" data-go="request" style="max-width:220px">Request a pickup</button>
+</div>
+${tabbar('home')}`;
+
+S.dashboard = `
+${tbar('Back2Basics',{bell:1})}
+<div class="body scroll">
+  <div><div class="h-display serif">Hello, Altigreen</div><div class="muted">Your recovery at a glance</div></div>
+  <div class="stats">
+    <div class="stat"><div class="v">12.4t</div><div class="k">Recycled</div></div>
+    <div class="stat"><div class="v">9.1t</div><div class="k">Recovered</div></div>
+    <div class="stat"><div class="v">7</div><div class="k">Certificates</div></div>
+  </div>
+  <button class="btn btn-signal" data-go="request">Request a pickup</button>
+  <div class="h-sec" style="margin-top:4px">Recent pickups</div>
+  <div class="list">
+    ${pickupRow('PKP-2042','Li-ion NMC · 24 units','Scheduled','scheduled','scheduled')}
+    ${pickupRow('PKP-2041','LFP · 60 units','Processed','processed','track-progress')}
+    ${pickupRow('PKP-2039','Li-ion NMC · 18 units','Recovered','recovered','track-recovered')}
+    ${pickupRow('PKP-2031','Li-ion NMC · 30 units','Certified','certified','track-certified')}
+  </div>
+</div>
+${tabbar('home')}`;
+
+S.request = `
+${tbar('Request pickup',{back:'dashboard'})}
+<div class="body scroll">
+  <div class="muted" style="margin:-2px 0 2px">Tell us what to collect. Our field agent confirms exact details on-site.</div>
+  ${field('Battery type','Li-ion NMC',{sel:1})}
+  ${field('Approx. quantity / weight','e.g. 24 units · 480 kg',{ph:1})}
+  ${field('Pickup location','Warehouse address',{ph:1})}
+  ${field('Preferred date','Select a date',{ph:1,sel:1})}
+  ${field('Notes (optional)','Access details, contact on site…',{ph:1})}
+  <div class="field"><label>Photos (optional)</label><div class="upload">+ Add photos of the batteries</div></div>
+  <button class="btn btn-signal" data-go="submitted" style="margin-top:4px">Submit request</button>
+</div>`;
+
+S.submitted = `
+${tbar('',{back:'dashboard'})}
+<div class="confirm">
+  <div class="seal">${I.check}</div>
+  <h3 class="serif">Request submitted</h3>
+  ${chip('Requested','requested')}
+  <p>We've logged <b>PKP-2042</b>. You'll be notified the moment a field agent is assigned.</p>
+  <div style="width:100%;max-width:230px;display:flex;flex-direction:column;gap:9px;margin-top:6px">
+    <button class="btn btn-ghost" data-go="scheduled">View request</button>
+    <button class="btn btn-signal" data-go="dashboard">Back to home</button>
+  </div>
+</div>`;
+
+S.scheduled = `
+${tbar('PKP-2042',{back:'dashboard'})}
+<div class="body scroll">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div class="h-sec">Pickup request</div>${chip('Scheduled','scheduled')}
+  </div>
+  <div class="card" style="padding:13px">
+    ${timeline([
+      {s:'Requested',ts:'12 Jun, 09:20',state:'done'},
+      {s:'Scheduled',ts:'12 Jun, 14:05',state:'active'},
+      {s:'Collected',ts:'Awaiting agent',state:'todo'},
+    ])}
+  </div>
+  <div class="card" style="display:flex;align-items:center;gap:11px">
+    <div style="width:38px;height:38px;border-radius:10px;background:var(--paper-2);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--ink-3)">RK</div>
+    <div style="flex:1"><div style="font-size:13px;font-weight:700">Ravi K. · Field agent</div><div class="tiny">ETA Tomorrow · 10:00–12:00</div></div>
+  </div>
+  <div class="card">
+    <div class="brk">
+      <div class="r"><span class="lab">Battery type</span><span class="val">Li-ion NMC</span></div>
+      <div class="r"><span class="lab">Quantity</span><span class="val">24 units</span></div>
+      <div class="r"><span class="lab">Location</span><span class="val">Bhiwandi WH-3</span></div>
+    </div>
+  </div>
+  <div class="row-btns">
+    <button class="btn btn-ghost btn-sm" data-go="scheduled">Reschedule</button>
+    <button class="btn btn-ghost btn-sm" data-go="scheduled">Update details</button>
+  </div>
+  <div style="text-align:center"><button class="btn-text danger" data-go="dashboard">Cancel request</button></div>
+  <div class="banner info"><span class="bi">${I.info}</span><span>When the agent arrives, your estimated offer appears here.</span></div>
+  <button class="btn btn-ink" data-go="offer">Agent arrived — view offer</button>
+</div>`;
+
+S.offer = `
+${tbar('Offer · PKP-2042',{back:'scheduled'})}
+<div class="body scroll">
+  <div style="display:flex;justify-content:center;margin-top:2px">${chip('Recycle · NMC','recovered')}</div>
+  <div style="text-align:center;padding:4px 4px 0">
+    <div class="h-sec" style="margin-bottom:4px">Estimated offer</div>
+    <div class="serif" style="font-size:44px;font-weight:600;letter-spacing:-.02em;line-height:1">₹1,84,500</div>
+    <div class="tiny" style="margin-top:7px;max-width:240px;margin-left:auto;margin-right:auto">Estimated — final value confirmed after processing. Metal recovery is the best route for this pack.</div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:4px">
+    <div class="card" style="flex:1;padding:12px"><div class="tiny mono" style="letter-spacing:.08em">RECOVERED VALUE</div><div class="serif" style="font-size:19px;font-weight:600;margin-top:3px">₹2,46,000</div></div>
+    <div class="card" style="flex:1;padding:12px"><div class="tiny mono" style="letter-spacing:.08em">RECOVERY RATE</div><div class="serif" style="font-size:19px;font-weight:600;margin-top:3px">94%</div></div>
+  </div>
+  <button class="btn btn-ghost" data-go="offer-breakdown">View full breakdown</button>
+  <button class="btn btn-signal" data-go="handover">Accept offer</button>
+  <div style="text-align:center"><button class="btn-text" data-go="dashboard">Decline</button></div>
+</div>`;
+
+S['offer-breakdown'] = `
+${tbar('How we valued it',{back:'offer'})}
+<div class="body scroll" style="gap:10px">
+  <div class="card" style="padding:13px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span class="h-sec">Recovered value</span>
+      <span class="serif" style="font-size:20px;font-weight:600">₹2,46,000</span>
+    </div>
+    <div style="border-left:3px solid var(--signal-deep);padding:5px 0 5px 11px;font-size:11px;color:var(--ink-3);line-height:1.45;margin:8px 0 2px">94% recovery yield · 480 kg · live metal rates</div>
+    <div class="brk">
+      <div class="r"><span class="lab">Nickel · 31 kg</span><span class="val">₹1,28,000</span></div>
+      <div class="r"><span class="lab">Cobalt · 12 kg</span><span class="val">₹74,000</span></div>
+      <div class="r"><span class="lab">Lithium · 18 kg</span><span class="val">₹32,000</span></div>
+      <div class="r"><span class="lab">Copper · 9 kg</span><span class="val">₹12,000</span></div>
+    </div>
+  </div>
+  <div class="card" style="padding:13px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span class="h-sec">Processing &amp; logistics</span>
+      <span class="serif" style="font-size:20px;font-weight:600;color:var(--hazard)">−₹61,500</span>
+    </div>
+    <div class="brk" style="margin-top:6px">
+      <div class="r"><span class="lab">Intake &amp; sorting</span><span class="val">₹19,200</span></div>
+      <div class="r"><span class="lab">Refining &amp; recovery</span><span class="val">₹28,300</span></div>
+      <div class="r"><span class="lab">Logistics · 100 km</span><span class="val">₹8,000</span></div>
+      <div class="r"><span class="lab">QA, compliance &amp; handling</span><span class="val">₹6,000</span></div>
+    </div>
+  </div>
+  <div style="background:var(--ink);color:var(--paper);border-radius:var(--r-md);padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span class="mono" style="font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:rgba(242,237,226,.6)">Your estimated offer</span>
+      <span class="serif" style="font-size:25px;font-weight:600;color:var(--signal)">₹1,84,500</span>
+    </div>
+    <div class="mono" style="font-size:10.5px;color:rgba(242,237,226,.5);margin-top:6px">₹2,46,000 − ₹61,500 = ₹1,84,500</div>
+  </div>
+  <button class="btn btn-ink" data-go="offer">Back to offer</button>
+</div>`;
+
+S.handover = `
+${tbar('',{back:'dashboard'})}
+<div class="confirm">
+  <div class="seal">${I.check}</div>
+  <h3 class="serif">Handover confirmed</h3>
+  ${chip('Collected','collected')}
+  <p><b>PKP-2042</b> has been collected. Your receipt and a secure tracking link are on the way.</p>
+  <div style="width:100%;max-width:240px;display:flex;flex-direction:column;gap:10px;margin-top:8px">
+    <div class="seclink"><div class="lk">${I.lock}</div><div class="mid"><div class="t1">Secure tracking link</div><div class="t2">b2b.app/t/9f3a…·token</div></div></div>
+    <button class="btn btn-signal" data-go="track-progress">Open tracking</button>
+    <button class="btn btn-ghost" data-go="dashboard">Done</button>
+  </div>
+</div>`;
+
+S['track-progress'] = `
+${tbar('PKP-2041',{back:'dashboard'})}
+<div class="body scroll">
+  <div style="display:flex;align-items:center;justify-content:space-between"><div class="h-sec">Lifecycle</div>${chip('Processed','processed')}</div>
+  <div class="card">
+    ${timeline([
+      {s:'Collected',ts:'08 Jun, 11:30',state:'done'},
+      {s:'Tested',ts:'09 Jun, 16:10',state:'done'},
+      {s:'Processed',ts:'11 Jun, 10:45',state:'active'},
+      {s:'Recovered',ts:'In progress',state:'todo'},
+      {s:'Certified',ts:'—',state:'todo'},
+    ])}
+  </div>
+  <div class="banner info"><span class="bi">${I.info}</span><span>We'll notify you as your battery moves through each stage.</span></div>
+  <div class="banner lock"><span class="bi">${I.lock}</span><span>Recovery breakdown and certificate unlock once recovered.</span></div>
+</div>
+${tabbar('track')}`;
+
+S['track-recovered'] = `
+${tbar('PKP-2039',{back:'dashboard'})}
+<div class="body scroll">
+  <div style="display:flex;align-items:center;justify-content:space-between"><div class="h-sec">Lifecycle</div>${chip('Recovered','recovered')}</div>
+  <div class="card">
+    ${timeline([
+      {s:'Collected',ts:'02 Jun',state:'done'},
+      {s:'Tested',ts:'03 Jun',state:'done'},
+      {s:'Processed',ts:'05 Jun',state:'done'},
+      {s:'Recovered',ts:'07 Jun, 13:20',state:'active'},
+      {s:'Certified',ts:'Awaiting certification',state:'todo'},
+    ])}
+  </div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:10px">Recovery summary</div>
+    <div style="display:flex;gap:8px">
+      <div class="stat" style="box-shadow:none;border-color:var(--line)"><div class="v">142kg</div><div class="k">Recovered</div></div>
+      <div class="stat" style="box-shadow:none;border-color:var(--line)"><div class="v">94%</div><div class="k">Recovery rate</div></div>
+    </div>
+    <div class="toggle" style="margin-top:12px">
+      <div class="toggle-head" data-toggle><span>View material breakdown</span><span class="cv">${I.chevd}</span></div>
+      <div class="toggle-target">
+        <div class="brk">
+          <div class="r"><span class="lab">Nickel</span><span class="val">31 kg</span></div>
+          <div class="r"><span class="lab">Cobalt</span><span class="val">12 kg</span></div>
+          <div class="r"><span class="lab">Lithium</span><span class="val">18 kg</span></div>
+          <div class="r"><span class="lab">Copper</span><span class="val">9 kg</span></div>
+          <div class="r"><span class="lab">Graphite + other</span><span class="val">72 kg</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="banner lock"><span class="bi">${I.lock}</span><span>Your EPR certificate becomes available once certified.</span></div>
+</div>
+${tabbar('track')}`;
+
+S['track-certified'] = `
+${tbar('PKP-2031',{back:'dashboard'})}
+<div class="body scroll">
+  <div style="display:flex;align-items:center;justify-content:space-between"><div class="h-sec">Lifecycle</div>${chip('Certified','certified')}</div>
+  <div class="card">
+    ${timeline([
+      {s:'Collected',ts:'24 May',state:'done'},
+      {s:'Tested',ts:'25 May',state:'done'},
+      {s:'Processed',ts:'27 May',state:'done'},
+      {s:'Recovered',ts:'29 May',state:'done'},
+      {s:'Certified',ts:'31 May, 17:00',state:'done'},
+    ])}
+  </div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:10px">Recovery summary</div>
+    <div style="display:flex;gap:8px">
+      <div class="stat" style="box-shadow:none"><div class="v">238kg</div><div class="k">Recovered</div></div>
+      <div class="stat" style="box-shadow:none"><div class="v">96%</div><div class="k">Recovery rate</div></div>
+    </div>
+  </div>
+  <div class="banner ok"><span class="bi">${I.cert.replace('viewBox','width="16" viewBox')}</span><span>Certificate ready — added to your compliance log.</span></div>
+  <button class="btn btn-signal" data-go="certificate">View certificate</button>
+</div>
+${tabbar('track')}`;
+
+S.certificate = `
+${tbar('EPR Certificate',{back:'track-certified'})}
+<div class="body scroll">
+  <div class="cert">
+    <div class="top"><div class="bm"><div class="sq">B2</div>Back2Basics</div><div class="ty">Recycling</div></div>
+    <div class="cbody">
+      <div class="cgrid">
+        <div class="cr"><span class="l">Battery ID</span><span class="v">PKP-2031</span></div>
+        <div class="cr"><span class="l">Weight processed</span><span class="v">248 kg</span></div>
+        <div class="cr"><span class="l">Nickel recovered</span><span class="v">54 kg</span></div>
+        <div class="cr"><span class="l">Cobalt recovered</span><span class="v">21 kg</span></div>
+        <div class="cr"><span class="l">Lithium recovered</span><span class="v">29 kg</span></div>
+        <div class="cr"><span class="l">Date certified</span><span class="v">31 May 2026</span></div>
+      </div>
+      <div class="qr"><div class="qrbox"></div><div class="qt">Scan to verify on the<br>public recovery record.<br><b>CERT-2031-NMC</b></div></div>
+    </div>
+  </div>
+  <button class="btn btn-signal" data-go="certificate">${I.dl} Download PDF</button>
+  <button class="btn btn-ghost" data-go="compliance">View compliance log</button>
+</div>`;
+
+S.compliance = `
+${tbar('Compliance log')}
+<div class="body scroll">
+  <div class="muted" style="margin:-2px 0 2px">Every certificate in one place, ready for your CPCB return.</div>
+  <div class="filters"><span class="fchip on">All</span><span class="fchip">Recycling</span><span class="fchip">Refurb</span><span class="fchip">2026</span></div>
+  <div class="list">
+    <div class="lrow" data-go="certificate"><div class="ico">${I.doc}</div><div class="mid"><div class="t1">PKP-2031 · Recycling</div><div class="t2">248 kg · 31 May 2026</div></div><div class="chev">${I.dl}</div></div>
+    <div class="lrow" data-go="certificate"><div class="ico">${I.doc}</div><div class="mid"><div class="t1">PKP-2024 · Recycling</div><div class="t2">180 kg · 22 May 2026</div></div><div class="chev">${I.dl}</div></div>
+    <div class="lrow" data-go="certificate"><div class="ico">${I.doc}</div><div class="mid"><div class="t1">PKP-2018 · Refurbishment</div><div class="t2">12 units · 14 May 2026</div></div><div class="chev">${I.dl}</div></div>
+    <div class="lrow" data-go="certificate"><div class="ico">${I.doc}</div><div class="mid"><div class="t1">PKP-2009 · Recycling</div><div class="t2">320 kg · 03 May 2026</div></div><div class="chev">${I.dl}</div></div>
+  </div>
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:13px"><span class="muted" style="font-weight:700;color:var(--ink-2)">Total certified</span><span class="serif" style="font-size:20px;font-weight:600">9.1 t</span></div>
+  <button class="btn btn-signal" data-go="compliance">${I.dl} Export for CPCB return</button>
+</div>
+${tabbar('cert')}`;
+
+S.profile = `
+${tbar('Profile')}
+<div class="body scroll">
+  <div class="card" style="display:flex;align-items:center;gap:12px">
+    <div style="width:48px;height:48px;border-radius:13px;background:var(--ink);color:var(--signal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px">AG</div>
+    <div><div style="font-size:15px;font-weight:800">Altigreen Propulsion</div><div class="tiny">EPR-PRO-449201</div></div>
+  </div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:10px">Account</div>
+    <div class="brk">
+      <div class="r"><span class="lab">Contact</span><span class="val">ops@altigreen.com</span></div>
+      <div class="r"><span class="lab">Batteries submitted</span><span class="val">182</span></div>
+      <div class="r"><span class="lab">Avg recovery rate</span><span class="val">93%</span></div>
+    </div>
+  </div>
+  <div class="list">
+    <div class="lrow"><div class="mid"><div class="t1">Notifications</div><div class="t2">Pickup &amp; recovery alerts</div></div><div class="chev">${I.chev}</div></div>
+    <div class="lrow"><div class="mid"><div class="t1">Edit company details</div><div class="t2">Name, contact, EPR ID</div></div><div class="chev">${I.chev}</div></div>
+  </div>
+  <button class="btn btn-ghost" data-go="login" style="margin-top:2px">Log out</button>
+</div>
+${tabbar('profile')}`;
+
+/* ============ GALLERY METADATA ============ */
+const GROUPS = [
+  {tag:'V1 · Account & Onboarding',desc:'The producer signs in or registers with their EPR details, then lands on the dashboard.',screens:[
+    {id:'login',label:'V1 · Screen 1',title:'Log in',cap:'Returning vendor signs in.',anno:'<b>Log in</b> → Dashboard · <b>Create account</b> → Sign up'},
+    {id:'signup',label:'V1 · Screen 2',title:'Create account',cap:'New producer registers with company + EPR ID.',anno:'<b>Create account</b> → Dashboard'},
+  ]},
+  {tag:'V6 · Dashboard & History',desc:'The hub. Totals, recent pickups and the entry point to every other flow. Shown empty and populated.',screens:[
+    {id:'dashboard-empty',label:'V6 · Screen 3',title:'Dashboard — empty',cap:'First-time state, before any pickup.',anno:'<b>Request a pickup</b> → Request'},
+    {id:'dashboard',label:'V6 · Screen 4',title:'Dashboard — active',cap:'Totals + recent pickups, each row opens its state.',anno:'Rows → Scheduled / In-recovery / Recovered / Certified'},
+    {id:'profile',label:'V6 · Screen 15',title:'Profile & settings',cap:'Company, EPR ID, account stats, log out.',anno:'<b>Log out</b> → Log in'},
+  ]},
+  {tag:'V2 · Request a Pickup',desc:'Capture what to collect, confirm submission, then manage the request while Requested or Scheduled.',screens:[
+    {id:'request',label:'V2 · Screen 5',title:'Request pickup',cap:'Type, quantity, location, date, optional photos.',anno:'<b>Submit request</b> → Submitted'},
+    {id:'submitted',label:'V2 · Screen 6',title:'Request submitted',cap:'Requested state + notification.',anno:'<b>View request</b> → Scheduled detail'},
+    {id:'scheduled',label:'V2 · Screen 7',title:'Pickup — scheduled',cap:'Agent + ETA. Reschedule / update / cancel.',anno:'<b>View offer</b> → Offer (agent on-site)'},
+  ]},
+  {tag:'V3 · Offer & Confirmation',desc:'The on-site estimated offer, a transparent itemised valuation, then handover confirmation.',screens:[
+    {id:'offer',label:'V3 · Screen 9',title:'Estimated offer',cap:'Pathway, offer, recovered value at a glance.',anno:'<b>View full breakdown</b> → Valuation · <b>Accept</b> → Handover'},
+    {id:'offer-breakdown',label:'V3 · Screen 10',title:'Valuation breakdown',cap:'Recovered value by material − itemised costs = offer.',anno:'Vendor-facing transparency · no internal margin levers'},
+    {id:'handover',label:'V3 · Screen 11',title:'Handover confirmed',cap:'Collected · receipt · secure tracking link.',anno:'<b>Open tracking</b> → Tracking'},
+  ]},
+  {tag:'V4 · Tracking & Recovery',desc:'The lifecycle timeline across its three meaningful states: in progress, recovered, and certified.',screens:[
+    {id:'track-progress',label:'V4 · Screen 12',title:'Tracking — in progress',cap:'Collected → Tested → Processed live.',anno:'Notifications on each stage advance'},
+    {id:'track-recovered',label:'V4 · Screen 13',title:'Tracking — recovered',cap:'Recovery summary + expandable materials.',anno:'Certificate still locked until certified'},
+    {id:'track-certified',label:'V4 · Screen 14',title:'Tracking — certified',cap:'Lifecycle complete, certificate unlocked.',anno:'<b>View certificate</b> → Certificate'},
+  ]},
+  {tag:'V5 · Certificate & Compliance',desc:'Download the EPR certificate and manage the running compliance log for CPCB filing.',screens:[
+    {id:'certificate',label:'V5 · Screen 15',title:'EPR certificate',cap:'Recycling certificate with embedded QR.',anno:'<b>Download PDF</b> · <b>View log</b> → Compliance'},
+    {id:'compliance',label:'V5 · Screen 16',title:'Compliance log',cap:'All certificates, filter + export.',anno:'<b>Export for CPCB return</b>'},
+  ]},
+];
+
+/* journey + legend */
+const JSTEPS=[['V1','Sign up / Login'],['V6','Dashboard'],['V2','Request pickup'],['V3','Offer & confirm'],['V4','Tracking'],['V5','Certificate']];
+document.getElementById('journey').innerHTML = JSTEPS.map((s,i)=>`<div class="step"><span class="n">${s[0]}</span>${s[1]}</div>${i<JSTEPS.length-1?'<span class="arrow">→</span>':''}`).join('');
+const LEG=[['Requested','#52564F'],['Scheduled','#0E6CA8'],['Collected','#1F231F'],['Processed','#8A5A06'],['Recovered','#3F6E26'],['Certified','#4F6B16']];
+document.getElementById('legend').innerHTML = '<span class="lg" style="color:var(--ink-2)">Status model:</span>'+LEG.map(l=>`<span class="lg"><span class="dot" style="background:${l[1]}"></span>${l[0]}</span>`).join('<span class="lg" style="color:var(--ink-5)">→</span>');
+
+/* build a phone node from a screen id */
+function phoneNode(id,big){
+  const p=document.createElement('div');
+  p.className='phone'+(big?' big':'');
+  p.innerHTML=`<div class="notch"></div><div class="phone-screen"><div class="statusbar"><span>9:41</span><span class="r">5G ▮▮▮ 100%</span></div><div class="app">${S[id]}</div></div>`;
+  return p;
+}
+
+/* render gallery */
+const gal=document.getElementById('gallery');
+GROUPS.forEach(g=>{
+  const tagEl=document.createElement('div');tagEl.className='section-tag';tagEl.innerHTML=`<span class="d"></span>${g.tag}`;gal.appendChild(tagEl);
+  const desc=document.createElement('div');desc.className='section-desc';desc.textContent=g.desc;gal.appendChild(desc);
+  const grid=document.createElement('div');grid.className='grid';
+  g.screens.forEach(sc=>{
+    const cell=document.createElement('div');cell.className='cell';
+    cell.innerHTML=`<div class="clabel">${sc.label}</div><div class="ctitle serif">${sc.title}</div><div class="ccap">${sc.cap}</div>`;
+    cell.appendChild(phoneNode(sc.id,false));
+    const a=document.createElement('div');a.className='anno';a.innerHTML=sc.anno;cell.appendChild(a);
+    grid.appendChild(cell);
+  });
+  gal.appendChild(grid);
+});
+
+/* ============ INTERACTIVE PROTOTYPE ============ */
+const stage=document.getElementById('proto-stage');
+function show(id){ if(!S[id])return; stage.innerHTML=S[id]; stage.scrollTop=0; }
+show('login');
+
+/* delegated navigation + toggles */
+document.addEventListener('click',e=>{
+  const tg=e.target.closest('[data-toggle]');
+  if(tg){ tg.closest('.toggle').classList.toggle('open'); return; }
+  const go=e.target.closest('[data-go]');
+  if(!go)return;
+  const dest=go.getAttribute('data-go');
+  if(stage.contains(go)){ show(dest); }      // inside interactive device → switch screen
+  else {                                      // inside gallery → drive the device + scroll to it
+    show(dest);
+    document.getElementById('proto').scrollIntoView({behavior:'smooth',block:'center'});
+  }
+});
+
+/* ============ EXPORT MODE (single screen render for PNG) ============ */
+const ONLY=(typeof window.__ONLY__!=='undefined')?window.__ONLY__:null;
+if(ONLY){
+  document.body.classList.add('export');
+  // hard reset: remove everything, render only the target phone
+  const w=document.querySelector('.wrap');
+  Array.from(w.children).forEach(c=>c.remove());
+  document.body.style.cssText='margin:0;padding:24px;background:#F2EDE2;display:flex;justify-content:center;align-items:flex-start';
+  document.documentElement.style.height='auto';
+  const ph=phoneNode(ONLY,true);
+  document.body.appendChild(ph);
+}
+</script>
+</body>
+</html>
