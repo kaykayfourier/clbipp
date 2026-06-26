@@ -106,10 +106,26 @@ keeps every lane moving in parallel without anyone touching another's files.
 - `docs/PROJECT_STATE.md` — live status, current phase, open questions. Check first.
 - `docs/CONTEXT.md` — decisions made and why, conventions, deferred items.
 - `docs/CLBIPP_Vendor_Wireframes_1.html` — UI source of truth for this sprint.
+- `prisma/schema.prisma` — the real vendor schema (Profile, Pickup, Offer,
+  StatusEvent, Certificate). Read before writing any RLS policy or auth code
+  that touches these tables. Owned by Person B — don't edit directly.
 - `docs/DecisionSystemBreakdown.pdf` — engine spec. For the LATER Field Agent
   app — not this sprint. Needing this for a vendor-app task is a sign of scope drift.
+- `docs/CLBIPP_Vendor_Build_Plan.pdf` — the full granular build plan (screen
+  mappings, exact checklists, demo-path definition of done). `PROJECT_STATE.md`
+  has the operative summary; only open this PDF if more detail is needed.
 - `docs/ai-prompts/database-rls-policies.md` — read before writing/editing any RLS policy.
 - `docs/ai-prompts/database-create-migration.md` — read before authoring a migration.
+
+**Ignore `docs/team_tasks_v2.*` if present** — it's the old full-project task
+breakdown from before the vendor-only rescope. Superseded by `PROJECT_STATE.md`
+and the ownership map above. Do not use it for lane or phase decisions.
+
+**Scope note for future docs:** only the docs listed above are in scope this
+sprint. If docs for the later Field Agent or Admin apps get added (e.g. under
+`docs/field-agent/` or `docs/admin/`), they are NOT relevant to current
+vendor-app work — don't read them for context on this sprint's tasks unless
+explicitly asked to.
 
 ## Conventions
 
