@@ -43,9 +43,12 @@ screens show price + qualitative rationale only. `Offer.materialBreakdown` /
 
 ## How to treat the plan in PROJECT_STATE.md
 
-- **Lane ownership and phase sequencing are fixed.** Who builds what, and in
-  what order, was decided for reasons outside the codebase (team coordination,
-  not yet known to you). Don't propose reassigning work between people.
+- **Phase sequencing is fixed; lane ownership is strict-by-default but
+  shiftable.** The order of phases was decided for reasons outside the codebase
+  (team coordination) — don't reorder it. Lane ownership holds by default, but
+  when a task genuinely straddles lanes it can move by agreement: flag it, get
+  the other owner's OK, and log it in `docs/LANE_OWNERSHIP.md`. Don't silently
+  reassign work, and don't silently absorb another lane's task either.
 - **Specific technical implementation choices are defaults, not mandates.** If
   you see a better technical approach for *how* to build a given task — more
   correct, more secure, more maintainable — say so explicitly with your
@@ -58,13 +61,16 @@ screens show price + qualitative rationale only. `Offer.materialBreakdown` /
 
 | Area | Owner |
 |------|-------|
-| Supabase Auth, session/route protection, RLS policies (all tables), login + signup auth wiring, the 3 realtime tracking screens, profile screen | Person A |
-| Prisma schema + types, onboarding/KYC screens, dashboard, compliance, certificate PDF generation, internal seed/simulation surface | Person B |
+| Supabase Auth, session/route protection, RLS policies (all tables), login + full signup/account-creation flow (account-type selector, individual & fleet forms, `auth.signUp` + initial profile-row insert), the 3 realtime tracking screens, profile screen | Person A |
+| Prisma schema + types, post-signup KYC upload + verification, dashboard, compliance, certificate PDF generation, internal seed/simulation surface | Person B |
 | Component library (from wireframe), the full request → offer → handover flow, PWA + offline, deployment/CI | Person C |
 
-**Do not edit another lane's area, even if faster.** If you need something from
-a lane that isn't finished yet, stub it against the agreed shape and leave
-`// TODO: replace with <thing> once <owner> ships it`. See "Stub-data pattern" below.
+**Do not edit another lane's area, even if faster** — unless ownership has been
+shifted by agreement and logged in `docs/LANE_OWNERSHIP.md` (lanes are
+strict-by-default but can move when a task straddles them: flag → agree → log).
+If you need something from a lane that isn't finished yet, stub it against the
+agreed shape and leave `// TODO: replace with <thing> once <owner> ships it`.
+See "Stub-data pattern" below.
 
 ## Commands
 
@@ -105,6 +111,7 @@ keeps every lane moving in parallel without anyone touching another's files.
 
 - `docs/PROJECT_STATE.md` — live status, current phase, open questions. Check first.
 - `docs/CONTEXT.md` — decisions made and why, conventions, deferred items.
+- `docs/LANE_OWNERSHIP.md` — lane-shift policy (strict-by-default, flexible-with-flagging) + the log of ownership changes.
 - `docs/CLBIPP_Vendor_Wireframes_1.html` — UI source of truth for this sprint.
 - `prisma/schema.prisma` — the real vendor schema (Profile, Pickup, Offer,
   StatusEvent, Certificate). Read before writing any RLS policy or auth code

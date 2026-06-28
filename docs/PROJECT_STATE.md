@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-06-24
+**Last updated:** 2026-06-27
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -38,11 +38,15 @@ Shared `/lib`, `/components`, Prisma schema, auth sit at root.
 
 | Person | Owns |
 |---|---|
-| **A (me / Aamir)** | Supabase Auth, session/route protection, RLS policies, login + signup screens' auth wiring, realtime tracking screens, profile. |
-| **B (Teammate 1)** | Prisma schema + types, onboarding/KYC screens, dashboard, compliance, certificate PDF generation, internal seed/sim surface. |
+| **A (me / Aamir)** | Supabase Auth, session/route protection, RLS policies, login + full signup/account-creation flow (type selector + individual/fleet forms, `auth.signUp` + initial profile-row insert), realtime tracking screens, profile. |
+| **B (Teammate 1)** | Prisma schema + types, post-signup KYC upload + verification, dashboard, compliance, certificate PDF generation, internal seed/sim surface. |
 | **C (Teammate 2)** | Component library (from wireframe), full request → offer → handover flow, PWA + offline, deployment/CI. |
 
 Setup + final ship are shared by all three.
+
+**Lane shifts are logged in `LANE_OWNERSHIP.md`** (policy: strict-by-default,
+flexible-with-flagging). Most recent: signup/account-creation flow moved B → A
+on 2026-06-27 (B keeps post-signup KYC).
 
 **My personal context:** beginner, learning the stack as I go. Using Claude Code
 as a supervised tool (read + understand what it generates, don't blind-trust).
@@ -81,7 +85,22 @@ to ship. Auth quickstart (~1 hr) to be done in the Day-1 gap while B builds sche
 3. Build login/signup auth wiring against mock shapes; swap to B's real types once pushed.
 4. Write RLS policies once B's schema lands (see open questions for the gotchas).
 
+> **Email confirmation:** turned OFF for this sprint (team-only eval). Rationale +
+> the flip-to-production steps are in `CONTEXT.md`. This is a Supabase dashboard
+> toggle (Authentication → Sign In/Providers → Email → "Confirm email").
+
 ---
+
+## Flagged for Person C (PWA / component-library shell)
+
+- **Root shell still default Next.js scaffold.** `src/app/globals.css` auto-
+  switches to a dark background on `prefers-color-scheme: dark` (the
+  create-next-app default), and `src/app/layout.tsx` doesn't constrain width —
+  so pages render full-bleed/website-sized instead of phone-app-sized. Noticed
+  while testing the new auth screens (2026-06-27). Left untouched since the
+  root layout/global styles overlap C's component-library + PWA-shell
+  ownership — flagging rather than silently restyling shared code. Worth
+  addressing whenever the real app shell/frame gets built.
 
 ## Open questions / things to confirm
 
