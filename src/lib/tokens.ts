@@ -30,6 +30,8 @@ export const colors = {
   warningBg: "#FFF7ED",
   info: "#3B82F6",
   infoBg: "#EFF6FF",
+  hazard: "#FF5A1F",
+  hazardBg: "#FFF3EE",
 
   // Status badge colours (maps to lifecycle)
   status: {
@@ -41,6 +43,26 @@ export const colors = {
     recovered: { dot: "#22C55E", bg: "#F0FDF4", text: "#15803D" },
     certified: { dot: "#22C55E", bg: "#F0FDF4", text: "#15803D" },
   },
+// NEW - Upload / Dropzone states
+upload: {
+  empty: {
+    border: "#E5E5E5",
+    bg: "#FFFFFF",
+    text: "#666666",
+  },
+
+  selected: {
+    border: "#C8F53D",
+    bg: "#F8F5EE",
+    text: "#111111",
+  },
+
+  uploading: {
+    border: "#3B82F6",
+    bg: "#EFF6FF",
+    text: "#1D4ED8",
+  },
+},
 } as const;
 
 export const typography = {
