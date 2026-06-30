@@ -23,16 +23,16 @@ export interface TimelineStageData {
 export type TimelineStatus = "completed" | "active" | "pending";
 
 export interface TimelineProps {
-  /** The current (latest reached) stage */
   currentStage: LifecycleStage;
-  /**
-   * Optional per-stage overrides. Keys are stage names.
-   * Merge with defaults; you only need to pass what differs.
-   */
+
   stages?: Partial<Record<LifecycleStage, Pick<TimelineStageData, "timestamp" | "sublabel">>>;
+
   className?: string;
-  /** Show a pulsing indicator on the active stage (use for realtime views) */
+
   pulse?: boolean;
+
+  // NEW
+  endStage?: LifecycleStage;
 }
 
 // Human-readable labels for each stage
@@ -135,17 +135,26 @@ function Timeline({
   stages = {},
   className,
   pulse = false,
+  endStage,
 }: TimelineProps) {
   const currentIndex = LIFECYCLE_STAGES.indexOf(currentStage);
+  const visibleStages =
+  endStage === undefined
+    ? LIFECYCLE_STAGES
+    : LIFECYCLE_STAGES.slice(
+        0,
+        LIFECYCLE_STAGES.indexOf(endStage) + 1
+      );
 
   return (
     <div className={cn("flex flex-col", className)} role="list" aria-label="Pickup lifecycle">
-      {LIFECYCLE_STAGES.map((stage, idx) => {
+      {visibleStages.map((stage, idx) => {
         const status = getStatus(stage, currentStage);
         const override = stages[stage];
         const label = STAGE_LABELS[stage];
-        const isLast = idx === LIFECYCLE_STAGES.length - 1;
-        const connectorCompleted = idx < currentIndex;
+        const isLast = idx === visibleStages.length - 1;
+        const connectorCompleted =
+          LIFECYCLE_STAGES.indexOf(stage) < currentIndex;
 
         // Determine sublabel
         let sublabel: string | undefined;
