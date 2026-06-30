@@ -1,5 +1,4 @@
-@import "tailwindcss";`
-
+@import "tailwindcss";
 :root {
   /* Fonts (loaded in layout.tsx) */
   --font-display: var(--font-display);
