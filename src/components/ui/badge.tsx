@@ -1,55 +1,58 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { colors } from "@/lib/tokens";
 import type { LifecycleStage } from "@/lib/tokens";
 
 // ─── StatusBadge ────────────────────────────────────────────────────────────
 // Maps a lifecycle stage to a coloured dot + ALL-CAPS label pill.
-// Matches the wireframe badges exactly: SCHEDULED, PROCESSED, RECOVERED, CERTIFIED, etc.
+// Dot and background colours come from tokens.ts colors.status — the JS object
+// is the right place for these since they are applied via style={} (dynamic),
+// not as static Tailwind classes.
 
 const STATUS_CONFIG: Record<
   LifecycleStage,
   { dot: string; bg: string; text: string; label: string }
 > = {
   requested: {
-    dot: "#3B82F6",
-    bg: "#EFF6FF",
-    text: "#1D4ED8",
+    dot: colors.info,
+    bg: colors.infoBg,
+    text: colors.infoText,
     label: "REQUESTED",
   },
   scheduled: {
-    dot: "#3B82F6",
-    bg: "#EFF6FF",
-    text: "#1D4ED8",
+    dot: colors.info,
+    bg: colors.infoBg,
+    text: colors.infoText,
     label: "SCHEDULED",
   },
   collected: {
-    dot: "#F97316",
-    bg: "#FFF7ED",
-    text: "#C2410C",
+    dot: colors.warning,
+    bg: colors.warningBg,
+    text: colors.warningText,
     label: "COLLECTED",
   },
   tested: {
-    dot: "#F97316",
-    bg: "#FFF7ED",
-    text: "#C2410C",
+    dot: colors.warning,
+    bg: colors.warningBg,
+    text: colors.warningText,
     label: "TESTED",
   },
   processed: {
-    dot: "#F97316",
-    bg: "#FFF7ED",
-    text: "#C2410C",
+    dot: colors.warning,
+    bg: colors.warningBg,
+    text: colors.warningText,
     label: "PROCESSED",
   },
   recovered: {
-    dot: "#22C55E",
-    bg: "#F0FDF4",
-    text: "#15803D",
+    dot: colors.success,
+    bg: colors.successBg,
+    text: colors.successText,
     label: "RECOVERED",
   },
   certified: {
-    dot: "#22C55E",
-    bg: "#F0FDF4",
-    text: "#15803D",
+    dot: colors.success,
+    bg: colors.successBg,
+    text: colors.successText,
     label: "CERTIFIED",
   },
 };
@@ -105,17 +108,17 @@ export type BadgeVariant =
 
 const BADGE_VARIANT_CLASSES: Record<BadgeVariant, string> = {
   default:
-    "bg-[#F8F5EE] text-[#111111] border border-[#E5E5E5]",
+    "bg-background text-text-primary border border-border",
   success:
-    "bg-[#F0FDF4] text-[#15803D]",
+    "bg-success-bg text-success-text",
   error:
-    "bg-[#FEF2F2] text-[#B91C1C]",
+    "bg-error-bg text-error-text",
   warning:
-    "bg-[#FFF7ED] text-[#C2410C]",
+    "bg-warning-bg text-warning-text",
   info:
-    "bg-[#EFF6FF] text-[#1D4ED8]",
+    "bg-info-bg text-info-text",
   outline:
-    "bg-transparent border border-[#E5E5E5] text-[#666666]",
+    "bg-transparent border border-border text-text-secondary",
 };
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {

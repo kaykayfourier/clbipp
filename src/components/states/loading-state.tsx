@@ -27,7 +27,7 @@ function LoadingState({
       >
         <Spinner size="sm" />
         {label && (
-          <span className="text-sm text-[#666666]">{label}</span>
+          <span className="text-sm text-text-secondary">{label}</span>
         )}
       </div>
     );
@@ -43,8 +43,8 @@ function LoadingState({
       aria-label={label ?? "Loading"}
     >
       {/* Logo mark */}
-      <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-[#111111]">
-        <span className="text-[#C8F53D] text-xl font-bold font-mono select-none">
+      <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-black">
+        <span className="text-primary-green text-xl font-bold font-mono select-none">
           B2
         </span>
       </div>
@@ -52,7 +52,7 @@ function LoadingState({
       <Spinner size="lg" />
 
       {label && (
-        <p className="text-sm text-[#666666]">{label}</p>
+        <p className="text-sm text-text-secondary">{label}</p>
       )}
     </div>
   );
@@ -75,7 +75,7 @@ function Spinner({
 
   return (
     <svg
-      className={cn("animate-spin text-[#C8F53D]", sizeClasses[size], className)}
+      className={cn("animate-spin text-primary-green", sizeClasses[size], className)}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
@@ -109,7 +109,7 @@ function SkeletonBlock({
   return (
     <div
       className={cn(
-        "animate-pulse rounded-[10px] bg-[#E5E5E5]",
+        "animate-pulse rounded-[10px] bg-border",
         className
       )}
       aria-hidden="true"
@@ -122,7 +122,7 @@ function SkeletonCard({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "rounded-[14px] border border-[#E5E5E5] bg-white p-4 space-y-3",
+        "rounded-[14px] border border-border bg-surface p-4 space-y-3",
         className
       )}
       aria-hidden="true"
@@ -143,7 +143,7 @@ function SkeletonListRow({ className }: { className?: string }) {
     <div
       className={cn(
         "flex items-center gap-3 px-4 py-3.5",
-        "bg-white border border-[#E5E5E5] rounded-[14px]",
+        "bg-surface border border-border rounded-[14px]",
         className
       )}
       aria-hidden="true"
@@ -159,3 +159,4 @@ function SkeletonListRow({ className }: { className?: string }) {
 }
 
 export { LoadingState, Spinner, SkeletonBlock, SkeletonCard, SkeletonListRow };
+

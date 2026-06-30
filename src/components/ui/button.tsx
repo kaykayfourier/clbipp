@@ -14,7 +14,7 @@ const buttonVariants = cva(
     "inline-flex items-center justify-center gap-2",
     "font-semibold rounded-full",
     "transition-all duration-150 ease-out",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#C8F53D]",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-green",
     "disabled:pointer-events-none disabled:opacity-40",
     "select-none",
   ].join(" "),
@@ -22,13 +22,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-[#C8F53D] text-[#111111] hover:brightness-95 active:brightness-90",
+          "bg-primary-green text-text-primary hover:brightness-95 active:brightness-90",
         secondary:
-          "bg-transparent border-2 border-[#111111] text-[#111111] hover:bg-[#111111]/5 active:bg-[#111111]/10",
+          "bg-transparent border-2 border-primary-black text-text-primary hover:bg-primary-black/5 active:bg-primary-black/10",
         ghost:
-          "bg-transparent text-[#666666] hover:text-[#111111] hover:bg-[#111111]/5 active:bg-[#111111]/10",
+          "bg-transparent text-text-secondary hover:text-text-primary hover:bg-primary-black/5 active:bg-primary-black/10",
         destructive:
-          "bg-transparent border-2 border-[#EF4444] text-[#EF4444] hover:bg-[#EF4444]/5 active:bg-[#EF4444]/10",
+          "bg-transparent border-2 border-error text-error hover:bg-error/5 active:bg-error/10",
       },
       size: {
         sm: "text-sm px-4 py-2 h-9",

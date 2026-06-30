@@ -43,13 +43,13 @@ function AppShell({
   return (
     <div
       className={cn(
-        "relative flex flex-col min-h-screen bg-[#F8F5EE]",
+        "relative flex flex-col min-h-screen bg-background",
         className
       )}
     >
       {/* ── Top Header ─────────────────────────────────────────────────── */}
       {(title || showBack || headerRight) && (
-        <header className="sticky top-0 z-20 flex items-center h-14 px-4 bg-[#F8F5EE] border-b border-[#E5E5E5]">
+        <header className="sticky top-0 z-20 flex items-center h-14 px-4 bg-background border-b border-border">
           {/* Back button */}
           {showBack && (
             <BackButton href={backHref} />
@@ -59,7 +59,7 @@ function AppShell({
           {title && (
             <h1
               className={cn(
-                "flex-1 text-base font-semibold text-[#111111] text-center",
+                "flex-1 text-base font-semibold text-text-primary text-center",
                 // When there's a back button and no right element, centre precisely
                 showBack && !headerRight && "pr-9"
               )}
@@ -100,15 +100,15 @@ function BackButton({ href }: { href?: string }) {
     <span
       className={cn(
         "flex items-center justify-center w-9 h-9 rounded-full",
-        "hover:bg-[#111111]/5 active:bg-[#111111]/10",
+        "hover:bg-primary-black/5 active:bg-primary-black/10",
         "transition-colors duration-100",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8F53D]"
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-green"
       )}
     >
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
         <path
           d="M12.5 15l-5-5 5-5"
-          stroke="#111111"
+          stroke="var(--color-text-primary)"
           strokeWidth="1.75"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -162,7 +162,7 @@ function SectionLabel({
   return (
     <p
       className={cn(
-        "text-[11px] font-semibold tracking-widest text-[#666666] uppercase",
+        "text-[11px] font-semibold tracking-widest text-text-secondary uppercase",
         className
       )}
     >

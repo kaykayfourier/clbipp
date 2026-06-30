@@ -16,17 +16,17 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         ref={ref}
         className={cn(
           // Base
-          "w-full rounded-[10px] border bg-white px-4 py-3",
-          "text-base text-[#111111] placeholder:text-[#AAAAAA]",
+          "w-full rounded-[10px] border bg-surface px-4 py-3",
+          "text-base text-text-primary placeholder:text-text-disabled",
           "transition-colors duration-100",
           // Default border
-          "border-[#E5E5E5]",
+          "border-border",
           // Focus
-          "focus:outline-none focus:ring-2 focus:ring-[#C8F53D] focus:ring-offset-0 focus:border-transparent",
+          "focus:outline-none focus:ring-2 focus:ring-primary-green focus:ring-offset-0 focus:border-transparent",
           // Error
-          error && "border-[#EF4444] focus:ring-[#EF4444]",
+          error && "border-error focus:ring-error",
           // Disabled
-          "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-[#F8F5EE]",
+          "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-background",
           className
         )}
         {...props}
@@ -51,20 +51,20 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           className={cn(
-            "w-full appearance-none rounded-[10px] border bg-white px-4 py-3 pr-10",
-            "text-base text-[#111111]",
+            "w-full appearance-none rounded-[10px] border bg-surface px-4 py-3 pr-10",
+            "text-base text-text-primary",
             "transition-colors duration-100",
-            "border-[#E5E5E5]",
-            "focus:outline-none focus:ring-2 focus:ring-[#C8F53D] focus:ring-offset-0 focus:border-transparent",
-            error && "border-[#EF4444] focus:ring-[#EF4444]",
-            "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-[#F8F5EE]",
+            "border-border",
+            "focus:outline-none focus:ring-2 focus:ring-primary-green focus:ring-offset-0 focus:border-transparent",
+            error && "border-error focus:ring-error",
+            "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-background",
             className
           )}
           {...props}
         >
           {children}
         </select>
-        {/* Chevron icon */}
+        {/* Chevron icon — uses CSS var so it tracks the token */}
         <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
           <svg
             width="16"
@@ -75,7 +75,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           >
             <path
               d="M4 6l4 4 4-4"
-              stroke="#666666"
+              stroke="var(--color-text-secondary)"
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -102,13 +102,13 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         ref={ref}
         className={cn(
-          "w-full rounded-[10px] border bg-white px-4 py-3",
-          "text-base text-[#111111] placeholder:text-[#AAAAAA]",
+          "w-full rounded-[10px] border bg-surface px-4 py-3",
+          "text-base text-text-primary placeholder:text-text-disabled",
           "resize-none transition-colors duration-100",
-          "border-[#E5E5E5]",
-          "focus:outline-none focus:ring-2 focus:ring-[#C8F53D] focus:ring-offset-0 focus:border-transparent",
-          error && "border-[#EF4444] focus:ring-[#EF4444]",
-          "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-[#F8F5EE]",
+          "border-border",
+          "focus:outline-none focus:ring-2 focus:ring-primary-green focus:ring-offset-0 focus:border-transparent",
+          error && "border-error focus:ring-error",
+          "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-background",
           className
         )}
         {...props}
@@ -145,11 +145,11 @@ function Field({
     <div className={cn("flex flex-col gap-1.5", className)}>
       <label
         htmlFor={htmlFor}
-        className="text-sm font-medium text-[#111111]"
+        className="text-sm font-medium text-text-primary"
       >
         {label}
         {required && (
-          <span className="ml-1 text-[#EF4444]" aria-hidden="true">
+          <span className="ml-1 text-error" aria-hidden="true">
             *
           </span>
         )}
@@ -163,7 +163,7 @@ function Field({
           id={htmlFor ? `${htmlFor}-hint` : undefined}
           className={cn(
             "text-xs",
-            error ? "text-[#EF4444]" : "text-[#666666]"
+            error ? "text-error" : "text-text-secondary"
           )}
           role={error ? "alert" : undefined}
         >

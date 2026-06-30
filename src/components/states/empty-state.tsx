@@ -21,7 +21,8 @@ export interface EmptyStateProps {
   className?: string;
 }
 
-// Default battery illustration matching the wireframe empty dashboard
+// Default battery illustration matching the wireframe empty dashboard.
+// SVG fill values use CSS vars so they track the token system.
 function BatteryEmptyIllustration() {
   return (
     <svg
@@ -32,11 +33,11 @@ function BatteryEmptyIllustration() {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <rect x="10" y="20" width="54" height="36" rx="8" fill="#E5E5E5" />
-      <rect x="64" y="30" width="8" height="16" rx="4" fill="#E5E5E5" />
-      <rect x="14" y="24" width="46" height="28" rx="6" fill="#F8F5EE" />
+      <rect x="10" y="20" width="54" height="36" rx="8" fill="var(--color-border)" />
+      <rect x="64" y="30" width="8" height="16" rx="4" fill="var(--color-border)" />
+      <rect x="14" y="24" width="46" height="28" rx="6" fill="var(--color-background)" />
       {/* Low charge bar */}
-      <rect x="14" y="24" width="12" height="28" rx="6" fill="#C8F53D" />
+      <rect x="14" y="24" width="12" height="28" rx="6" fill="var(--color-primary-green)" />
     </svg>
   );
 }
@@ -67,9 +68,9 @@ function EmptyState({
 
       {/* Text */}
       <div className="space-y-2">
-        <h2 className="text-xl font-semibold text-[#111111]">{heading}</h2>
+        <h2 className="text-xl font-semibold text-text-primary">{heading}</h2>
         {description && (
-          <p className="text-sm text-[#666666] leading-relaxed max-w-xs mx-auto">
+          <p className="text-sm text-text-secondary leading-relaxed max-w-xs mx-auto">
             {description}
           </p>
         )}
@@ -85,7 +86,7 @@ function EmptyState({
             <button
               type="button"
               onClick={onSecondaryAction}
-              className="text-sm text-[#666666] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8F53D] rounded"
+              className="text-sm text-text-secondary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-green rounded"
             >
               {secondaryLabel}
             </button>
@@ -97,3 +98,4 @@ function EmptyState({
 }
 
 export { EmptyState };
+

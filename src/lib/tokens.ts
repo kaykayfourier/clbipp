@@ -1,6 +1,6 @@
 // ─── Back2Basics · Design Tokens ───────────────────────────────────────────
 // Single source of truth. Import this anywhere you need raw values.
-// Tailwind config reads these too — keep them in sync.
+// globals.css @theme reads these names — keep them in sync.
 
 export const colors = {
   // Brand
@@ -21,7 +21,7 @@ export const colors = {
   textDisabled: "#AAAAAA",
   textOnGreen: "#111111",
 
-  // Semantic
+  // Semantic — fill colours
   success: "#22C55E",
   successBg: "#F0FDF4",
   error: "#EF4444",
@@ -33,6 +33,18 @@ export const colors = {
   hazard: "#FF5A1F",
   hazardBg: "#FFF3EE",
 
+  // Semantic — text-on-coloured-bg shades (darker for WCAG contrast)
+  successText: "#15803D",
+  errorText: "#B91C1C",
+  warningText: "#C2410C",
+  infoText: "#1D4ED8",
+
+  // Semantic — banner/chip border tints
+  successBorder: "#BBF7D0",
+  errorBorder: "#FECACA",
+  warningBorder: "#FED7AA",
+  infoBorder: "#BFDBFE",
+
   // Status badge colours (maps to lifecycle)
   status: {
     requested: { dot: "#3B82F6", bg: "#EFF6FF", text: "#1D4ED8" },
@@ -43,26 +55,25 @@ export const colors = {
     recovered: { dot: "#22C55E", bg: "#F0FDF4", text: "#15803D" },
     certified: { dot: "#22C55E", bg: "#F0FDF4", text: "#15803D" },
   },
-// NEW - Upload / Dropzone states
-upload: {
-  empty: {
-    border: "#E5E5E5",
-    bg: "#FFFFFF",
-    text: "#666666",
-  },
 
-  selected: {
-    border: "#C8F53D",
-    bg: "#F8F5EE",
-    text: "#111111",
+  // Upload / Dropzone states
+  upload: {
+    empty: {
+      border: "#E5E5E5",
+      bg: "#FFFFFF",
+      text: "#666666",
+    },
+    selected: {
+      border: "#C8F53D",
+      bg: "#F8F5EE",
+      text: "#111111",
+    },
+    uploading: {
+      border: "#3B82F6",
+      bg: "#EFF6FF",
+      text: "#1D4ED8",
+    },
   },
-
-  uploading: {
-    border: "#3B82F6",
-    bg: "#EFF6FF",
-    text: "#1D4ED8",
-  },
-},
 } as const;
 
 export const typography = {
@@ -162,3 +173,4 @@ export const LIFECYCLE_STAGES = [
 export type LifecycleStage = (typeof LIFECYCLE_STAGES)[number];
 
 export type StatusVariant = LifecycleStage;
+

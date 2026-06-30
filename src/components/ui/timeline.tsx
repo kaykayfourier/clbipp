@@ -78,7 +78,7 @@ function StageDot({
   if (status === "completed") {
     return (
       <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#22C55E]">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-success">
           {/* Checkmark */}
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
             <path
@@ -98,9 +98,9 @@ function StageDot({
     return (
       <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
         {pulse && (
-          <span className="absolute h-5 w-5 animate-ping rounded-full bg-[#22C55E] opacity-30" />
+          <span className="absolute h-5 w-5 animate-ping rounded-full bg-success opacity-30" />
         )}
-        <span className="relative flex h-5 w-5 items-center justify-center rounded-full bg-[#22C55E]">
+        <span className="relative flex h-5 w-5 items-center justify-center rounded-full bg-success">
           <span className="h-2 w-2 rounded-full bg-white" />
         </span>
       </span>
@@ -110,7 +110,7 @@ function StageDot({
   // Pending
   return (
     <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-      <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#E5E5E5] bg-white" />
+      <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-border bg-surface" />
     </span>
   );
 }
@@ -122,7 +122,7 @@ function Connector({ completed }: { completed: boolean }) {
     <span
       className={cn(
         "ml-[9px] block w-0.5 h-6",
-        completed ? "bg-[#22C55E]" : "bg-[#E5E5E5]"
+        completed ? "bg-success" : "bg-border"
       )}
     />
   );
@@ -177,8 +177,8 @@ function Timeline({
                   className={cn(
                     "block text-sm font-semibold leading-tight",
                     status === "pending"
-                      ? "text-[#AAAAAA]"
-                      : "text-[#111111]"
+                      ? "text-text-disabled"
+                      : "text-text-primary"
                   )}
                 >
                   {label}
@@ -188,8 +188,8 @@ function Timeline({
                     className={cn(
                       "block text-xs mt-0.5",
                       status === "completed"
-                        ? "text-[#666666]"
-                        : "text-[#AAAAAA]"
+                        ? "text-text-secondary"
+                        : "text-text-disabled"
                     )}
                   >
                     {sublabel}

@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 
 // ─── BottomTabBar ────────────────────────────────────────────────────────────
 // The 4-tab bottom nav: Home · Track · Certificates · Profile
-// Active tab renders in primaryBlack; inactive in textSecondary.
-// Matches the wireframe BottomTabBar exactly.
+// Active tab renders in text-primary; inactive in text-disabled.
+// SVG stroke/fill values use CSS vars so they track the token system.
 
 // ─── Icons ──────────────────────────────────────────────────────────────────
 
@@ -17,11 +17,11 @@ function HomeIcon({ active }: { active: boolean }) {
     <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
       <path
         d="M2.5 9.5L11 3l8.5 6.5V19a1 1 0 01-1 1h-5v-5h-5v5h-5a1 1 0 01-1-1V9.5z"
-        stroke={active ? "#111111" : "#AAAAAA"}
+        stroke={active ? "var(--color-text-primary)" : "var(--color-text-disabled)"}
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
-        fill={active ? "#111111" : "none"}
+        fill={active ? "var(--color-text-primary)" : "none"}
         fillOpacity={active ? 0.08 : 0}
       />
     </svg>
@@ -35,20 +35,20 @@ function TrackIcon({ active }: { active: boolean }) {
         cx="11"
         cy="11"
         r="3"
-        stroke={active ? "#111111" : "#AAAAAA"}
+        stroke={active ? "var(--color-text-primary)" : "var(--color-text-disabled)"}
         strokeWidth="1.5"
-        fill={active ? "#111111" : "none"}
+        fill={active ? "var(--color-text-primary)" : "none"}
         fillOpacity={active ? 0.15 : 0}
       />
       <path
         d="M11 4v2M11 16v2M4 11H2M20 11h-2"
-        stroke={active ? "#111111" : "#AAAAAA"}
+        stroke={active ? "var(--color-text-primary)" : "var(--color-text-disabled)"}
         strokeWidth="1.5"
         strokeLinecap="round"
       />
       <path
         d="M6.22 6.22l1.41 1.41M14.36 14.36l1.42 1.42M6.22 15.78l1.41-1.41M14.36 7.64l1.42-1.42"
-        stroke={active ? "#111111" : "#AAAAAA"}
+        stroke={active ? "var(--color-text-primary)" : "var(--color-text-disabled)"}
         strokeWidth="1.3"
         strokeLinecap="round"
       />
@@ -65,14 +65,14 @@ function CertificatesIcon({ active }: { active: boolean }) {
         width="14"
         height="18"
         rx="2"
-        stroke={active ? "#111111" : "#AAAAAA"}
+        stroke={active ? "var(--color-text-primary)" : "var(--color-text-disabled)"}
         strokeWidth="1.5"
-        fill={active ? "#111111" : "none"}
+        fill={active ? "var(--color-text-primary)" : "none"}
         fillOpacity={active ? 0.06 : 0}
       />
       <path
         d="M7 7h8M7 11h8M7 15h5"
-        stroke={active ? "#111111" : "#AAAAAA"}
+        stroke={active ? "var(--color-text-primary)" : "var(--color-text-disabled)"}
         strokeWidth="1.5"
         strokeLinecap="round"
       />
@@ -87,14 +87,14 @@ function ProfileIcon({ active }: { active: boolean }) {
         cx="11"
         cy="8"
         r="3.5"
-        stroke={active ? "#111111" : "#AAAAAA"}
+        stroke={active ? "var(--color-text-primary)" : "var(--color-text-disabled)"}
         strokeWidth="1.5"
-        fill={active ? "#111111" : "none"}
+        fill={active ? "var(--color-text-primary)" : "none"}
         fillOpacity={active ? 0.1 : 0}
       />
       <path
         d="M4 19c0-3.314 3.134-6 7-6s7 2.686 7 6"
-        stroke={active ? "#111111" : "#AAAAAA"}
+        stroke={active ? "var(--color-text-primary)" : "var(--color-text-disabled)"}
         strokeWidth="1.5"
         strokeLinecap="round"
       />
@@ -145,7 +145,7 @@ function BottomTabBar({ className }: BottomTabBarProps) {
       className={cn(
         "fixed bottom-0 left-0 right-0 z-30",
         "flex items-stretch",
-        "bg-white border-t border-[#E5E5E5]",
+        "bg-surface border-t border-border",
         // safe area padding for iOS home indicator
         "pb-safe",
         className
@@ -165,8 +165,8 @@ function BottomTabBar({ className }: BottomTabBarProps) {
             className={cn(
               "flex flex-1 flex-col items-center justify-center gap-1 py-3",
               "transition-colors duration-100",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8F53D]",
-              isActive ? "text-[#111111]" : "text-[#AAAAAA]"
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-green",
+              isActive ? "text-text-primary" : "text-text-disabled"
             )}
             aria-current={isActive ? "page" : undefined}
           >
@@ -174,7 +174,7 @@ function BottomTabBar({ className }: BottomTabBarProps) {
             <span
               className={cn(
                 "text-[10px] font-medium",
-                isActive ? "text-[#111111]" : "text-[#AAAAAA]"
+                isActive ? "text-text-primary" : "text-text-disabled"
               )}
             >
               {tab.label}
