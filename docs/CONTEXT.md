@@ -49,11 +49,20 @@ One repo, three apps separated by route folders. Shared code at root.
   no conflict, different layers of the same database.
 - **Individual vs Fleet split at signup.** Individual = minimal fields. Fleet =
   GST + PAN + business address + EPR ID + KYC document upload.
+- **Email confirmation OFF for now.** This sprint's build is evaluated by the
+  team only (lead circulates it for feedback), so requiring every tester to
+  confirm an email adds friction with no anti-abuse payoff. Auth stays secure —
+  passwords, sessions, and RLS all still apply. Flip ON (Supabase dashboard
+  toggle + add `src/app/auth/confirm/route.ts` for the callback) when promoting
+  toward production.
 - **Single repo, not three.** All apps share schema, auth, components — splitting
   would duplicate the foundation or add packaging overhead. Separate by route folder.
-- **The build plan's lane/sequencing is fixed; its technical "how" isn't.** Claude
-  Code (or anyone) can propose a better implementation approach for a task, but
-  not reassign who owns it or reorder phases — that layer is a team decision.
+- **Phase sequencing is fixed; lane ownership is strict-by-default but shiftable;
+  the technical "how" is open.** Claude Code (or anyone) can propose a better
+  implementation approach for a task. Phase *order* stays fixed. Lane *ownership*
+  holds by default but can move when a task straddles lanes — by agreement,
+  flagged, and logged in `LANE_OWNERSHIP.md`. The "who" is a team decision, not a
+  silent one.
 
 ## Decisions explicitly deferred (do not build yet)
 

@@ -192,7 +192,7 @@ model Profile {
   kycDocUrls String[]  @map("kyc_doc_urls")
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   pickups      Pickup[]
   offers       Offer[]
