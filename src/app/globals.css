@@ -1,11 +1,70 @@
 @import "tailwindcss";
-
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Fonts (loaded in layout.tsx) */
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  /* Brand */
+  --primary-green: #C8F53D;
+  --primary-black: #111111;
+
+  /* Backgrounds */
+  --background: #F8F5EE;
+  --surface: #FFFFFF;
+
+  /* Borders */
+  --border: #E5E5E5;
+  --border-strong: #CCCCCC;
+
+  /* Text */
+  --text-primary: #111111;
+  --text-secondary: #666666;
+  --text-disabled: #AAAAAA;
+
+  /* Semantic — fills */
+  --success: #22C55E;
+  --success-bg: #F0FDF4;
+
+  --error: #EF4444;
+  --error-bg: #FEF2F2;
+
+  --warning: #F97316;
+  --warning-bg: #FFF7ED;
+
+  --info: #3B82F6;
+  --info-bg: #EFF6FF;
+
+  --hazard: #FF5A1F;
+  --hazard-bg: #FFF3EE;
+
+  /* Semantic — text-on-coloured-bg shades */
+  --success-text: #15803D;
+  --error-text: #B91C1C;
+  --warning-text: #C2410C;
+  --info-text: #1D4ED8;
+
+  /* Semantic — banner / chip border tints */
+  --success-border: #BBF7D0;
+  --error-border: #FECACA;
+  --warning-border: #FED7AA;
+  --info-border: #BFDBFE;
+
+  /* Interaction micro-shades (not in the main table; used for pressed states) */
+  --background-pressed: #F0EDE6;
 }
 
 @theme inline {
+  /* Fonts */
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);`
+  --font-mono: var(--font-mono);
+  --font-sans: var(--font-body);
+
+  /* Colors */
+  --color-primary-green: var(--primary-green);
+  --color-primary-black: var(--primary-black);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
