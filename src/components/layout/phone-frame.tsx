@@ -7,6 +7,11 @@ import { cn } from "@/lib/utils";
 //
 // Renders a phone outline (iOS-style pill) with a status bar strip and
 // a scrollable content area for the child screen.
+//
+// Note: style={{ backgroundColor }} is used intentionally here because the
+// phone shell and status bar need exact hex values that are not Tailwind
+// utility candidates (they simulate a physical device, not app UI).
+// They reference CSS vars from the token system to stay in sync.
 
 export interface PhoneFrameProps {
   /** Rendered inside the phone viewport */
@@ -25,27 +30,27 @@ function PhoneFrame({ children, label, className }: PhoneFrameProps) {
       <div
         className={cn(
           "relative rounded-[40px] overflow-hidden",
-          "border-[6px] border-[#1A1A1A]",
+          "border-[6px] border-primary-black",
           "shadow-xl",
           // Fixed dimensions matching standard phone preview
           "w-[320px] h-[640px]"
         )}
-        style={{ backgroundColor: "#111111" }}
+        style={{ backgroundColor: "var(--color-primary-black)" }}
       >
         {/* Status bar */}
         <div
           className="relative z-10 flex items-center justify-between px-6 pt-3 pb-1"
-          style={{ backgroundColor: "#F8F5EE" }}
+          style={{ backgroundColor: "var(--color-background)" }}
         >
           {/* Time */}
-          <span className="text-[12px] font-semibold text-[#111111]">9:41</span>
+          <span className="text-[12px] font-semibold text-text-primary">9:41</span>
 
           {/* Notch / island placeholder */}
-          <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-24 h-6 rounded-full bg-[#111111]" />
+          <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-24 h-6 rounded-full bg-primary-black" />
 
           {/* Signal / battery */}
           <div className="flex items-center gap-1">
-            <span className="text-[11px] font-semibold text-[#111111]">5G</span>
+            <span className="text-[11px] font-semibold text-text-primary">5G</span>
             {/* Battery icon */}
             <svg width="22" height="12" viewBox="0 0 22 12" fill="none" aria-hidden="true">
               <rect
@@ -54,11 +59,11 @@ function PhoneFrame({ children, label, className }: PhoneFrameProps) {
                 width="18"
                 height="11"
                 rx="2.5"
-                stroke="#111111"
+                stroke="var(--color-text-primary)"
                 strokeWidth="1"
               />
-              <rect x="1.5" y="1.5" width="15" height="9" rx="2" fill="#111111" />
-              <path d="M20 4v4" stroke="#111111" strokeWidth="1.5" strokeLinecap="round" />
+              <rect x="1.5" y="1.5" width="15" height="9" rx="2" fill="var(--color-text-primary)" />
+              <path d="M20 4v4" stroke="var(--color-text-primary)" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </div>
         </div>
@@ -66,7 +71,7 @@ function PhoneFrame({ children, label, className }: PhoneFrameProps) {
         {/* Screen content — scrollable */}
         <div
           className="absolute inset-0 top-[44px] overflow-y-auto overscroll-contain"
-          style={{ backgroundColor: "#F8F5EE" }}
+          style={{ backgroundColor: "var(--color-background)" }}
         >
           {children}
         </div>
@@ -74,7 +79,7 @@ function PhoneFrame({ children, label, className }: PhoneFrameProps) {
 
       {/* Label */}
       {label && (
-        <figcaption className="text-sm text-[#666666] font-medium">
+        <figcaption className="text-sm text-text-secondary font-medium">
           {label}
         </figcaption>
       )}

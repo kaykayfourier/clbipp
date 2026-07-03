@@ -4,18 +4,18 @@ import { cn } from "@/lib/utils";
 
 // ─── Card ───────────────────────────────────────────────────────────────────
 // Base white surface with border and optional shadow.
-// Variants: default, elevated, outline, ghost (no bg)
+// Variants: default, elevated, outline, ghost (no bg), tinted
 
 const cardVariants = cva(
   "rounded-[14px] overflow-hidden",
   {
     variants: {
       variant: {
-        default: "bg-white border border-[#E5E5E5]",
-        elevated: "bg-white border border-[#E5E5E5] shadow-md",
-        outline: "bg-transparent border border-[#E5E5E5]",
+        default: "bg-surface border border-border",
+        elevated: "bg-surface border border-border shadow-md",
+        outline: "bg-transparent border border-border",
         ghost: "bg-transparent",
-        tinted: "bg-[#F8F5EE] border border-[#E5E5E5]",
+        tinted: "bg-background border border-border",
       },
       padding: {
         none: "",
@@ -70,7 +70,7 @@ const CardTitle = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn("text-base font-semibold text-[#111111] leading-tight", className)}
+    className={cn("text-base font-semibold text-text-primary leading-tight", className)}
     {...props}
   >
     {children}
@@ -87,7 +87,7 @@ const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn("text-sm text-[#666666] leading-snug", className)}
+    className={cn("text-sm text-text-secondary leading-snug", className)}
     {...props}
   />
 ));
@@ -113,7 +113,7 @@ const CardFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center gap-2 pt-3 mt-3 border-t border-[#E5E5E5]", className)}
+    className={cn("flex items-center gap-2 pt-3 mt-3 border-t border-border", className)}
     {...props}
   />
 ));
@@ -123,7 +123,7 @@ CardFooter.displayName = "CardFooter";
 // ─── Divider (utility used inside cards) ────────────────────────────────────
 
 function CardDivider({ className }: { className?: string }) {
-  return <hr className={cn("border-t border-[#E5E5E5] my-3", className)} />;
+  return <hr className={cn("border-t border-border my-3", className)} />;
 }
 
 export {

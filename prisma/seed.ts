@@ -4,72 +4,81 @@ const prisma = new PrismaClient()
 
 async function main() {
 
-  await prisma.pathwayFactor.updateMany({
-    where: { isActive: true },
-    data: {isActive: false}
-  })
+  await prisma.profile.deleteMany()
+  await prisma.pickup.deleteMany()
+  await prisma.statusEvent.deleteMany()
+  await prisma.offer.deleteMany()
+  await prisma.certificate.deleteMany()
+
   
-  await prisma.marketPrices.create({
+  await prisma.profile.create({
     data: {
-      Li: 1200,
-      Co: 2800,
-      Ni: 1500,
-      Mn: 200,
-      Cu: 850,
-      Al: 220, 
+      id: "00000000-0000-0000-0000-000000000001",
+      vendorType: 'individual',
+      fullName: "Aamir Hashmi Singh",
+      email: "aamirsingh@6969",
+      phone: "+91 1234656767",
+      
+    },
+  })
+  console.log("Profiles data inserted")
+
+  await prisma.pickup.create({
+    data: {
+      id: "PKP-2031",
+      vendorId: "00000000-0000-0000-0000-000000000001",
+      batteryType: "li_ion_nmc",
+      approxQuantity: "90 units",
+      approxWeightKg: 480.00,
+      location: "Johri Farm",
+      status: "certified",
+      
     },
   })
 
+  console.log('PICKUP data inserted.')
 
-  await prisma.pathwayFactor.create({
-    data: {
-      configVersion: 'v2026-Q2',
-      isActive: true,
+  const stages = ["requested","scheduled","collected","tested","processed","recovered","certified"]
+  for (const status of stages) {
+    await prisma.statusEvent.create({
+      data: {pickupId: "PKP-2031", status: status as any, actorRole: "system"}
+    })
+  }
+  console.log("Status events populated")
+  await prisma.offer.create({
+  data: {
+    pickupId: "PKP-2031",
+    vendorId: "00000000-0000-0000-0000-000000000001",
+    pathway: "recycle",
+    estimatedPrice: 18450000, // paise
+    rationale: "High nickel content, metal recovery is the best route.",
+    materialBreakdown: [
+      { material: "Nickel", weight_kg: 31, value_paise: 12800000 },
+      { material: "Cobalt", weight_kg: 12, value_paise: 7400000 },
+    ],
+    deductions: [
+      { label: "Logistics", amount_paise: 800000 },
+    ],
+  }
+})
+console.log("Offers data inserted")
 
-      processingRatePerKg: 40.0,
-      refurbLaborRatePerKg: 180.0,
-      cellReplacementRate: 400.0,
-      testingRatePerKg: 50.0,
-      hydrometRatePerKg: 60.0,
+await prisma.certificate.create({
+  data: {
+    pickupId: "PKP-2031",
+    vendorId: "00000000-0000-0000-0000-000000000001",
+    pdfUrl: "certificates/PKP-2031.pdf",
+    totalWeightKg: 248,
+    materialSummary: [
+      { material: "Nickel", recovered_kg: 54 },
+      { material: "Cobalt", recovered_kg: 21 },
+    ],
+  }
+})
+console.log("certificates data inserted")
 
-      chemistryComposition: {
-        NMC622: {
-          Li: 0.07,
-          Co: 0.05,
-          Ni: 0.15,
-          Mn: 0.05,
-          Cu: 0.12,
-          Al: 0.15,
-        },
-        LFP: {
-          Li: 0.04,
-          Co: 0.00,
-          Ni: 0.00,
-          Mn: 0.00,
-          Cu: 0.12,
-          Al: 0.18,
-        },
-        C811: {
-          Li: 0.07,
-          Co: 0.05,
-          Ni: 0.15,
-          Mn: 0.05,
-          Cu: 0.12,
-          Al: 0.15,
-        },
-        LCO: {
-          Li: 0.07,
-          Co: 0.02,
-          Ni: 0.20,
-          Mn: 0.03,
-          Cu: 0.12,
-          Al: 0.15,
-        },
-      },
-    },
-  })
 
-  console.log('Seed data inserted.')
+
 }
 
 main()
