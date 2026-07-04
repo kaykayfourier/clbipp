@@ -216,11 +216,11 @@ async function main() {
   ]);
   console.log("Seed data deleted. Sim tables reset")
   }
-  reset_data()
-  //seed_data()
+  await reset_data()
+  await seed_data()
 }
 
-main()
+ main()
   .catch((e) => {
     console.error(e)
     process.exit(1)
