@@ -212,6 +212,7 @@ model Pickup {
   preferredDate  DateTime?   @map("preferred_date") @db.Date
   notes          String?
   photoUrls      String[]    @map("photo_urls")
+  publicToken    String      @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
 
   status PickupStatus @default(requested)
 
