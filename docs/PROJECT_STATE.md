@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-05
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -13,11 +13,16 @@
 
 ## Where we are right now
 
-Phase 1 is effectively complete. Phase 2 is underway — B has shipped seed data
-and the first Phase 2 screens (dashboard, compliance, certificate page scaffold).
-C's design system is done and available. Person A is about to start Phase 2
-implementation: complete the signup split flow (Phase 1 loose end), then build
-the 3 tracking screens, profile, and the public tracking link route.
+Phase 1 is complete. Phase 2 is underway. As of 2026-07-05:
+
+- **A** has completed the signup split flow (Phase 1 loose end now closed) and
+  is building the tracking screens, profile, and public tracking link.
+- **B** has shipped dashboard, compliance, certificate scaffold (all mock data),
+  and has agreed to add a `Pickup.publicToken` column (blocks A's Task 5).
+- **C** has shipped the full component library and AppShell. PWA/deploy is
+  Phase 3.
+
+Target: finish Phase 2 screens this session, then go straight to Phase 3.
 
 ---
 
@@ -67,13 +72,12 @@ as a supervised tool (read + understand what it generates, don't blind-trust).
 
 Person A:
 - ✅ `src/middleware.ts` — route protection, correct src/ location
-- ✅ `src/lib/supabase/auth.ts` — signIn, signUpWithProfile, signOut, getCurrentProfile
-- ✅ Login page (`/login`) — functional, plain Tailwind, TODO to swap C's components
-- ✅ Signup page — basic combined form works; creates auth user + profile row atomically
+- ✅ `src/lib/supabase/auth.ts` — signIn, signUpWithProfile (now accepts fleet fields), signOut, getCurrentProfile
+- ✅ Login page (`/login`) — AppShell + design tokens, Field/Button
+- ✅ Signup split flow — 3-screen split: type selector → individual form / fleet form.
+  Fleet fields (GST/PAN/EPR/address/company) collected at signup, written to profile row.
+  All auth screens use AppShell with hideNav (no tab bar during onboarding).
 - ✅ RLS policies — all 5 tables versioned in `supabase/policies.sql`
-- ⚠️ Signup split flow NOT done — the wireframe calls for 3 screens (type-selector →
-  individual form / fleet form with GST/PAN/EPR fields). The current single page works
-  but doesn't collect fleet-specific fields. **First task in the build order below.**
 
 Person B:
 - ✅ Prisma schema — Profile, Pickup, Offer, StatusEvent, Certificate
@@ -95,18 +99,18 @@ Person B (shipped so far):
 - ✅ `src/app/(app)/compliance/page.tsx` — filter chips + certificate list (mock data)
 - ✅ `src/app/(app)/certificates/[id]/page.tsx` — certificate detail (scaffolded)
 
-Person A — NOT STARTED (build order below)
+Person A — IN PROGRESS (build order below)
 Person C — NOT STARTED
 
 **Phase 3 — PWA, hardening, ship** — NOT STARTED
 
 ---
 
-## Person A — build order (next session)
+## Person A — build order (current session)
 
 Work through these in sequence. Each is one branch/PR.
 
-### 1. Signup split flow (Phase 1 loose end)
+### ✅ 1. Signup split flow (Phase 1 loose end — DONE 2026-07-05)
 
 Replace the single `/signup` page with a 3-screen split:
 
@@ -163,11 +167,10 @@ Reads from `getCurrentProfile()` + a Prisma count of pickups for this vendor.
 A public (no-auth) route showing a read-only lifecycle timeline for a pickup,
 accessible via a token. The handover screen (C's) will link to this.
 
-**Before building:** confirm with B what the token lives on. `Certificate.publicToken`
-exists but a certificate isn't created until status = certified, while the link
-is generated at handover (collected). Either Pickup needs its own publicToken,
-or the approach changes. Do not build this route until the schema question is
-resolved. Add a carve-out for `/t/...` in `src/middleware.ts` when ready.
+**B has agreed to add `Pickup.publicToken`** (resolves the timing mismatch —
+`Certificate.publicToken` only exists at certified, but the link is shared at
+handover/collected). Build this route once B's column + backfill lands. Add a
+carve-out for `/t/...` in `src/middleware.ts` at that point.
 
 ---
 
@@ -190,29 +193,55 @@ used for Prisma-level testing and UI dev only):
 
 ---
 
-## Open questions / things to confirm
+## Phase 2 → Phase 3 prerequisites
 
-- **Public tracking token:** `Certificate.publicToken` exists but a cert isn't
-  created until certified — the tracking link is generated at handover (collected).
-  Confirm with B: does Pickup need its own publicToken column, or is the link
-  approach different? Blocks step 5 of the build order.
+**These must be complete before Phase 3 can begin for anyone.** Flag them as
+blockers if Phase 2 ends and any of these are missing.
+
+| # | What | Owner | Status |
+|---|---|---|---|
+| P1 | Wire `BottomTabBar` into `src/app/(app)/layout.tsx` so all logged-in screens share nav | A (with C's OK; log in LANE_OWNERSHIP.md) | Planned in A's Task 2 |
+| P2 | `Pickup.publicToken` column added + backfilled in schema | B | B agreed, not yet shipped |
+| P3 | A's Task 5 `/t/[token]` route built | A | Blocked on P2 |
+| P4 | B's dashboard rows link to **real seeded pickup IDs** (PKP-2031 / 2024 / 2039 / 2042) so dashboard→track navigation resolves | B | Not confirmed yet |
+| P5 | Input validation (email format, GST/PAN/EPR patterns, password strength) added to signup forms | A + B (share B's Zod schemas) | **Deferred to Phase 3** — skip for faster Phase 2 testing |
+
+---
+
+## Open questions / standing rules
+
 - **Scheduled screen agent/ETA:** hardcoded demo UI in the wireframe — no
   agent/ETA column in schema (field-agent app doesn't exist yet). Confirmed fake.
 - **Do NOT render `Offer.materialBreakdown` / `Offer.deductions` as ₹ values
-  on vendor-facing screens.** Weight (kg) from materialBreakdown is fine on
-  tracking; price values are not. Person C to be reminded for offer/offer-breakdown screens.
-- **RLS not tested with a real second account yet** — scheduled for Phase 3 hardening.
+  on vendor-facing screens.** Weight (kg) is fine on tracking; price values are not.
+  Person C to be reminded for offer/offer-breakdown/handover screens.
+- **RLS not tested with a real second account yet** — Phase 3 hardening.
 
 ---
 
 ## Flagged for Person C
 
-- **Login/signup screens** still use raw Tailwind inputs — TODOs exist in both
-  files to swap to C's `<Input>` / `<Button>` once available. Now available —
-  C can swap, or A will do it as part of the signup split rebuild.
+**Phase 2 (action before Phase 3):**
+- **`(app)/layout.tsx` tab bar wiring** — `BottomTabBar` is built but not wired
+  into the group layout. A will wire it in Task 2 with C's OK (log lane shift in
+  LANE_OWNERSHIP.md). If A hasn't done it by Phase 2 end, C picks it up.
+- **`<Input>` component missing** — `src/components/ui/input.tsx` is mislabeled
+  (holds a Card). Auth screens currently use a local `Field` helper with a TODO
+  to swap. C should ship the real shared `<Input>` so A/B screens can adopt it.
 - **`Offer.materialBreakdown` / `Offer.deductions`** must NOT be rendered as
-  ₹ values on the offer, offer-breakdown, or handover screens. Lead's instruction.
-  The wireframe HTML is stale on this — the removed KPIs are still visible in it.
+  ₹ values on offer, offer-breakdown, or handover screens. Lead's instruction.
+  The wireframe HTML is stale on this point — the removed KPIs are still visible.
+
+**Phase 3 (design + PWA pass — flag to C now, action in Phase 3):**
+- **Max-width mobile container** — on desktop browsers the app stretches full-width.
+  Add a `max-w-sm` or `max-w-[390px]` centering wrapper in `AppShell` so desktop
+  preview shows a phone-width column. Makes the app feel native-width before PWA.
+- **Display font / typography** — wireframe uses a serif display font for headings
+  (`.h-display.serif`). Adopt it app-wide in the Phase 3 design pass.
+- **Logo** — B2 block is a placeholder. Replace with real mark in Phase 3.
+- **Signup hero text** — type-selector screen has a bland subtitle; upgrade copy
+  and sizing as part of the design pass.
+- **PWA packaging, offline, service worker, deployment/CI** — C's lane, Phase 3.
 
 ---
 
