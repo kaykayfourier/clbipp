@@ -1,13 +1,23 @@
 import { createClient } from '@/lib/supabase/server'
 
-// Account-creation input. Fleet-specific business fields (GST/PAN/EPR) and KYC
-// upload are a separate post-signup step owned by Person B — see
-// docs/LANE_OWNERSHIP.md. This is the auth-complete minimum.
+// Account-creation input. Fleet business text fields (company/GST/PAN/EPR/
+// address) are collected in the fleet signup form and written to the profile
+// row here — that's the initial profile-row insert, Person A's lane. KYC
+// *document upload + verification* stays Person B's post-signup step
+// (docs/LANE_OWNERSHIP.md). Fleet fields are optional so the individual flow
+// can omit them.
 export type SignUpInput = {
   email: string
   password: string
   fullName: string
   vendorType: 'individual' | 'fleet'
+  // For a fleet account, fullName holds the contact person's name and
+  // companyName the business — the profiles table has no separate contact_name.
+  companyName?: string
+  eprRegId?: string
+  gstNumber?: string
+  panNumber?: string
+  businessAddress?: string
 }
 
 export async function signIn(email: string, password: string) {
@@ -33,11 +43,18 @@ export async function signUpWithProfile(input: SignUpInput) {
   const userId = data.user?.id
   if (!userId) return { error: new Error('Sign-up did not return a user.') }
 
+  // Fleet-only columns are left undefined (→ NULL) for individual accounts.
+  // Supabase ignores undefined keys, so this one insert serves both flows.
   const { error: profileError } = await supabase.from('profiles').insert({
     id: userId,
     vendor_type: input.vendorType,
     full_name: input.fullName,
     email: input.email,
+    company_name: input.companyName,
+    gst_number: input.gstNumber,
+    pan_number: input.panNumber,
+    business_address: input.businessAddress,
+    epr_reg_id: input.eprRegId,
   })
   if (profileError) return { error: profileError }
 
