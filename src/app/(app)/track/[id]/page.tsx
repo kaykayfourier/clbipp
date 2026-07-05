@@ -3,10 +3,11 @@ import Link from 'next/link'
 import { getCurrentProfile } from '@/lib/supabase/auth'
 import { prisma } from '@/lib/prisma'
 import { AppShell, PagePadding } from '@/components/layout/app-shell'
-import { Timeline } from '@/components/ui/timeline'
+import { Timeline, Connector } from '@/components/ui/timeline'
 import { Banner } from '@/components/ui/banner'
 import { Button } from '@/components/ui/button'
-import { Card, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
+import { StatusBadge } from '@/components/ui/badge'
 import type { LifecycleStage } from '@/lib/tokens'
 
 // Offer.materialBreakdown JSON shape (stable keys — do not rename without
@@ -46,28 +47,47 @@ function safeBreakdown(json: unknown): MaterialItem[] {
 // a second tab bar; bottom padding keeps content clear of the fixed nav.
 const NAV_PADDING = 'pb-[calc(4rem+env(safe-area-inset-bottom,0px))]'
 
-// Recovery summary card shared between the recovered and certified screens.
-// Renders total weight (kg) and an expandable material breakdown. ₹ values
-// and recovery rate are intentionally omitted — lead's instruction.
+function LifecycleHeader({ status }: { status: LifecycleStage }) {
+  return (
+    <div className="flex items-center justify-between">
+      <p className="text-xs font-bold uppercase tracking-widest text-text-secondary">Lifecycle</p>
+      <StatusBadge status={status} />
+    </div>
+  )
+}
+
+// Recovery summary: stat box (kg) + expandable material breakdown.
+// ₹ values and recovery rate are intentionally omitted — lead's instruction.
 function RecoverySummary({ breakdown }: { breakdown: MaterialItem[] }) {
-  const totalKg = breakdown.reduce((sum, item) => sum + (item.weight_kg ?? 0), 0)
+  const totalKg = breakdown.length > 0
+    ? breakdown.reduce((sum, item) => sum + (item.weight_kg ?? 0), 0)
+    : null
   return (
     <Card>
-      <CardTitle>Recovery summary</CardTitle>
-      <p className="mt-2 text-sm text-text-secondary">
-        Total weight:{' '}
-        <span className="font-semibold text-text-primary">{totalKg} kg</span>
+      <p className="text-xs font-bold uppercase tracking-widest text-text-secondary mb-3">
+        Recovery summary
       </p>
+      <div className="inline-flex flex-col rounded-lg border border-border px-4 py-3">
+        <span className="text-2xl font-bold text-text-primary">
+          {totalKg !== null ? `${totalKg} kg` : '—'}
+        </span>
+        <span className="text-xs text-text-secondary mt-0.5">
+          {totalKg !== null ? 'Recovered' : 'Pending finalisation'}
+        </span>
+      </div>
       {breakdown.length > 0 && (
-        <details className="mt-3">
+        <details className="mt-4">
           <summary className="cursor-pointer select-none text-sm font-medium text-text-primary">
-            Material breakdown
+            View material breakdown
           </summary>
-          <ul className="mt-2 flex flex-col gap-1.5">
+          <ul className="mt-3 flex flex-col">
             {breakdown.map((item) => (
-              <li key={item.material} className="flex justify-between text-sm text-text-secondary">
-                <span>{item.material}</span>
-                <span>{item.weight_kg} kg</span>
+              <li
+                key={item.material}
+                className="flex justify-between border-t border-border py-2 text-sm"
+              >
+                <span className="text-text-secondary">{item.material}</span>
+                <span className="font-medium text-text-primary">{item.weight_kg} kg</span>
               </li>
             ))}
           </ul>
@@ -103,9 +123,29 @@ export default async function TrackPage({
 
   // ── Cancelled ─────────────────────────────────────────────────────────────
   if (status === 'cancelled') {
+    // Show timeline up to the last recorded lifecycle stage, then the error banner.
+    const lastLifecycleEvent = [...pickup.statusEvents]
+      .reverse()
+      .find(e => LIFECYCLE.includes(e.status as LifecycleStage))
+    // Fall back to 'requested' so the timeline always renders, even with no events
+    const lastStage = (lastLifecycleEvent?.status ?? 'requested') as LifecycleStage
     return (
       <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
-        <PagePadding>
+        <PagePadding className="flex flex-col gap-4">
+          <Card className="overflow-visible">
+            <Timeline currentStage={lastStage} stages={stages} />
+            <Connector completed={false} />
+            <div className="flex items-start gap-3">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-error">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                  <path d="M3 3l4 4M7 3l-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </span>
+              <div className="flex-1 min-h-[1.75rem] pb-0.5">
+                <span className="block text-sm font-semibold leading-tight text-error">Cancelled</span>
+              </div>
+            </div>
+          </Card>
           <Banner variant="error">This pickup was cancelled.</Banner>
         </PagePadding>
       </AppShell>
@@ -117,7 +157,10 @@ export default async function TrackPage({
     return (
       <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
         <PagePadding className="flex flex-col gap-4">
-          <Timeline currentStage={status} stages={stages} pulse />
+          <LifecycleHeader status={status as LifecycleStage} />
+          <Card className="overflow-visible">
+            <Timeline currentStage={status} stages={stages} pulse />
+          </Card>
           <Banner variant="info">
             Your pickup is confirmed. We&apos;ll be in touch to arrange collection.
           </Banner>
@@ -131,12 +174,15 @@ export default async function TrackPage({
     return (
       <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
         <PagePadding className="flex flex-col gap-4">
-          <Timeline currentStage={status} stages={stages} pulse />
+          <LifecycleHeader status={status as LifecycleStage} />
+          <Card className="overflow-visible">
+            <Timeline currentStage={status} stages={stages} pulse />
+          </Card>
           <Banner variant="info">
             We&apos;ll notify you as your battery moves through each stage.
           </Banner>
           <Banner variant="tinted">
-            Certificate unlocks once your battery is fully recovered.
+            Recovery breakdown and certificate unlock once recovered.
           </Banner>
         </PagePadding>
       </AppShell>
@@ -148,10 +194,14 @@ export default async function TrackPage({
     return (
       <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
         <PagePadding className="flex flex-col gap-4">
-          <Timeline currentStage="recovered" stages={stages} endStage="recovered" />
-          {pickup.offer && <RecoverySummary breakdown={breakdown} />}
+          <LifecycleHeader status="recovered" />
+          <Card>
+            {/* No endStage — certified shows as the next pending step */}
+            <Timeline currentStage="recovered" stages={stages} />
+          </Card>
+          <RecoverySummary breakdown={breakdown} />
           <Banner variant="tinted">
-            Certificate available once your battery is certified.
+            Your EPR certificate becomes available once certified.
           </Banner>
         </PagePadding>
       </AppShell>
@@ -162,9 +212,12 @@ export default async function TrackPage({
   return (
     <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
       <PagePadding className="flex flex-col gap-4">
-        <Timeline currentStage="certified" stages={stages} />
-        {pickup.offer && <RecoverySummary breakdown={breakdown} />}
-        <Banner variant="success">Your EPR certificate is ready.</Banner>
+        <LifecycleHeader status="certified" />
+        <Card>
+          <Timeline currentStage="certified" stages={stages} />
+        </Card>
+        <RecoverySummary breakdown={breakdown} />
+        <Banner variant="success">Certificate ready — added to your compliance log.</Banner>
         <Link href={`/certificates/${pickup.id}`}>
           <Button fullWidth>View certificate</Button>
         </Link>
