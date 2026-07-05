@@ -1,4 +1,4 @@
-// Local, presentational label+input field for the signup forms only.
+// Local, presentational label+input field for the auth screens (login + signup).
 // This is NOT the shared <Input> — Person C owns the component kit and hasn't
 // shipped a real Input yet (src/components/ui/input.tsx is a mislabeled Card).
 // Styling mirrors the wireframe's .field/.input (docs/CLBIPP_Vendor_Wireframes_1.html).
