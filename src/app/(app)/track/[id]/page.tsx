@@ -8,6 +8,7 @@ import { Banner } from '@/components/ui/banner'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { StatusBadge } from '@/components/ui/badge'
+import { TrackingRealtime } from './TrackingRealtime'
 import type { LifecycleStage } from '@/lib/tokens'
 
 // Offer.materialBreakdown JSON shape (stable keys — do not rename without
@@ -156,6 +157,7 @@ export default async function TrackPage({
   if (status === 'requested' || status === 'scheduled') {
     return (
       <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+        <TrackingRealtime pickupId={pickup.id} />
         <PagePadding className="flex flex-col gap-4">
           <LifecycleHeader status={status as LifecycleStage} />
           <Card className="overflow-visible">
@@ -173,6 +175,7 @@ export default async function TrackPage({
   if (status === 'collected' || status === 'tested' || status === 'processed') {
     return (
       <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+        <TrackingRealtime pickupId={pickup.id} />
         <PagePadding className="flex flex-col gap-4">
           <LifecycleHeader status={status as LifecycleStage} />
           <Card className="overflow-visible">
@@ -193,11 +196,13 @@ export default async function TrackPage({
   if (status === 'recovered') {
     return (
       <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+        <TrackingRealtime pickupId={pickup.id} />
         <PagePadding className="flex flex-col gap-4">
           <LifecycleHeader status="recovered" />
-          <Card>
-            {/* No endStage — certified shows as the next pending step */}
-            <Timeline currentStage="recovered" stages={stages} />
+          <Card className="overflow-visible">
+            {/* No endStage — certified shows as the next pending step.
+                pulse: recovered is the active frontier (certified still pending). */}
+            <Timeline currentStage="recovered" stages={stages} pulse />
           </Card>
           <RecoverySummary breakdown={breakdown} />
           <Banner variant="tinted">
