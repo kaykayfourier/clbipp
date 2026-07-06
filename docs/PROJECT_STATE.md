@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-06
+**Last updated:** 2026-07-06 (Task 3 done)
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -15,8 +15,9 @@
 
 Phase 1 is complete. Phase 2 is in progress. As of 2026-07-06:
 
-- **A** has completed signup split (Phase 1 loose end) and the full static
-  tracking screen with all lifecycle states. Task 3 (Realtime) is next.
+- **A** has completed signup split (Phase 1 loose end), the full static
+  tracking screen with all lifecycle states, and Supabase Realtime on the
+  tracking screen. Task 4 (profile screen) is next.
 - **B** has shipped dashboard, compliance, certificate scaffold (all mock data).
   Has agreed to fix dashboard to real Prisma + seed an offer for PKP-3099.
   `Pickup.publicToken` column has been pushed and migrated.
@@ -84,8 +85,8 @@ Person B (shipped so far):
 Person A — Tasks 1 + 2 done:
 - ✅ Task 1: Signup split flow (Phase 1 loose end, DONE 2026-07-05)
 - ✅ Task 2: Static tracking screen + tab bar wiring (DONE 2026-07-05/06)
-- 🔄 Task 3: Realtime on tracking — **NEXT**
-- ⬜ Task 4: Full profile screen
+- ✅ Task 3: Realtime on tracking (DONE 2026-07-06)
+- 🔄 Task 4: Full profile screen — **NEXT**
 - ⬜ Task 5: Public tracking link `/t/[token]`
 
 Person C — NOT STARTED (request → offer → handover flow)
@@ -149,13 +150,63 @@ happens, re-apply the four `timeline.tsx` changes above. Consider that these
 tracking-specific tweaks may be worth moving into a track-local wrapper later so
 they can't be overwritten.
 
-### ⚠ Known visual bug (flagged, NOT yet fixed — do in Task 3 or a quick follow-up)
+---
 
-- **Pulse glow missing on `recovered` state.** In-progress + early states pass
-  `pulse` to `<Timeline>`, but the `recovered` and `certified` renders don't.
-  `recovered` is the active frontier (certified still pending) so it SHOULD pulse;
-  `certified` is terminal so it correctly should NOT. Fix = add `pulse` to the
-  `<Timeline>` in the `recovered` branch of `track/[id]/page.tsx` (one word).
+## Person A — Task 3 detail (what was built)
+
+### Realtime — `src/lib/supabase-realtime.ts` + `track/[id]/TrackingRealtime.tsx`
+
+`supabase-realtime.ts`: exports `subscribeToPickupEvents(pickupId, onEvent)`.
+Opens a channel on the browser Supabase client, listens for `INSERT` on
+`status_events` filtered to this pickup, fires the callback, returns an
+unsubscribe fn. Payload is intentionally ignored — the callback is a signal only.
+
+`TrackingRealtime.tsx`: `"use client"`, renders `null`. On mount subscribes and
+calls `router.refresh()` on each event; on unmount unsubscribes. `router.refresh()`
+re-runs the server component so the whole page (timeline, banners, RecoverySummary,
+cert button) re-renders with fresh Prisma data. Server stays the single source of
+truth — no stage-derivation logic on the client.
+
+Mounted in the 3 non-terminal branches of `track/[id]/page.tsx` (early,
+in-progress, recovered). Terminal branches (certified, cancelled) have no
+subscription — no further events expected.
+
+**One-time SQL:** `supabase/realtime.sql` — adds `status_events` to the
+`supabase_realtime` publication (re-runnable, guarded). Must be run in the
+Supabase SQL editor; already applied.
+
+**Pulse bug fixed:** `recovered` branch now passes `pulse` + `overflow-visible`
+to the Timeline Card (was missing both — the bug was flagged in Task 2 notes).
+
+---
+
+## Person A — Task 4 plan (NEXT)
+
+### Full profile screen · branch `feat/profile`
+
+Goal: `/profile` screen showing the logged-in vendor's account details.
+
+**What to show:**
+- Full name, email, vendor type (individual / fleet)
+- Fleet-only fields when `vendor_type === 'fleet'`: company name, GST number,
+  PAN number, EPR reg ID, business address
+- A sign-out button (calls `signOut()` from `src/lib/supabase/auth.ts`, then
+  redirects to `/login`)
+
+**Data source:** `getCurrentProfile()` in `src/lib/supabase/auth.ts` already
+returns `{ user, profile }` — but currently only selects `full_name, email,
+vendor_type`. Needs to also select the fleet fields:
+`company_name, gst_number, pan_number, epr_reg_id, business_address`.
+
+**Architecture:**
+- `src/app/(app)/profile/page.tsx` — server component, calls `getCurrentProfile()`,
+  renders the profile display. Fleet fields section conditionally rendered.
+- Sign-out is a form action or a small `"use client"` button component (since
+  `signOut()` needs to run client-side or in a server action).
+- Tab bar already in `(app)/layout.tsx` — profile tab should be wired up.
+
+**Check wireframe** (`docs/CLBIPP_Vendor_Wireframes_1.html`) for exact layout
+before building — it has the profile screen spec.
 
 ---
 
@@ -163,11 +214,10 @@ they can't be overwritten.
 
 Carry these into the next chat — do not assume they work:
 
-- **Timeline dates/timestamps** — code reads from `pickup.statusEvents` and passes
-  them to `<Timeline>`, but PKP-3099 has no `status_events` rows yet. Changing
-  status via the Supabase table editor does NOT create events. To test dates:
-  manually insert `status_events` rows for PKP-3099 (or wait for B's real flow).
-  **Untested until events exist.**
+- **Timeline dates/timestamps** — partially tested. PKP-3099 now has manually
+  inserted `status_events` rows (added during Task 3 Realtime testing). Timestamps
+  appear on completed stages. Full end-to-end (agent flow auto-inserting events)
+  still blocked on B's real flow.
 - **Recovered state recovery summary with real data** — RecoverySummary currently
   shows "—/Pending finalisation" because PKP-3099 has no offer. Blocked on B
   seeding an offer with `materialBreakdown` for PKP-3099.
@@ -182,36 +232,6 @@ Carry these into the next chat — do not assume they work:
   every tab tap). Acceptable for now.
 - **Signup fleet fields** — confirmed writing to profile row earlier, but not
   re-verified after recent changes.
-
----
-
-## Person A — Task 3 plan (NEXT)
-
-### Realtime on tracking · branch `feat/track-realtime`
-
-Goal: timeline updates live when a `status_events` row is inserted, no page reload.
-
-**Architecture:**
-- `page.tsx` stays a server component for initial data fetch + auth
-- Extract timeline rendering into a `"use client"` child component:
-  `src/app/(app)/track/[id]/TrackingTimeline.tsx`
-  - Takes `initialEvents` + `pickupId` as props
-  - On mount: subscribes to Postgres changes on `status_events` for this pickup
-  - On new INSERT: appends event to local state, re-derives timeline stages
-  - On unmount: unsubscribes (cleanup)
-
-**New helper:** `src/lib/supabase-realtime.ts`
-- Wraps the **browser** Supabase client (`@/lib/supabase/client`)
-- Exports `subscribeToPickupEvents(pickupId, onEvent)` → returns unsubscribe fn
-- Uses `supabase.channel(...).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'status_events', filter: \`pickup_id=eq.${pickupId}\` }, callback).subscribe()`
-
-**Supabase setup (one-time SQL, versioned under `supabase/`):**
-```sql
-alter publication supabase_realtime add table status_events;
-```
-RLS on `status_events` already gates what the client receives.
-
-**Commit:** `feat(track): live status updates via Supabase Realtime`
 
 ---
 
@@ -253,10 +273,11 @@ Two vendor accounts (fake UUIDs — not real Supabase auth users):
 | PKP-2024 | fleet | certified | ✅ | ✅ |
 | PKP-2039 | fleet | recovered | ✅ | ❌ |
 | PKP-2042 | fleet | scheduled | ❌ | ❌ |
-| PKP-3099 | real auth user (Aamir) | varies (test manually) | ❌ | ❌ |
+| PKP-3099 | real auth user (Aamir) `efc87c57-1659-4de1-98af-86c2068b65e2` (login: `business@test`) | varies (test manually) | ❌ | ❌ |
 
 PKP-3099 is the only pickup with a real Supabase auth `vendorId` — use this for
-testing. Change status in Supabase table editor to test different states.
+testing. Manually insert `status_events` rows + update `pickups.status` to test
+different states (the INSERT fires Realtime; the UPDATE is what the server render reads).
 To test recovery summary, B needs to seed an offer with `materialBreakdown` for it.
 
 ---

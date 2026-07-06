@@ -1,43 +1,127 @@
 import { getCurrentProfile } from '@/lib/supabase/auth'
+import { AppShell, PagePadding, SectionLabel } from '@/components/layout/app-shell'
+import { Card } from '@/components/ui/card'
 import { logout } from './actions'
 
-// Minimal profile screen — doubles as the auth test harness (the post-login /
-// post-signup landing) and the seed of the full Phase-2 profile screen.
-// Deliberately shows NO recovery rate / recovered value (locked rule — the
-// wireframe HTML is stale on this).
+// Vendor profile / account screen. Server component — reads the caller's own
+// profile via getCurrentProfile() (RLS-scoped) and renders it. Fleet business
+// details are shown only for fleet accounts.
+//
+// Locked rule: NO recovery rate / recovered value anywhere on vendor screens.
+// The wireframe HTML shows an "Avg recovery rate" row — that is stale and is
+// intentionally not rendered here.
+
+// The bottom tab bar lives in (app)/layout.tsx, so AppShell renders with
+// hideNav; this restores the bottom padding hideNav would otherwise drop, so
+// content clears the fixed nav bar. (Same pattern as the tracking screen.)
+const NAV_PADDING = 'pb-[calc(4rem+env(safe-area-inset-bottom,0px))]'
+
+// Up-to-two-letter monogram for the avatar, from the account's display name.
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase()
+}
+
+// One label/value line inside a details card.
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-1.5">
+      <span className="shrink-0 text-sm text-text-secondary">{label}</span>
+      <span className="text-right text-sm font-medium text-text-primary">
+        {value}
+      </span>
+    </div>
+  )
+}
+
 export default async function ProfilePage() {
   const data = await getCurrentProfile()
-  // Middleware already guards this route; this is a defensive fallback only.
+
+  // Middleware already guards this route; these are defensive fallbacks only.
   const email = data?.user.email ?? 'unknown'
-  const fullName = data?.profile?.full_name ?? email
-  const vendorType = data?.profile?.vendor_type ?? '—'
+  const profile = data?.profile
+  const isFleet = profile?.vendor_type === 'fleet'
+
+  // For a fleet account the company is the headline identity; the contact
+  // person's name lives in full_name. For an individual, the person is it.
+  const displayName =
+    (isFleet ? profile?.company_name : profile?.full_name) ??
+    profile?.full_name ??
+    email
+  const subtitle = isFleet
+    ? profile?.epr_reg_id ?? 'Fleet account'
+    : 'Individual account'
 
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col gap-4 px-6 py-12">
-      <h1 className="text-2xl font-semibold">Profile</h1>
-
-      <div className="rounded-md border border-zinc-200 p-4">
-        <p className="text-lg font-medium">Logged in as {fullName}</p>
-        <dl className="mt-2 space-y-1 text-sm text-zinc-600">
-          <div className="flex justify-between">
-            <dt>Email</dt>
-            <dd>{email}</dd>
+    <AppShell title="Profile" hideNav contentClassName={NAV_PADDING}>
+      <PagePadding className="flex flex-col gap-4">
+        {/* Identity */}
+        <Card className="flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[13px] bg-primary-black text-[17px] font-extrabold text-primary-green">
+            {initials(displayName)}
           </div>
-          <div className="flex justify-between">
-            <dt>Account type</dt>
-            <dd>{vendorType}</dd>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-bold text-text-primary">
+              {displayName}
+            </p>
+            <p className="truncate text-xs text-text-secondary">{subtitle}</p>
           </div>
-        </dl>
-      </div>
+        </Card>
 
-      <form action={logout}>
-        <button
-          type="submit"
-          className="w-full rounded-md border border-zinc-300 py-2 font-medium"
-        >
-          Log out
-        </button>
-      </form>
-    </main>
+        {/* Account */}
+        <Card>
+          <SectionLabel className="mb-3">Account</SectionLabel>
+          <div className="divide-y divide-border">
+            {!isFleet && profile?.full_name && (
+              <Row label="Name" value={profile.full_name} />
+            )}
+            <Row label="Email" value={email} />
+            <Row label="Account type" value={isFleet ? 'Fleet' : 'Individual'} />
+          </div>
+        </Card>
+
+        {/* Business details — fleet only */}
+        {isFleet && (
+          <Card>
+            <SectionLabel className="mb-3">Business details</SectionLabel>
+            <div className="divide-y divide-border">
+              {profile?.company_name && (
+                <Row label="Company" value={profile.company_name} />
+              )}
+              {profile?.full_name && (
+                <Row label="Contact" value={profile.full_name} />
+              )}
+              {profile?.gst_number && (
+                <Row label="GST number" value={profile.gst_number} />
+              )}
+              {profile?.pan_number && (
+                <Row label="PAN number" value={profile.pan_number} />
+              )}
+              {profile?.epr_reg_id && (
+                <Row label="EPR reg ID" value={profile.epr_reg_id} />
+              )}
+              {profile?.business_address && (
+                <Row label="Address" value={profile.business_address} />
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Sign out — server action (signOut() is server-bound; see actions.ts) */}
+        <form action={logout}>
+          <button
+            type="submit"
+            className="w-full rounded-[14px] border border-border bg-surface py-3 text-sm font-semibold text-text-primary transition-colors hover:bg-background-pressed"
+          >
+            Log out
+          </button>
+        </form>
+      </PagePadding>
+    </AppShell>
   )
 }
