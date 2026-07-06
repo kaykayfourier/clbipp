@@ -1,6 +1,7 @@
 import { getCurrentProfile } from '@/lib/supabase/auth'
+import { prisma } from '@/lib/prisma'
 import { AppShell, PagePadding, SectionLabel } from '@/components/layout/app-shell'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { logout } from './actions'
 
 // Vendor profile / account screen. Server component — reads the caller's own
@@ -25,6 +26,31 @@ function initials(name: string): string {
     .map((p) => p[0])
     .join('')
     .toUpperCase()
+}
+
+// Weight is shown in kg, switching to tonnes once it's large enough to read
+// better that way. Weight/counts only — never a recovery rate or value (locked
+// rule), so these aggregates are safe to show the vendor.
+function formatWeight(kg: number): string {
+  if (kg <= 0) return '0 kg'
+  if (kg >= 1000) return `${(kg / 1000).toFixed(1)}t`
+  return `${Math.round(kg)} kg`
+}
+
+// A single stat box in the summary grid.
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <Card variant="elevated">
+      <CardContent>
+        <div className="font-serif text-xl font-semibold text-text-primary">
+          {value}
+        </div>
+        <div className="mt-1 text-[10px] uppercase tracking-widest text-text-secondary">
+          {label}
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 // One label/value line inside a details card.
@@ -57,6 +83,22 @@ export default async function ProfilePage() {
     ? profile?.epr_reg_id ?? 'Fleet account'
     : 'Individual account'
 
+  // Account summary. vendorId is the profile/auth id and equals Pickup.vendorId.
+  // "Recycled" uses certified weight (the verified, closed-loop total), not the
+  // vendor's request-time estimate. Three reads, run together.
+  const vendorId = data?.user.id
+  const [pickupCount, certCount, weightAgg] = vendorId
+    ? await Promise.all([
+        prisma.pickup.count({ where: { vendorId } }),
+        prisma.certificate.count({ where: { vendorId } }),
+        prisma.certificate.aggregate({
+          _sum: { totalWeightKg: true },
+          where: { vendorId },
+        }),
+      ])
+    : [0, 0, { _sum: { totalWeightKg: null } }]
+  const recycledKg = Number(weightAgg._sum.totalWeightKg ?? 0)
+
   return (
     <AppShell title="Profile" hideNav contentClassName={NAV_PADDING}>
       <PagePadding className="flex flex-col gap-4">
@@ -72,6 +114,13 @@ export default async function ProfilePage() {
             <p className="truncate text-xs text-text-secondary">{subtitle}</p>
           </div>
         </Card>
+
+        {/* Account summary */}
+        <div className="grid grid-cols-3 gap-2">
+          <Stat value={String(pickupCount)} label="Submitted" />
+          <Stat value={formatWeight(recycledKg)} label="Recycled" />
+          <Stat value={String(certCount)} label="Certificates" />
+        </div>
 
         {/* Account */}
         <Card>
