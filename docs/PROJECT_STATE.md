@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-06 (Task 4 done, Task 5 next)
+**Last updated:** 2026-07-06 (Task 4 done, Task 5 next; parked A hardening items H1–H2 from PR #10 review)
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -293,6 +293,21 @@ Carry these into the next chat — do not assume they work:
 | P3 | `/t/[token]` public route built | A | Task 5, after Task 3+4 |
 | P4 | Dashboard rows link to real pickup IDs | B | Not done |
 | P5 | Input validation on signup (email, GST/PAN/EPR, password) | A + B | Deferred to Phase 3 |
+
+### Phase 3 hardening — Person A (parked, not this sprint)
+
+Surfaced while reviewing C's request→offer→handover PR (#10). Both are RLS /
+status-write concerns in A's lane. **Parked for Phase 3 — do not build now.**
+
+| # | What | Why | Fix (convergent) |
+|---|---|---|---|
+| H1 | `status_events` "collected" row is never written when the vendor accepts an offer | `acceptOffer` writes as the vendor's own session; RLS only lets the service role write `status_events`, so the insert is silently dropped (non-fatal). The pickup `status` still updates so screens read correctly, but the audit log loses the entry and no realtime ping fires. | In the `handover/actions.ts` server action, write the `status_events` row via a **service-role** Supabase client (stays server-side, bypasses RLS). |
+| H2 | A vendor can self-advance their own pickup's lifecycle | The "Vendors can update their own pickups" policy (`policies.sql`) + the vendor's browser token mean a vendor could call the API directly and set their `status` to anything (e.g. jump to `certified`). The UI is not the security boundary — RLS is. | Move all status transitions to service-role server actions, then tighten/remove the broad vendor UPDATE policy so vendors can't set lifecycle status directly. |
+
+Both point the same direction: **status transitions belong in service-role server
+actions, not vendor-session writes.** Doing H1 and H2 together also restores the
+realtime ping on accept. Needs a service-role client helper under
+`src/lib/supabase-*.ts` (doesn't exist yet).
 
 ---
 
