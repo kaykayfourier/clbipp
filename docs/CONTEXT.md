@@ -84,6 +84,24 @@ One repo, three apps separated by route folders. Shared code at root.
 - Wrap Supabase calls in helpers in `src/lib/supabase-*.ts` rather than scattering
   client calls across pages.
 
+## Git workflow (learned 2026-07-06 — do not repeat these mistakes)
+
+**Simple rule for every feature:** one branch, finish work, commit, push, open one
+PR targeting `main`, merge, done. Don't stack PRs.
+
+**If you must stack PRs** (rare): merge each PR in order AND tick "Delete branch"
+on GitHub's merge confirmation for each one. GitHub only auto-retargets the next PR
+to `main` when the base branch is deleted. If you don't delete it, PRs merge
+sideways into their base branch instead of landing on `main`.
+
+**Stacked PRs are not worth it at this team's pace.** One PR per feature targeting
+`main` directly is simpler and safer. Granularity lives in individual commits, not
+in the PR structure.
+
+**Merge conflicts on `prisma/schema.prisma`:** schema is B's file. If you hit a
+conflict, always resolve by keeping `main`'s version:
+`git checkout origin/main -- prisma/schema.prisma`
+
 ## Status lifecycle (locked contract)
 
 `requested → scheduled → collected → tested → processed → recovered → certified`

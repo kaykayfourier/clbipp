@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-06 (Task 3 done)
+**Last updated:** 2026-07-06 (Task 4 done, Task 5 next)
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -15,13 +15,14 @@
 
 Phase 1 is complete. Phase 2 is in progress. As of 2026-07-06:
 
-- **A** has completed signup split (Phase 1 loose end), the full static
-  tracking screen with all lifecycle states, and Supabase Realtime on the
-  tracking screen. Task 4 (profile screen) is next.
+- **A** has completed signup split, static tracking screen, Supabase Realtime,
+  and the full profile screen (Task 4). Task 5 (public tracking link) is next.
 - **B** has shipped dashboard, compliance, certificate scaffold (all mock data).
   Has agreed to fix dashboard to real Prisma + seed an offer for PKP-3099.
   `Pickup.publicToken` column has been pushed and migrated.
 - **C** has shipped the component library and AppShell.
+
+All of A's work through Task 4 is on `origin/main` (merged 2026-07-06).
 
 ---
 
@@ -82,12 +83,12 @@ Person B (shipped so far):
 - ✅ `src/app/(app)/compliance/page.tsx` — mock data
 - ✅ `src/app/(app)/certificates/[id]/page.tsx` — hardcoded to PKP-2031 (not real)
 
-Person A — Tasks 1 + 2 done:
+Person A — Tasks 1–4 done:
 - ✅ Task 1: Signup split flow (Phase 1 loose end, DONE 2026-07-05)
 - ✅ Task 2: Static tracking screen + tab bar wiring (DONE 2026-07-05/06)
 - ✅ Task 3: Realtime on tracking (DONE 2026-07-06)
-- 🔄 Task 4: Full profile screen — **NEXT**
-- ⬜ Task 5: Public tracking link `/t/[token]`
+- ✅ Task 4: Full profile screen (DONE 2026-07-06)
+- 🔄 Task 5: Public tracking link `/t/[token]` — **NEXT**
 
 Person C — NOT STARTED (request → offer → handover flow)
 
@@ -180,33 +181,74 @@ to the Timeline Card (was missing both — the bug was flagged in Task 2 notes).
 
 ---
 
-## Person A — Task 4 plan (NEXT)
+## Person A — Task 4 detail (DONE 2026-07-06)
 
-### Full profile screen · branch `feat/profile`
+### Profile screen — `src/app/(app)/profile/page.tsx`
 
-Goal: `/profile` screen showing the logged-in vendor's account details.
+Server component. Calls `getCurrentProfile()` (RLS-scoped) + 3 Prisma aggregates
+in `Promise.all`. Renders:
 
-**What to show:**
-- Full name, email, vendor type (individual / fleet)
-- Fleet-only fields when `vendor_type === 'fleet'`: company name, GST number,
-  PAN number, EPR reg ID, business address
-- A sign-out button (calls `signOut()` from `src/lib/supabase/auth.ts`, then
-  redirects to `/login`)
+- **Identity card** — avatar monogram (initials), display name (company for fleet,
+  full name for individual), EPR reg ID subtitle (fleet) or "Individual account".
+- **Account summary grid** — 3 stat boxes: Submitted (pickup count), Recycled
+  (certified weight kg/t), Certificates (certificate count). Prisma reads only.
+  Weight + counts only — never recovery rate or value (locked rule).
+- **Account card** — name (individual only), email, account type.
+- **Business details card** — fleet only, conditionally rendered:
+  company, contact name, GST, PAN, EPR reg ID, business address.
+- **Log out button** — server action (`profile/actions.ts` → `signOut()` → redirect `/login`).
 
-**Data source:** `getCurrentProfile()` in `src/lib/supabase/auth.ts` already
-returns `{ user, profile }` — but currently only selects `full_name, email,
-vendor_type`. Needs to also select the fleet fields:
+`getCurrentProfile()` extended to select fleet fields:
 `company_name, gst_number, pan_number, epr_reg_id, business_address`.
 
-**Architecture:**
-- `src/app/(app)/profile/page.tsx` — server component, calls `getCurrentProfile()`,
-  renders the profile display. Fleet fields section conditionally rendered.
-- Sign-out is a form action or a small `"use client"` button component (since
-  `signOut()` needs to run client-side or in a server action).
-- Tab bar already in `(app)/layout.tsx` — profile tab should be wired up.
+**Certificate count note:** counts rows in `certificates` table (actual issued
+documents), not pickups at status `certified`. PKP-3099 has no Certificate row
+yet — count shows 0 until B's cert-generation flow runs. Intentional.
 
-**Check wireframe** (`docs/CLBIPP_Vendor_Wireframes_1.html`) for exact layout
-before building — it has the profile screen spec.
+**Profile tab** was already wired in `tabs.tsx` to `/profile`. AppShell uses
+`hideNav` + `NAV_PADDING` (same pattern as tracking screen) — no double tab bar.
+
+**Wireframe divergence:** wireframe shows "Avg recovery rate" row — omitted
+(locked rule). Notifications and Edit details rows omitted (no backend yet;
+flag to B for notifications preference column; edit details is a future branch).
+
+---
+
+## Person A — Task 5 plan (NEXT)
+
+### Public tracking link · `src/app/t/[token]/page.tsx`
+
+Goal: a publicly accessible URL (`/t/<uuid>`) that lets anyone with the link
+view the lifecycle status of a pickup — no login required. The token is
+`Pickup.publicToken` (UUID, already in schema, already backfilled).
+
+**What to show:**
+- Pickup ID, current status badge, lifecycle timeline with timestamps.
+- Same visual structure as the authenticated `/track/[id]` screen.
+
+**What NOT to show:**
+- Vendor name, email, or any personal data.
+- Offer value, recovery rate, or any financial figure (locked rule).
+- `RecoverySummary` material breakdown is fine (kg weights only) — same rule
+  as the authenticated screen.
+
+**Architecture:**
+- `src/app/t/[token]/page.tsx` — server component. Queries
+  `prisma.pickup.findFirst({ where: { publicToken: token } })`.
+  Prisma bypasses RLS (service-role connection), so no auth needed at the
+  query layer — the token itself is the capability (knowing it = access).
+- `src/middleware.ts` — add `/t` to `PUBLIC_PATHS` so middleware doesn't
+  redirect unauthenticated visitors to `/login`.
+- No Supabase auth client call needed on this route.
+- Render `notFound()` if no pickup matches the token.
+
+**Files to touch:**
+1. `src/middleware.ts` — add `'/t'` to `PUBLIC_PATHS`.
+2. `src/app/t/[token]/page.tsx` — new file, server component.
+
+**Check wireframe** for any public tracking screen spec before building.
+The handover screen references `b2b.app/t/9f3a…·token` but there may not
+be a full public-view wireframe — check first.
 
 ---
 
@@ -214,24 +256,20 @@ before building — it has the profile screen spec.
 
 Carry these into the next chat — do not assume they work:
 
-- **Timeline dates/timestamps** — partially tested. PKP-3099 now has manually
-  inserted `status_events` rows (added during Task 3 Realtime testing). Timestamps
-  appear on completed stages. Full end-to-end (agent flow auto-inserting events)
-  still blocked on B's real flow.
-- **Recovered state recovery summary with real data** — RecoverySummary currently
-  shows "—/Pending finalisation" because PKP-3099 has no offer. Blocked on B
-  seeding an offer with `materialBreakdown` for PKP-3099.
-- **Certified state end-to-end** — the "View certificate" button links to
-  `/certificates/[id]`, but B's cert page is hardcoded to PKP-2031, so the link
-  target is wrong until B fixes it.
-- **Dashboard → track navigation** — cannot test; B's dashboard rows don't link
-  to `/track/[id]` yet and use mock data.
-- **Cancelled state** — new red end-state added this session, eyeballed only,
-  not tested against a real cancelled pickup.
-- **Track tab routing** — works but noted as slightly slow (extra DB query on
-  every tab tap). Acceptable for now.
-- **Signup fleet fields** — confirmed writing to profile row earlier, but not
-  re-verified after recent changes.
+- **Timeline dates/timestamps** — partially tested. PKP-3099 has manually
+  inserted `status_events` rows. Full end-to-end blocked on B's real agent flow.
+- **Recovered state recovery summary with real data** — shows "—/Pending
+  finalisation" because PKP-3099 has no offer. Blocked on B.
+- **Certified state end-to-end** — "View certificate" links to `/certificates/[id]`
+  but B's cert page is hardcoded to PKP-2031. Broken until B fixes it.
+- **Dashboard → track navigation** — B's dashboard rows don't link to
+  `/track/[id]` yet and use mock data.
+- **Cancelled state** — eyeballed only, not tested against a real cancelled pickup.
+- **Profile certificate/recycled stats** — count and weight show 0 for PKP-3099
+  because no Certificate row exists for that vendor. Correct behaviour, but not
+  testable until B's cert flow runs.
+- **Signup fleet fields** — confirmed writing to profile row, not re-verified
+  after recent changes.
 
 ---
 
