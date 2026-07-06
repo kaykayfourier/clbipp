@@ -117,101 +117,6 @@ model PathwayDecision {
   @@map("pathway_decisions")
 }
 
-model Profile {
-  id              String        @id @db.Uuid
-  vendorType      VendorType    @map("vendor_type")
-  fullName        String        @map("full_name")
-  email           String
-  phone           String?
-  companyName     String?       @map("company_name")
-  gstNumber       String?       @map("gst_number")
-  panNumber       String?       @map("pan_number")
-  businessAddress String?       @map("business_address")
-  eprRegId        String?       @map("epr_reg_id")
-  kycStatus       KycStatus     @default(pending) @map("kyc_status")
-  kycDocUrls      String[]      @map("kyc_doc_urls")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at")
-  certificates    Certificate[]
-  offers          Offer[]
-  pickups         Pickup[]
-
-  @@map("profiles")
-}
-
-model Pickup {
-  id             String        @id
-  vendorId       String        @map("vendor_id") @db.Uuid
-  batteryType    BatteryType   @map("battery_type")
-  approxQuantity String        @map("approx_quantity")
-  approxWeightKg Decimal?      @map("approx_weight_kg")
-  location       String
-  preferredDate  DateTime?     @map("preferred_date") @db.Date
-  notes          String?
-  photoUrls      String[]      @map("photo_urls")
-  status         PickupStatus  @default(requested)
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
-  publicToken    String        @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
-  certificate    Certificate?
-  offer          Offer?
-  vendor         Profile       @relation(fields: [vendorId], references: [id])
-  statusEvents   StatusEvent[]
-
-  @@index([vendorId])
-  @@index([status])
-  @@index([createdAt(sort: Desc)])
-  @@map("pickups")
-}
-
-model StatusEvent {
-  id         BigInt       @id @default(autoincrement())
-  pickupId   String       @map("pickup_id")
-  status     PickupStatus
-  actorId    String?      @map("actor_id") @db.Uuid
-  actorRole  String?      @map("actor_role")
-  notes      String?
-  occurredAt DateTime     @default(now()) @map("occurred_at")
-  pickup     Pickup       @relation(fields: [pickupId], references: [id])
-
-  @@index([pickupId])
-  @@index([occurredAt])
-  @@map("status_events")
-}
-
-model Offer {
-  id                BigInt          @id @default(autoincrement())
-  pickupId          String          @unique @map("pickup_id")
-  vendorId          String          @map("vendor_id") @db.Uuid
-  pathway           RecoveryPathway
-  estimatedPrice    Int             @map("estimated_price")
-  rationale         String
-  materialBreakdown Json            @default("[]") @map("material_breakdown")
-  deductions        Json            @default("[]")
-  createdAt         DateTime        @default(now()) @map("created_at")
-  pickup            Pickup          @relation(fields: [pickupId], references: [id])
-  vendor            Profile         @relation(fields: [vendorId], references: [id])
-
-  @@index([vendorId])
-  @@map("offers")
-}
-
-model Certificate {
-  id              BigInt   @id @default(autoincrement())
-  pickupId        String   @unique @map("pickup_id")
-  vendorId        String   @map("vendor_id") @db.Uuid
-  pdfUrl          String   @map("pdf_url")
-  publicToken     String   @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
-  totalWeightKg   Decimal  @map("total_weight_kg")
-  materialSummary Json     @default("[]") @map("material_summary")
-  certifiedAt     DateTime @default(now()) @map("certified_at")
-  pickup          Pickup   @relation(fields: [pickupId], references: [id])
-  vendor          Profile  @relation(fields: [vendorId], references: [id])
-
-  @@index([vendorId])
-  @@map("certificates")
-}
-
 enum Chemistry {
   LFP
   NMC622
@@ -224,6 +129,8 @@ enum Pathway {
   REFURBISH
   RECYCLE
 }
+
+// ── Enums ────────────────────────────────────────────────────────────────────
 
 enum VendorType {
   individual
@@ -262,4 +169,119 @@ enum RecoveryPathway {
   refurbish
   reuse
   dispose
+}
+
+// ── Models ───────────────────────────────────────────────────────────────────
+
+model Profile {
+  id         String     @id @db.Uuid
+  vendorType VendorType @map("vendor_type")
+
+  fullName String  @map("full_name")
+  email    String
+  phone    String?
+
+  // fleet-only (null for individual)
+  companyName     String? @map("company_name")
+  gstNumber       String? @map("gst_number")
+  panNumber       String? @map("pan_number")
+  businessAddress String? @map("business_address")
+  eprRegId        String? @map("epr_reg_id")
+
+  kycStatus  KycStatus @default(pending) @map("kyc_status")
+  kycDocUrls String[]  @map("kyc_doc_urls")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  pickups      Pickup[]
+  offers       Offer[]
+  certificates Certificate[]
+
+  @@map("profiles")
+}
+
+model Pickup {
+  id       String @id
+  vendorId String @map("vendor_id") @db.Uuid
+
+  batteryType    BatteryType @map("battery_type")
+  approxQuantity String      @map("approx_quantity")
+  approxWeightKg Decimal?    @map("approx_weight_kg")
+  location       String
+  preferredDate  DateTime?   @map("preferred_date") @db.Date
+  notes          String?
+  photoUrls      String[]    @map("photo_urls")
+  publicToken    String      @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
+
+  status PickupStatus @default(requested)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  vendor       Profile       @relation(fields: [vendorId], references: [id])
+  statusEvents StatusEvent[]
+  offer        Offer?
+  certificate  Certificate?
+
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("pickups")
+}
+
+model StatusEvent {
+  id         BigInt       @id @default(autoincrement())
+  pickupId   String       @map("pickup_id")
+  status     PickupStatus
+  actorId    String?      @map("actor_id") @db.Uuid
+  actorRole  String?      @map("actor_role")
+  notes      String?
+  occurredAt DateTime     @default(now()) @map("occurred_at")
+
+  pickup Pickup @relation(fields: [pickupId], references: [id])
+
+  @@index([pickupId])
+  @@index([occurredAt])
+  @@map("status_events")
+}
+
+model Offer {
+  id       BigInt @id @default(autoincrement())
+  pickupId String @unique @map("pickup_id")
+  vendorId String @map("vendor_id") @db.Uuid
+
+  pathway           RecoveryPathway
+  estimatedPrice    Int             @map("estimated_price")
+  rationale         String
+  materialBreakdown Json            @default("[]") @map("material_breakdown")
+  deductions        Json            @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pickup Pickup  @relation(fields: [pickupId], references: [id])
+  vendor Profile @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("offers")
+}
+
+model Certificate {
+  id       BigInt @id @default(autoincrement())
+  pickupId String @unique @map("pickup_id")
+  vendorId String @map("vendor_id") @db.Uuid
+
+  pdfUrl      String @map("pdf_url")
+  publicToken String @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
+
+  totalWeightKg   Decimal @map("total_weight_kg")
+  materialSummary Json    @default("[]") @map("material_summary")
+
+  certifiedAt DateTime @default(now()) @map("certified_at")
+
+  pickup Pickup  @relation(fields: [pickupId], references: [id])
+  vendor Profile @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("certificates")
 }
