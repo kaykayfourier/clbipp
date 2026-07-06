@@ -83,9 +83,14 @@ export async function getCurrentProfile() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
+  // Fleet-only columns (company_name … business_address) are NULL for individual
+  // accounts; the profile screen renders that section only when vendor_type is
+  // 'fleet'. Selecting them here keeps getCurrentProfile the single profile read.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, email, vendor_type')
+    .select(
+      'full_name, email, vendor_type, company_name, gst_number, pan_number, epr_reg_id, business_address'
+    )
     .eq('id', user.id)
     .single()
 

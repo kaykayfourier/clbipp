@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-06 (Task 3 done)
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -13,11 +13,15 @@
 
 ## Where we are right now
 
-Phase 1 is effectively complete. Phase 2 is underway — B has shipped seed data
-and the first Phase 2 screens (dashboard, compliance, certificate page scaffold).
-C's design system is done and available. Person A is about to start Phase 2
-implementation: complete the signup split flow (Phase 1 loose end), then build
-the 3 tracking screens, profile, and the public tracking link route.
+Phase 1 is complete. Phase 2 is in progress. As of 2026-07-06:
+
+- **A** has completed signup split (Phase 1 loose end), the full static
+  tracking screen with all lifecycle states, and Supabase Realtime on the
+  tracking screen. Task 4 (profile screen) is next.
+- **B** has shipped dashboard, compliance, certificate scaffold (all mock data).
+  Has agreed to fix dashboard to real Prisma + seed an offer for PKP-3099.
+  `Pickup.publicToken` column has been pushed and migrated.
+- **C** has shipped the component library and AppShell.
 
 ---
 
@@ -27,16 +31,9 @@ Single repo for all three apps. Already contains:
 - Next.js + TypeScript + App Router scaffold
 - Prisma + Supabase Postgres set up, initial migration done
 - `src/middleware.ts` (must live under `src/` — Next's dev bundler silently
-  never registers it at the project root when `src/app` is in use, no error,
-  no warning; root-level `middleware.ts` was the cause of the Phase 1
-  login/signup-redirect bug, fixed 2026-06-29)
-- Decision engine (`src/lib/decisionEngine.ts`) — Layers 0–5, 20 passing tests, merged. **PARKED for this sprint** (vendor app does not use it).
-- Field-agent intake flow — an early merged branch. **PARKED for this sprint.**
-- README with architecture + Prisma guidelines
-
-The three apps live in ONE repo, separated by route folders:
-`/` + vendor screens (this sprint) · `/field/...` (later) · `/admin/...` (later).
-Shared `/lib`, `/components`, Prisma schema, auth sit at root.
+  never registers it at the project root when `src/app` is in use)
+- Decision engine (`src/lib/decisionEngine.ts`) — Layers 0–5, 20 passing tests. **PARKED for this sprint.**
+- Field-agent intake flow — early merged branch. **PARKED for this sprint.**
 
 ---
 
@@ -44,142 +41,231 @@ Shared `/lib`, `/components`, Prisma schema, auth sit at root.
 
 | Person | Owns |
 |---|---|
-| **A (me / Aamir)** | Supabase Auth, session/route protection, RLS policies, login + full signup/account-creation flow (type selector + individual/fleet forms, `auth.signUp` + initial profile-row insert), realtime tracking screens, profile. |
-| **B (Teammate 1)** | Prisma schema + types, post-signup KYC upload + verification, dashboard, compliance, certificate PDF generation, internal seed/sim surface. |
-| **C (Teammate 2)** | Component library (from wireframe), full request → offer → handover flow, PWA + offline, deployment/CI. |
+| **A (me / Aamir)** | Supabase Auth, session/route protection, RLS policies, login + full signup flow, tracking screens (`/track/[id]`), track tab navigation, realtime, profile, public tracking link. |
+| **B (Teammate 1)** | Prisma schema + types, post-signup KYC, dashboard, compliance, certificate PDF, seed/sim surface. |
+| **C (Teammate 2)** | Component library, request → offer → handover flow, PWA + offline, deployment/CI. |
 
-Setup + final ship are shared by all three.
-
-**Lane shifts are logged in `LANE_OWNERSHIP.md`** (policy: strict-by-default,
-flexible-with-flagging). Most recent: signup/account-creation flow moved B → A
-on 2026-06-27 (B keeps post-signup KYC).
-
-**My personal context:** beginner, learning the stack as I go. Using Claude Code
-as a supervised tool (read + understand what it generates, don't blind-trust).
+**Note on track tab:** A wired `BottomTabBar` into `(app)/layout.tsx` (logged in
+`LANE_OWNERSHIP.md`). Track tab navigation logic (`/track/page.tsx`) is A's.
+Currently routes to most recent non-cancelled pickup; falls back to dashboard
+if none exist.
 
 ---
 
 ## Status by phase
 
-**Phase 0 — Setup (half day, all three)** — DONE
+**Phase 0 — Setup** — DONE
 
-**Phase 1 — Foundations** — DONE (one A loose end carrying into Phase 2)
+**Phase 1 — Foundations** — DONE
 
 Person A:
 - ✅ `src/middleware.ts` — route protection, correct src/ location
-- ✅ `src/lib/supabase/auth.ts` — signIn, signUpWithProfile, signOut, getCurrentProfile
-- ✅ Login page (`/login`) — functional, plain Tailwind, TODO to swap C's components
-- ✅ Signup page — basic combined form works; creates auth user + profile row atomically
+- ✅ `src/lib/supabase/auth.ts` — signIn, signUpWithProfile (accepts fleet fields), signOut, getCurrentProfile
+- ✅ Login page (`/login`) — AppShell + design tokens
+- ✅ Signup split flow — type selector → individual / fleet forms. Fleet fields written to profile row at signup.
 - ✅ RLS policies — all 5 tables versioned in `supabase/policies.sql`
-- ⚠️ Signup split flow NOT done — the wireframe calls for 3 screens (type-selector →
-  individual form / fleet form with GST/PAN/EPR fields). The current single page works
-  but doesn't collect fleet-specific fields. **First task in the build order below.**
 
 Person B:
-- ✅ Prisma schema — Profile, Pickup, Offer, StatusEvent, Certificate
+- ✅ Prisma schema — Profile, Pickup, Offer, StatusEvent, Certificate (incl. `Pickup.publicToken`)
 - ✅ Zod validation — `src/lib/validation.ts`
-- ✅ Seed data — `prisma/seed.ts` (4 pickups: PKP-2031 certified individual,
-  PKP-2024 certified fleet, PKP-2039 recovered fleet, PKP-2042 scheduled fleet)
+- ✅ Seed data — `prisma/seed.ts` (PKP-2031 certified individual, PKP-2024 certified fleet, PKP-2039 recovered fleet, PKP-2042 scheduled fleet; all fake vendorIds)
 
 Person C:
-- ✅ Design tokens — `src/lib/tokens.ts` (colors, typography, radii, LIFECYCLE_STAGES)
-- ✅ Component library — Button, Card, Input, Badge, Banner, ListRow, Tabs, Timeline
+- ✅ Design tokens — `src/lib/tokens.ts`
+- ✅ Component library — Button, Card, Badge, Banner, ListRow, Tabs, Timeline
 - ✅ App shell + phone frame, Empty/Error/Loading states
-- ✅ Design system showcase at `/design-system`
-- ✅ Tailwind tokens wired in `globals.css`
 
 **Phase 2 — Core journey** — IN PROGRESS
 
 Person B (shipped so far):
-- ✅ `src/app/(app)/dashboard/page.tsx` — populated + empty states (mock data)
-- ✅ `src/app/(app)/compliance/page.tsx` — filter chips + certificate list (mock data)
-- ✅ `src/app/(app)/certificates/[id]/page.tsx` — certificate detail (scaffolded)
+- ✅ `src/app/(app)/dashboard/page.tsx` — mock data (not real Prisma yet)
+- ✅ `src/app/(app)/compliance/page.tsx` — mock data
+- ✅ `src/app/(app)/certificates/[id]/page.tsx` — hardcoded to PKP-2031 (not real)
 
-Person A — NOT STARTED (build order below)
-Person C — NOT STARTED
+Person A — Tasks 1 + 2 done:
+- ✅ Task 1: Signup split flow (Phase 1 loose end, DONE 2026-07-05)
+- ✅ Task 2: Static tracking screen + tab bar wiring (DONE 2026-07-05/06)
+- ✅ Task 3: Realtime on tracking (DONE 2026-07-06)
+- 🔄 Task 4: Full profile screen — **NEXT**
+- ⬜ Task 5: Public tracking link `/t/[token]`
+
+Person C — NOT STARTED (request → offer → handover flow)
 
 **Phase 3 — PWA, hardening, ship** — NOT STARTED
 
 ---
 
-## Person A — build order (next session)
+## Person A — Task 2 detail (what was built)
 
-Work through these in sequence. Each is one branch/PR.
+### Tracking screen — `src/app/(app)/track/[id]/page.tsx`
 
-### 1. Signup split flow (Phase 1 loose end)
+Server component. Queries `prisma.pickup.findFirst({ where: { id, vendorId } })` —
+scoped by vendorId so a vendor cannot view another's pickup.
 
-Replace the single `/signup` page with a 3-screen split:
+Five status buckets:
 
-| Step | Route | Content |
-|---|---|---|
-| Type selector | `/signup` | Two option cards: Individual vs Fleet. No form fields — just routes to step 2. |
-| Individual form | `/signup/individual` | Full name, email, password → `signUpWithProfile({ vendorType: 'individual' })` |
-| Fleet form | `/signup/fleet` | Company name, contact name, email, password, EPR reg ID, GST number, PAN number, business address → `signUpWithProfile({ vendorType: 'fleet', ...fleetFields })` |
+| Status | What renders |
+|---|---|
+| `cancelled` | Timeline up to last known stage (falls back to `requested`) + error banner |
+| `requested` / `scheduled` | LifecycleHeader + StatusBadge + Timeline in Card + info banner |
+| `collected` / `tested` / `processed` | LifecycleHeader + StatusBadge + Timeline (pulse) in Card + 2 banners |
+| `recovered` | LifecycleHeader + StatusBadge + full Timeline in Card + RecoverySummary + lock banner |
+| `certified` | LifecycleHeader + StatusBadge + full Timeline in Card + RecoverySummary + success banner + View certificate button |
 
-KYC upload is Person B's post-signup step — don't add it here. Just collect the
-fields and insert the profile row. Use C's `<Input>` and `<Button>` components
-(they're available now).
+**RecoverySummary:** Shows total weight kg as a stat box. Shows "—" / "Pending finalisation" 
+when no offer data yet. Expandable material breakdown (kg per material). 
+**₹ values and recovery rate % are never rendered anywhere on vendor screens.**
 
-### 2. Tracking screens — static first
+### Track tab — `src/app/(app)/track/page.tsx`
 
-Three states of one route: `src/app/(app)/track/[id]/page.tsx`.
-Read pickup + status_events from DB via Prisma server component. Render
-conditionally based on `pickup.status`.
+Server component. Queries most recent non-cancelled pickup for the logged-in user.
+Redirects to `/track/[id]` if found, `/dashboard` if none.
 
-| Status bucket | Screen | Key content |
-|---|---|---|
-| `collected` / `tested` / `processed` | track-progress | Lifecycle Timeline (partial). Two banners: "We'll notify you…" (info) + "Certificate unlocks once recovered" (lock). No stats. |
-| `recovered` | track-recovered | Full timeline to recovered. Recovery summary card: total weight kg only — NO recovery rate %, NO ₹ amounts. Expandable material breakdown (weight kg per material from `Certificate.materialSummary` is wrong here — use pickup offer's materialBreakdown weights, not values). Lock banner: "Certificate available once certified." |
-| `certified` | track-certified | Full timeline all done. Recovery summary card (kg only). Green banner "Certificate ready." Button → `/certificates/[pickupId]` (B's screen). |
+### Tab bar — `src/app/(app)/layout.tsx`
 
-**Do NOT display** recovered value (₹) or recovery rate (%) on any tracking screen —
-these are visible in the wireframe HTML but were removed by the lead. Weight (kg)
-only is fine.
+`BottomTabBar` wired here. `position: fixed` — floats above all content.
+All authenticated screens (A's + B's) get it automatically.
+Lane shift logged in `docs/LANE_OWNERSHIP.md`.
 
-The tab bar "Track" tab routes here. The Dashboard pickup rows route here too
-(B's dashboard currently links rows but navigation isn't wired yet).
+### Shared component edits made by A (to make tracking screens look right)
 
-### 3. Tracking screens — add Realtime
+These live in C's component files but were changed by A because they broke A's
+tracking screen. Not a lane dispute — just fixes A needed:
 
-After the static version works: add a Supabase Realtime subscription in
-`src/lib/supabase-realtime.ts` so the timeline updates without a page reload
-when a `status_events` row is inserted for this pickup.
+- `timeline.tsx`: removed meaningless "—" pending sublabels (`tested`, `processed`,
+  `certified`); kept "Awaiting agent" (collected) + "In progress" (recovered).
+- `timeline.tsx`: added `min-h-[1.75rem]` on stage label block + taller connector
+  (`h-8`) so rows are evenly spaced whether or not they have a sublabel.
+- `timeline.tsx`: exported `Connector` so the track page can reuse it for the
+  cancelled end-state.
+- Track page: `Card` wrapping each Timeline now uses `overflow-visible` — the
+  default `overflow-hidden` on Card was clipping the `animate-ping` pulse glow.
+- Cancelled state: now renders the timeline up to last known stage + a red X dot
+  and "Cancelled" label inside the card (connected by a red connector), then the
+  error banner.
 
-### 4. Profile screen (full)
-
-Replace the minimal stub at `src/app/(app)/profile/page.tsx` with the full
-wireframe version:
-
-- Avatar card: initials from name (e.g. "AH"), company name or full name, EPR reg ID (fleet) or "—" (individual)
-- Account section: contact email, batteries submitted count (count of profile's pickups)
-- List rows: "Notifications" and "Edit company details" — render as disabled rows with chevrons (stub, not wired this sprint)
-- Log out button
-
-Reads from `getCurrentProfile()` + a Prisma count of pickups for this vendor.
-**No avg recovery rate** — that was removed by the lead.
-
-### 5. Public tracking link `/t/[token]`
-
-A public (no-auth) route showing a read-only lifecycle timeline for a pickup,
-accessible via a token. The handover screen (C's) will link to this.
-
-**Before building:** confirm with B what the token lives on. `Certificate.publicToken`
-exists but a certificate isn't created until status = certified, while the link
-is generated at handover (collected). Either Pickup needs its own publicToken,
-or the approach changes. Do not build this route until the schema question is
-resolved. Add a carve-out for `/t/...` in `src/middleware.ts` when ready.
+⚠ **Clobber risk:** `timeline.tsx` is C's file. If C re-uploads it, these edits
+are lost and the tracking screen regresses (uneven rows, clipped pulse). If that
+happens, re-apply the four `timeline.tsx` changes above. Consider that these
+tracking-specific tweaks may be worth moving into a track-local wrapper later so
+they can't be overwritten.
 
 ---
 
-## Seed data reference (for building against)
+## Person A — Task 3 detail (what was built)
 
-Seeded by `prisma/seed.ts`. Two vendor accounts (not real Supabase auth users —
-used for Prisma-level testing and UI dev only):
+### Realtime — `src/lib/supabase-realtime.ts` + `track/[id]/TrackingRealtime.tsx`
+
+`supabase-realtime.ts`: exports `subscribeToPickupEvents(pickupId, onEvent)`.
+Opens a channel on the browser Supabase client, listens for `INSERT` on
+`status_events` filtered to this pickup, fires the callback, returns an
+unsubscribe fn. Payload is intentionally ignored — the callback is a signal only.
+
+`TrackingRealtime.tsx`: `"use client"`, renders `null`. On mount subscribes and
+calls `router.refresh()` on each event; on unmount unsubscribes. `router.refresh()`
+re-runs the server component so the whole page (timeline, banners, RecoverySummary,
+cert button) re-renders with fresh Prisma data. Server stays the single source of
+truth — no stage-derivation logic on the client.
+
+Mounted in the 3 non-terminal branches of `track/[id]/page.tsx` (early,
+in-progress, recovered). Terminal branches (certified, cancelled) have no
+subscription — no further events expected.
+
+**One-time SQL:** `supabase/realtime.sql` — adds `status_events` to the
+`supabase_realtime` publication (re-runnable, guarded). Must be run in the
+Supabase SQL editor; already applied.
+
+**Pulse bug fixed:** `recovered` branch now passes `pulse` + `overflow-visible`
+to the Timeline Card (was missing both — the bug was flagged in Task 2 notes).
+
+---
+
+## Person A — Task 4 plan (NEXT)
+
+### Full profile screen · branch `feat/profile`
+
+Goal: `/profile` screen showing the logged-in vendor's account details.
+
+**What to show:**
+- Full name, email, vendor type (individual / fleet)
+- Fleet-only fields when `vendor_type === 'fleet'`: company name, GST number,
+  PAN number, EPR reg ID, business address
+- A sign-out button (calls `signOut()` from `src/lib/supabase/auth.ts`, then
+  redirects to `/login`)
+
+**Data source:** `getCurrentProfile()` in `src/lib/supabase/auth.ts` already
+returns `{ user, profile }` — but currently only selects `full_name, email,
+vendor_type`. Needs to also select the fleet fields:
+`company_name, gst_number, pan_number, epr_reg_id, business_address`.
+
+**Architecture:**
+- `src/app/(app)/profile/page.tsx` — server component, calls `getCurrentProfile()`,
+  renders the profile display. Fleet fields section conditionally rendered.
+- Sign-out is a form action or a small `"use client"` button component (since
+  `signOut()` needs to run client-side or in a server action).
+- Tab bar already in `(app)/layout.tsx` — profile tab should be wired up.
+
+**Check wireframe** (`docs/CLBIPP_Vendor_Wireframes_1.html`) for exact layout
+before building — it has the profile screen spec.
+
+---
+
+## Person A — what is NOT yet tested on my screens
+
+Carry these into the next chat — do not assume they work:
+
+- **Timeline dates/timestamps** — partially tested. PKP-3099 now has manually
+  inserted `status_events` rows (added during Task 3 Realtime testing). Timestamps
+  appear on completed stages. Full end-to-end (agent flow auto-inserting events)
+  still blocked on B's real flow.
+- **Recovered state recovery summary with real data** — RecoverySummary currently
+  shows "—/Pending finalisation" because PKP-3099 has no offer. Blocked on B
+  seeding an offer with `materialBreakdown` for PKP-3099.
+- **Certified state end-to-end** — the "View certificate" button links to
+  `/certificates/[id]`, but B's cert page is hardcoded to PKP-2031, so the link
+  target is wrong until B fixes it.
+- **Dashboard → track navigation** — cannot test; B's dashboard rows don't link
+  to `/track/[id]` yet and use mock data.
+- **Cancelled state** — new red end-state added this session, eyeballed only,
+  not tested against a real cancelled pickup.
+- **Track tab routing** — works but noted as slightly slow (extra DB query on
+  every tab tap). Acceptable for now.
+- **Signup fleet fields** — confirmed writing to profile row earlier, but not
+  re-verified after recent changes.
+
+---
+
+## Pending items / blockers
+
+### Blocked on B
+
+| # | What | Status |
+|---|---|---|
+| P4 | Dashboard switches to real Prisma so real pickups show + empty state is testable | B not done |
+| P4 | Dashboard pickup rows link to `/track/[id]` | B not done |
+| — | Certificate page reads by pickup ID (currently hardcoded PKP-2031) | B not done |
+| — | Offer with `materialBreakdown` seeded for PKP-3099 (test pickup) | B not done |
+
+### Phase 2 → Phase 3 prerequisites
+
+| # | What | Owner | Status |
+|---|---|---|---|
+| P1 | `BottomTabBar` wired into `(app)/layout.tsx` | A ✅ | Done |
+| P2 | `Pickup.publicToken` column added + backfilled | B ✅ | Done, migrated locally |
+| P3 | `/t/[token]` public route built | A | Task 5, after Task 3+4 |
+| P4 | Dashboard rows link to real pickup IDs | B | Not done |
+| P5 | Input validation on signup (email, GST/PAN/EPR, password) | A + B | Deferred to Phase 3 |
+
+---
+
+## Seed data reference
+
+Two vendor accounts (fake UUIDs — not real Supabase auth users):
 
 | Vendor | ID | Type |
 |---|---|---|
 | Aamir Hashmi Singh | `00000000-0000-0000-0000-000000000001` | individual |
-| Riya Sharma / Altigreen Propulsion | `00000000-0000-0000-0000-000000000002` | fleet |
+| Riya Sharma / Altigreen | `00000000-0000-0000-0000-000000000002` | fleet |
 
 | Pickup | Vendor | Status | Has offer | Has cert |
 |---|---|---|---|---|
@@ -187,42 +273,28 @@ used for Prisma-level testing and UI dev only):
 | PKP-2024 | fleet | certified | ✅ | ✅ |
 | PKP-2039 | fleet | recovered | ✅ | ❌ |
 | PKP-2042 | fleet | scheduled | ❌ | ❌ |
+| PKP-3099 | real auth user (Aamir) `efc87c57-1659-4de1-98af-86c2068b65e2` (login: `business@test`) | varies (test manually) | ❌ | ❌ |
+
+PKP-3099 is the only pickup with a real Supabase auth `vendorId` — use this for
+testing. Manually insert `status_events` rows + update `pickups.status` to test
+different states (the INSERT fires Realtime; the UPDATE is what the server render reads).
+To test recovery summary, B needs to seed an offer with `materialBreakdown` for it.
 
 ---
 
-## Open questions / things to confirm
+## Open rules (locked, do not revisit)
 
-- **Public tracking token:** `Certificate.publicToken` exists but a cert isn't
-  created until certified — the tracking link is generated at handover (collected).
-  Confirm with B: does Pickup need its own publicToken column, or is the link
-  approach different? Blocks step 5 of the build order.
-- **Scheduled screen agent/ETA:** hardcoded demo UI in the wireframe — no
-  agent/ETA column in schema (field-agent app doesn't exist yet). Confirmed fake.
-- **Do NOT render `Offer.materialBreakdown` / `Offer.deductions` as ₹ values
-  on vendor-facing screens.** Weight (kg) from materialBreakdown is fine on
-  tracking; price values are not. Person C to be reminded for offer/offer-breakdown screens.
-- **RLS not tested with a real second account yet** — scheduled for Phase 3 hardening.
+- **Never render `Offer.materialBreakdown` / `Offer.deductions` as ₹ values
+  on any vendor-facing screen.** Weight (kg) only. This rule applies to A, B, and C.
+- **No recovery rate % shown to vendor anywhere.**
+- Status lifecycle (locked): `requested → scheduled → collected → tested → processed → recovered → certified` (+ `cancelled`)
+- `src/middleware.ts` must stay under `src/` — not project root.
 
 ---
 
-## Flagged for Person C
+## Design approach (Phase 3)
 
-- **Login/signup screens** still use raw Tailwind inputs — TODOs exist in both
-  files to swap to C's `<Input>` / `<Button>` once available. Now available —
-  C can swap, or A will do it as part of the signup split rebuild.
-- **`Offer.materialBreakdown` / `Offer.deductions`** must NOT be rendered as
-  ₹ values on the offer, offer-breakdown, or handover screens. Lead's instruction.
-  The wireframe HTML is stale on this — the removed KPIs are still visible in it.
-
----
-
-## Wireframe state (current, vendor side)
-
-`CLBIPP_Vendor_Wireframes_1.html` — 17 screens, current and approved. **The HTML
-is stale on two points** — the wireframe still shows recovered value (₹) and
-recovery rate (%) on offer and tracking screens, but the lead removed those.
-Build against the rule in CLAUDE.md, not the wireframe HTML.
-
-Screen list: login · signup-type · signup-individual · signup-fleet · dashboard-empty ·
-dashboard · request · submitted · scheduled · offer · offer-breakdown · handover ·
-track-progress · track-recovered · track-certified · certificate · compliance · profile.
+All design polish (typography, max-width mobile container, serif display font,
+logo, spacing) is deferred to Phase 3. A's screens should be functionally
+correct and reasonably close to wireframe now. Full design pass happens once
+all screens are built.
