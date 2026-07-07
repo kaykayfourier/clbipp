@@ -1,25 +1,18 @@
 import {ListRow} from "@/components/ui/list-row"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { prisma } from "@/lib/prisma"
+import type { Pickup } from "@prisma/client"
 
-const MockStats = {
-    recycled: "12.4t",
-    recovered: "9.1t",
-    certificates: 7,
+type DashboardStats{
+  pickupCount: number
+  certificateCount: number
 }
 
-const MockPickups: Array<{
-    id: string
-    subtitle: string
-    status: "scheduled" | "processed" | "recovered" | "requested" | "collected" | "tested" | "certified"
-}> = [
-    { id: "PKP-2042", subtitle: "Li-ion NMC · 24 units", status: "scheduled" },
-    { id: "PKP-2041", subtitle: "LFP · 60 units", status: "processed" },
-    { id: "PKP-2039", subtitle: "Li-ion NMC · 18 units", status: "recovered" },
 
-]
 
-function PopulatedDashboardPage() {
+
+function PopulatedDashboardPage({pickups,stats,}: {pickups: Pickup[], stats: DashboardStats}) {
     return(
         <div className="flex flex-col gap-4 p-4">
 
@@ -35,19 +28,19 @@ function PopulatedDashboardPage() {
         <div className = "grid grid-cols-3 gap-2">
             <Card variant="elevated">
           <CardContent>
-            <div className="font-serif text-xl font-semibold">{MockStats.recycled}</div>
-            <div className="text-[10px] uppercase tracking-widest text-[#666666] mt-1">Recycled</div>
+            <div className="font-serif text-xl font-semibold">{stats.pickupCount}</div>
+            <div className="text-[10px] uppercase tracking-widest text-[#666666] mt-1"> Pickups </div>
           </CardContent>
         </Card>
             <Card variant="elevated">
           <CardContent>
-            <div className="font-serif text-xl font-semibold">{MockStats.recovered}</div>
+            <div className="font-serif text-xl font-semibold"> - </div>
             <div className="text-[10px] uppercase tracking-widest text-[#666666] mt-1">Recovered</div>
           </CardContent>
         </Card>
             <Card variant="elevated">
           <CardContent>
-            <div className="font-serif text-xl font-semibold">{MockStats.certificates}</div>
+            <div className="font-serif text-xl font-semibold">{stats.certificateCount}</div>
             <div className="text-[10px] uppercase tracking-widest text-[#666666] mt-1">Certificates</div>
           </CardContent>
         </Card>
@@ -63,11 +56,11 @@ function PopulatedDashboardPage() {
 
         {/*List Rows */}
         <div className="flex flex-col gap-2">
-            {MockPickups.map((pickup) =>(
+            {pickups.map((pickup) =>(
                 <ListRow
                     key = {pickup.id}
                     id = {pickup.id}
-                    subtitle = {pickup.id}
+                    subtitle = {`${pickup.batteryType} · ${pickup.approxQuantity}`}
                     status = {pickup.status}
                 />
 
@@ -97,7 +90,15 @@ function EmptyDashboardPage() {
     </div>
   )
 }
-const hasPickups = MockPickups.length > 0;
-export default function DashboardPage(){
+
+export default async function DashboardPage(){
+  const pickups = await prisma.pickup.findMany({
+        where: {vendorId: "00000000-0000-0000-0000-000000000001", },
+        orderBy: {
+            createdAt: "desc",
+        },
+    })
+    const hasPickups = pickups.length > 0;
+
     return hasPickups ? <PopulatedDashboardPage/>  : <EmptyDashboardPage/>;
 }

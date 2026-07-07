@@ -49,10 +49,7 @@ const STAGE_LABELS: Record<LifecycleStage, string> = {
 // Default sublabels for pending stages
 const PENDING_SUBLABELS: Partial<Record<LifecycleStage, string>> = {
   collected: "Awaiting agent",
-  tested: "—",
-  processed: "—",
   recovered: "In progress",
-  certified: "—",
 };
 
 function getStatus(
@@ -121,7 +118,7 @@ function Connector({ completed }: { completed: boolean }) {
   return (
     <span
       className={cn(
-        "ml-[9px] block w-0.5 h-6",
+        "ml-[9px] block w-0.5 h-8",
         completed ? "bg-success" : "bg-border"
       )}
     />
@@ -172,7 +169,7 @@ function Timeline({
             <div className="flex items-start gap-3">
               <StageDot status={status} pulse={status === "active" && pulse} />
 
-              <div className="flex-1 pb-0.5">
+              <div className="flex-1 pb-0.5 min-h-[1.75rem]">
                 <span
                   className={cn(
                     "block text-sm font-semibold leading-tight",
@@ -207,4 +204,4 @@ function Timeline({
   );
 }
 
-export { Timeline };
+export { Timeline, Connector };
