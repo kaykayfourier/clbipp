@@ -217,7 +217,7 @@ model Pickup {
   status PickupStatus @default(requested)
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   vendor       Profile       @relation(fields: [vendorId], references: [id])
   statusEvents StatusEvent[]
