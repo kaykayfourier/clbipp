@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-06 (Task 4 done, Task 5 next; parked A hardening items H1–H2 from PR #10 review)
+**Last updated:** 2026-07-06 (C's PR #10 merged; Task 5 next; parked A hardening items H1–H2 from PR #10 review)
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -20,9 +20,12 @@ Phase 1 is complete. Phase 2 is in progress. As of 2026-07-06:
 - **B** has shipped dashboard, compliance, certificate scaffold (all mock data).
   Has agreed to fix dashboard to real Prisma + seed an offer for PKP-3099.
   `Pickup.publicToken` column has been pushed and migrated.
-- **C** has shipped the component library and AppShell.
+- **C** has shipped the component library and AppShell, and the full Phase 2
+  request → offer → handover flow (PR #10, **merged 2026-07-06**): request-pickup,
+  submitted, scheduled, offer, offer-breakdown, handover + `mockOffer.ts`.
 
-All of A's work through Task 4 is on `origin/main` (merged 2026-07-06).
+All of A's work through Task 4 is on `origin/main` (merged 2026-07-06). C's PR #10
+is merged and pulled locally.
 
 ---
 
@@ -90,7 +93,15 @@ Person A — Tasks 1–4 done:
 - ✅ Task 4: Full profile screen (DONE 2026-07-06)
 - 🔄 Task 5: Public tracking link `/t/[token]` — **NEXT**
 
-Person C — NOT STARTED (request → offer → handover flow)
+Person C — request → offer → handover flow SHIPPED (PR #10, merged 2026-07-06):
+- ✅ `request-pickup/page.tsx` — form, inserts to `pickups` via the browser client
+- ✅ `submitted/`, `scheduled/` — confirmation + scheduled screens
+- ✅ `offer/`, `offer-breakdown/` — driven by `mockOffer.ts` (real pricing parked)
+- ✅ `handover/page.tsx` + `actions.ts` — `acceptOffer()` sets status → collected
+- ⚠ **Not yet end-to-end:** the request insert fails until B adds the
+  `pickups.updated_at` DB default (see Blocked on B); dashboard listing of the new
+  pickup needs B's real-Prisma switch. The `status_events` write on accept is
+  RLS-dropped — see hardening H1.
 
 **Phase 3 — PWA, hardening, ship** — NOT STARTED
 
@@ -279,6 +290,7 @@ Carry these into the next chat — do not assume they work:
 
 | # | What | Status |
 |---|---|---|
+| — | **`pickups.updated_at` needs a DB default** — C's request-pickup insert (raw PostgREST, not Prisma) fails with a NOT NULL violation until then; same one-line fix B already did for `profiles`. **Gates C's whole flow.** | B says done, but NOT in any migration on `main` — **verify** |
 | P4 | Dashboard switches to real Prisma so real pickups show + empty state is testable | B not done |
 | P4 | Dashboard pickup rows link to `/track/[id]` | B not done |
 | — | Certificate page reads by pickup ID (currently hardcoded PKP-2031) | B not done |
