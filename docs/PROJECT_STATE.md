@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-06 (C's PR #10 merged; Task 5 next; parked A hardening items H1–H2 from PR #10 review)
+**Last updated:** 2026-07-07 (Task 5 done — A's Phase 2 lane complete; A moving into Phase 3 hardening H1/H2)
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -13,10 +13,13 @@
 
 ## Where we are right now
 
-Phase 1 is complete. Phase 2 is in progress. As of 2026-07-06:
+Phase 1 is complete. Phase 2 is in progress. As of 2026-07-07:
 
-- **A** has completed signup split, static tracking screen, Supabase Realtime,
-  and the full profile screen (Task 4). Task 5 (public tracking link) is next.
+- **A** has completed all Phase 2 lane tasks (1–5): signup split, tracking
+  screen, Realtime, profile, and the public tracking link `/t/[token]` (Task 5,
+  DONE 2026-07-07). **A's Phase 2 lane is fully complete** and is now moving into
+  Phase 3 hardening (H1/H2). Nothing left blocking A's own screens except items
+  gated on B (see blockers).
 - **B** has shipped dashboard, compliance, certificate scaffold (all mock data).
   Has agreed to fix dashboard to real Prisma + seed an offer for PKP-3099.
   `Pickup.publicToken` column has been pushed and migrated.
@@ -91,7 +94,9 @@ Person A — Tasks 1–4 done:
 - ✅ Task 2: Static tracking screen + tab bar wiring (DONE 2026-07-05/06)
 - ✅ Task 3: Realtime on tracking (DONE 2026-07-06)
 - ✅ Task 4: Full profile screen (DONE 2026-07-06)
-- 🔄 Task 5: Public tracking link `/t/[token]` — **NEXT**
+- ✅ Task 5: Public tracking link `/t/[token]` (DONE 2026-07-07)
+
+**A's Phase 2 lane is complete.** Next A work is Phase 3 hardening (H1/H2).
 
 Person C — request → offer → handover flow SHIPPED (PR #10, merged 2026-07-06):
 - ✅ `request-pickup/page.tsx` — form, inserts to `pickups` via the browser client
@@ -103,7 +108,24 @@ Person C — request → offer → handover flow SHIPPED (PR #10, merged 2026-07
   pickup needs B's real-Prisma switch. The `status_events` write on accept is
   RLS-dropped — see hardening H1.
 
-**Phase 3 — PWA, hardening, ship** — NOT STARTED
+**Phase 3 — PWA, hardening, ship** — STARTING. This is the whole-app netting-up
+phase: full design pass (once all screens exist), correct end-to-end DB
+linking/inserts/updates, input validation (P5, A+B), PWA + offline + deploy (C),
+and hardening. It splits into two kinds of work:
+
+- **Concentrated / lane-owned** — clear, single-owner tasks that need no
+  coordination to start. For A: **H1/H2** (RLS + status-write hardening; see
+  below) and A's half of **P5** (signup email/password validation).
+- **Shared / all-hands finishing** — design consistency pass, verifying the full
+  request→track→certificate chain links + writes correctly across lanes. These
+  depend on other lanes being in place (design pass waits until all screens
+  built; linking waits on B's real-Prisma dashboard). Task split between A/B/C
+  still to be agreed.
+
+A's concentrated slice (H1/H2, P5-A) is lane-independent and can start now. B
+still has Phase 2 tails (dashboard real Prisma, cert-by-ID); C's flow is gated on
+B's `updated_at` default — so the team is not uniformly in Phase 3 yet, and the
+shared finishing work can't fully land until those close.
 
 ---
 
@@ -225,41 +247,44 @@ flag to B for notifications preference column; edit details is a future branch).
 
 ---
 
-## Person A — Task 5 plan (NEXT)
+## Person A — Task 5 detail (DONE 2026-07-07)
 
-### Public tracking link · `src/app/t/[token]/page.tsx`
+### Public tracking link — `src/app/t/[token]/page.tsx`
 
-Goal: a publicly accessible URL (`/t/<uuid>`) that lets anyone with the link
-view the lifecycle status of a pickup — no login required. The token is
-`Pickup.publicToken` (UUID, already in schema, already backfilled).
+Publicly accessible URL (`/t/<uuid>`) showing a pickup's lifecycle to anyone
+holding the link — no login. Token is `Pickup.publicToken` (UUID). Two files:
 
-**What to show:**
-- Pickup ID, current status badge, lifecycle timeline with timestamps.
-- Same visual structure as the authenticated `/track/[id]` screen.
+- **`src/middleware.ts`** — added `'/t'` to `PUBLIC_PATHS`. Existing matcher
+  (`pathname === p || startsWith('/t/')`) now lets `/t/<anything>` through logged
+  out. No collision with `/track` (verified: neither `=== '/t'` nor `startsWith('/t/')`).
+- **`src/app/t/[token]/page.tsx`** — new server component. Lives at **top-level
+  `src/app/t/`, outside the `(app)` group**, so it does NOT inherit the
+  authenticated `BottomTabBar`. Self-contained (copies `buildStages`,
+  `safeBreakdown`, `LIFECYCLE`, `LifecycleHeader`, `RecoverySummary` from the
+  authed page — the merged/tested `/track/[id]` screen was left untouched).
 
-**What NOT to show:**
-- Vendor name, email, or any personal data.
-- Offer value, recovery rate, or any financial figure (locked rule).
-- `RecoverySummary` material breakdown is fine (kg weights only) — same rule
-  as the authenticated screen.
+Key decisions:
+- **UUID-format guard before the query** — `publicToken` is a Postgres `uuid`
+  column; a non-UUID string throws on cast (500) rather than returning null. Guard
+  → `notFound()` (404) on malformed tokens.
+- Queries by `publicToken` only, no `vendorId` scoping — the token IS the scope.
+  Prisma bypasses RLS.
+- Same 5 status buckets as `/track/[id]`, stripped for anon: `hideNav` + no back
+  button, **no `TrackingRealtime`**, and certified branch **omits the "View
+  certificate" button** (it links to the auth-only `/certificates` route).
+- Renders only pickup ID, status badge, timeline, kg-only RecoverySummary — no
+  vendor identity, no ₹/recovery-rate.
 
-**Architecture:**
-- `src/app/t/[token]/page.tsx` — server component. Queries
-  `prisma.pickup.findFirst({ where: { publicToken: token } })`.
-  Prisma bypasses RLS (service-role connection), so no auth needed at the
-  query layer — the token itself is the capability (knowing it = access).
-- `src/middleware.ts` — add `/t` to `PUBLIC_PATHS` so middleware doesn't
-  redirect unauthenticated visitors to `/login`.
-- No Supabase auth client call needed on this route.
-- Render `notFound()` if no pickup matches the token.
+**Verified:** loads logged-out (incognito) without redirect to `/login`; bad
+token → 404. Wireframe has no dedicated public-view screen — `/t/` appears only
+as the link string on the handover screen; the `track-progress` screen is the
+visual model.
 
-**Files to touch:**
-1. `src/middleware.ts` — add `'/t'` to `PUBLIC_PATHS`.
-2. `src/app/t/[token]/page.tsx` — new file, server component.
-
-**Check wireframe** for any public tracking screen spec before building.
-The handover screen references `b2b.app/t/9f3a…·token` but there may not
-be a full public-view wireframe — check first.
+**Deferred (Phase 3 follow-up):** no live updates on the public page. Realtime
+subscribes via the anon browser client, which RLS on `status_events` scopes to
+the owning vendor — an anon subscription would silently no-op. Public realtime
+would need a token-scoped path (dedicated anon SELECT policy, or poll) — its own
+small task, not built.
 
 ---
 
@@ -276,6 +301,9 @@ Carry these into the next chat — do not assume they work:
 - **Dashboard → track navigation** — B's dashboard rows don't link to
   `/track/[id]` yet and use mock data.
 - **Cancelled state** — eyeballed only, not tested against a real cancelled pickup.
+- **Public link `/t/[token]`** — verified logged-out load + 404 guard against
+  PKP-3099. Not tested against every status bucket with real data, and public
+  realtime was intentionally omitted (see Task 5 detail).
 - **Profile certificate/recycled stats** — count and weight show 0 for PKP-3099
   because no Certificate row exists for that vendor. Correct behaviour, but not
   testable until B's cert flow runs.
@@ -302,14 +330,15 @@ Carry these into the next chat — do not assume they work:
 |---|---|---|---|
 | P1 | `BottomTabBar` wired into `(app)/layout.tsx` | A ✅ | Done |
 | P2 | `Pickup.publicToken` column added + backfilled | B ✅ | Done, migrated locally |
-| P3 | `/t/[token]` public route built | A | Task 5, after Task 3+4 |
+| P3 | `/t/[token]` public route built | A ✅ | Done 2026-07-07 (Task 5) |
 | P4 | Dashboard rows link to real pickup IDs | B | Not done |
 | P5 | Input validation on signup (email, GST/PAN/EPR, password) | A + B | Deferred to Phase 3 |
 
-### Phase 3 hardening — Person A (parked, not this sprint)
+### Phase 3 hardening — Person A (H1/H2 — ACTIVE, Chat 1)
 
 Surfaced while reviewing C's request→offer→handover PR (#10). Both are RLS /
-status-write concerns in A's lane. **Parked for Phase 3 — do not build now.**
+status-write concerns in A's lane. **Now active — these are A's Phase 3 Chat 1
+concentrated tasks (see execution plan below).**
 
 | # | What | Why | Fix (convergent) |
 |---|---|---|---|
@@ -320,6 +349,65 @@ Both point the same direction: **status transitions belong in service-role serve
 actions, not vendor-session writes.** Doing H1 and H2 together also restores the
 realtime ping on accept. Needs a service-role client helper under
 `src/lib/supabase-*.ts` (doesn't exist yet).
+
+---
+
+## Phase 3 execution plan — Person A (2 chats, ~1 day)
+
+Small friendly college/internship team — lanes are light structure, not rigid
+gates. A can grab a quick OK from C to touch a shared file, and can pick up
+shared / loose-end tasks solo when finished early. Coordination = a heads-up (+ a
+one-line `LANE_OWNERSHIP.md` note if a file changes hands), not a formal process.
+
+### Chat 1 — A's concentrated tasks (single-owner, no blockers to start)
+
+1. **H2** (pure A): add a service-role Supabase client helper under
+   `src/lib/supabase-*.ts`; move status transitions into service-role server
+   actions; tighten/remove the broad vendor UPDATE policy in `policies.sql` so a
+   vendor can't self-advance their own lifecycle. Security boundary is RLS, not UI.
+2. **H1** (A, edits C's `handover/actions.ts` — quick OK from C first): write the
+   `status_events` "collected" row via the service-role client so it's no longer
+   RLS-dropped. Restores the audit entry + realtime ping on accept. Do with H2.
+3. **P5-A** (pure A; if time, else roll to netting-up): email + password
+   validation on the signup form A owns.
+
+Git: one branch `feat/status-hardening`, one PR to main, merge.
+
+### Final chat — net up the whole app with B & C (priority-ranked)
+
+Goal: a working, demoable end-to-end app in the remaining day. Do this list
+**top-down and stop where time runs out** — lower items are polish / nice-to-have.
+A can assign or absorb any of these solo once ahead.
+
+**P0 — core journey must work at all**
+- [ ] Verify B's `pickups.updated_at` DB default is actually on `main` (in a
+      migration), not just claimed. Without it the request-pickup insert fails →
+      the whole request→offer→handover→track chain is dead. **Highest priority.**
+- [ ] Confirm H1/H2 merged (from Chat 1).
+
+**P1 — end-to-end demo path works + is testable**
+- [ ] B: dashboard → real Prisma (real pickups + empty state), rows link to
+      `/track/[id]`. This is the demo's main navigation.
+- [ ] B: certificate page reads by pickup ID (currently hardcoded PKP-2031) — so
+      A's certified "View certificate" button actually works.
+- [ ] B: seed an Offer with `materialBreakdown` for PKP-3099 — so A's recovered /
+      certified RecoverySummary and profile recycled stats show real data.
+
+**P2 — validation + verify A's untested states against real data**
+- [ ] P5-B: GST/PAN/EPR validation (B, `validation.ts`) — pairs with P5-A.
+- [ ] Verify with real data: cancelled state, timeline timestamps, public
+      `/t/[token]` across status buckets, profile cert/recycled stats, signup
+      fleet fields (re-verify after recent changes).
+
+**P3 — polish + ship**
+- [ ] Design consistency pass across all screens (design tokens). Each person
+      polishes own screens; C drives overall consistency.
+- [ ] C: PWA + offline, deploy/CI.
+- [ ] Optional robustness: move A's tracking-specific `timeline.tsx` tweaks into a
+      track-local wrapper so a C re-upload can't clobber them (see Task 2 detail).
+
+**P4 — nice-to-have (only if time left over)**
+- [ ] Public realtime on `/t/[token]` (token-scoped path, A) — explicitly deferred.
 
 ---
 
