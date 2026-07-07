@@ -217,24 +217,90 @@ async function main() {
   console.log("Seed data deleted. Sim tables reset")
   }
 
-  async function aamir_seed(){
-    await prisma.pickup.create({
+  async function seedForExistingUser(email: string) {
+  const profile = await prisma.profile.findFirst({
+    where: { email },
+  })
+
+  if (!profile) {
+    throw new Error(`No profile found for ${email}`)
+  }
+
+  const vendorId = profile.id
+
+  console.log(`Seeding data for ${profile.fullName} (${vendorId})`)
+
+  // Pickup
+  await prisma.pickup.create({
     data: {
-      id: "PKP-3099",
-      vendorId: "efc87c57-1659-4de1-98af-86c2068b65e2",
+      id: "PKP-6099",
+      vendorId,
       batteryType: "li_ion_nmc",
       approxQuantity: "890 units",
-      approxWeightKg: 670.50,
+      approxWeightKg: 670.5,
       location: "Delhi NCR, Kalkaji Mandir",
-      status: "requested",
-      
+      status: "certified",
+      notes: "Demo seeded pickup",
     },
   })
-  }
+
+  // Status history
+  const stages = [
+    "requested",
+    "scheduled",
+    "collected",
+    "tested",
+    "processed",
+    "recovered",
+    "certified",
+  ] as const
+
+  await prisma.statusEvent.createMany({
+    data: stages.map((status) => ({
+      pickupId: "PKP-3099",
+      status,
+      actorRole: "system",
+    })),
+  })
+
+  // Offer
+  await prisma.offer.create({
+    data: {
+      pickupId: "PKP-6099",
+      vendorId,
+      pathway: "recycle",
+      estimatedPrice: 18450000,
+      rationale: "High nickel content, metal recovery is the best route.",
+      materialBreakdown: [
+        { material: "Nickel", weight_kg: 31, value_paise: 12800000 },
+        { material: "Cobalt", weight_kg: 12, value_paise: 7400000 },
+      ],
+      deductions: [
+        { label: "Logistics", amount_paise: 800000 },
+      ],
+    },
+  })
+
+  // Certificate
+  await prisma.certificate.create({
+    data: {
+      pickupId: "PKP-3099",
+      vendorId,
+      pdfUrl: "certificates/PKP-3099.pdf",
+      totalWeightKg: 248,
+      materialSummary: [
+        { material: "Nickel", recovered_kg: 54 },
+        { material: "Cobalt", recovered_kg: 21 },
+      ],
+    },
+  })
+
+  console.log("Demo data seeded successfully.")
+}
 
   //await reset_data()
   //await seed_data()
-  await aamir_seed()
+  await seedForExistingUser("kaykay@fourier")
 }
 
  main()

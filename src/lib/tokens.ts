@@ -168,6 +168,7 @@ export const LIFECYCLE_STAGES = [
   "processed",
   "recovered",
   "certified",
+  "cancelled",
 ] as const;
 
 export type LifecycleStage = (typeof LIFECYCLE_STAGES)[number];

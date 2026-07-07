@@ -1,18 +1,29 @@
+import { prisma } from "@/lib/prisma"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { getCurrentProfile } from "@/lib/supabase/auth"
+import { redirect, notFound } from "next/navigation"
+export default async function CertificatePage({ params }: { params: { id: string } }) {
+  const current = await getCurrentProfile()
 
-const mockCertificate = {
-  pickupId: "PKP-2031",
-  weight: "248 kg",
-  nickel: "54 kg",
-  cobalt: "21 kg",
-  lithium: "29 kg",
-  dateCertified: "31 May 2026",
-  publicToken: "CERT-2031-NMC",
-}
+  if (!current) {
+    redirect("/login")
+  }
 
-export default function CertificatePage() {
-  const cert = mockCertificate // replace with Prisma query by params.id later
+  const vendorId = current.user.id
+
+  const cert = await prisma.certificate.findFirst({
+    where: {
+      pickupId: params.id,
+      vendorId,
+    },
+  })
+
+  if (!cert) {
+    notFound()
+  }
+
+  const summary = cert.materialSummary as Array<{ material: string; recovered_kg: number }>
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -29,40 +40,35 @@ export default function CertificatePage() {
           <div className="text-[9px] tracking-widest uppercase opacity-80">Recycling</div>
         </div>
 
-        <div className="p-3.5">
-          <div className="flex flex-col">
-            <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
-              <span className="text-[#6B6F6B]">Battery ID</span>
-              <span className="font-bold font-mono">{cert.pickupId}</span>
+        <div className="p-3.5 flex flex-col gap-0">
+          <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
+            <span className="text-[#6B6F6B]">Battery ID</span>
+            <span className="font-bold font-mono">{cert.pickupId}</span>
+          </div>
+          <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
+            <span className="text-[#6B6F6B]">Weight processed</span>
+            <span className="font-bold font-mono">{cert.totalWeightKg.toString()} kg</span>
+          </div>
+
+          {summary.map((m) => (
+            <div key={m.material} className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
+              <span className="text-[#6B6F6B]">{m.material} recovered</span>
+              <span className="font-bold font-mono">{m.recovered_kg} kg</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
-              <span className="text-[#6B6F6B]">Weight processed</span>
-              <span className="font-bold font-mono">{cert.weight}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
-              <span className="text-[#6B6F6B]">Nickel recovered</span>
-              <span className="font-bold font-mono">{cert.nickel}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
-              <span className="text-[#6B6F6B]">Cobalt recovered</span>
-              <span className="font-bold font-mono">{cert.cobalt}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
-              <span className="text-[#6B6F6B]">Lithium recovered</span>
-              <span className="font-bold font-mono">{cert.lithium}</span>
-            </div>
-            <div className="flex justify-between py-1.5 text-[11.5px]">
-              <span className="text-[#6B6F6B]">Date certified</span>
-              <span className="font-bold font-mono">{cert.dateCertified}</span>
-            </div>
+          ))}
+
+          <div className="flex justify-between py-1.5 text-[11.5px]">
+            <span className="text-[#6B6F6B]">Date certified</span>
+            <span className="font-bold font-mono">
+              {cert.certifiedAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+            </span>
           </div>
 
           <div className="flex items-center gap-3 pt-3">
             <div
               className="w-16 h-16 rounded-lg border-[3px] border-[#0a0a0a] flex-shrink-0"
               style={{
-                background:
-                  "conic-gradient(from 0deg,#0a0a0a 25%,#fff 0 50%,#0a0a0a 0 75%,#fff 0)",
+                background: "conic-gradient(from 0deg,#0a0a0a 25%,#fff 0 50%,#0a0a0a 0 75%,#fff 0)",
                 backgroundSize: "16px 16px",
               }}
             />
@@ -75,12 +81,8 @@ export default function CertificatePage() {
         </div>
       </Card>
 
-      <Button variant="primary" fullWidth>
-        Download PDF
-      </Button>
-      <Button variant="secondary" fullWidth>
-        View compliance log
-      </Button>
+      <Button variant="primary" fullWidth>Download PDF</Button>
+      <Button variant="secondary" fullWidth>View compliance log</Button>
     </div>
   )
 }
