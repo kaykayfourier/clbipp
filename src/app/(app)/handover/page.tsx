@@ -139,16 +139,17 @@ export default async function HandoverPage({ searchParams }: PageProps) {
           </p>
         </Card>
 
-        {/* Navigation */}
+        {/* Navigation — track the pickup is the primary next step (wireframe:
+            handover → track-progress). */}
         <div className="flex flex-col gap-3 pt-1">
-          <Link href="/dashboard" className="block">
+          <Link href={`/track/${id}`} className="block">
             <Button variant="primary" fullWidth>
-              Back to Home
+              Track pickup
             </Button>
           </Link>
-          <Link href="/compliance" className="block">
+          <Link href="/dashboard" className="block">
             <Button variant="ghost" fullWidth>
-              View Compliance Log
+              Back to Home
             </Button>
           </Link>
         </div>

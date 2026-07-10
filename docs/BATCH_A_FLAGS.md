@@ -5,16 +5,37 @@
 > the plan of record is `~/.claude/plans/cheerful-hugging-unicorn.md` +
 > `docs/REMEDIATION_PLAN.md`. Last updated: 2026-07-10, after Phase 1.
 
-## Needs testing later (can't verify now)
+## Needs testing later (can't verify now — all blocked on B's seed)
 
 - **[T1] Offer screens render untested.** `/offer` + `/offer-breakdown` now read
   the real Offer, but a pickup with no Offer row correctly redirects to
   `/scheduled` (guard 4). So the actual price/pathway/rationale/kg-breakdown
-  render **cannot be seen** until B seeds an Offer against **PKP-3099 owned by the
-  real auth user** (`business@test`). His current seed attaches the offer to the
+  render **cannot be seen** until B seeds offers against pickups owned by the
+  **real auth user** (`business@test`). His current seed attaches the offer to the
   wrong pickup/vendor (see B-2). **Why barred:** the offer is a sub-state of
   `scheduled` — a `requested` pickup with no offer shouldn't be able to view one.
-  Re-test once B fixes the seed.
+  Re-test once B fixes + expands the seed.
+
+- **[T2] Phase 2 accept/cancel untested (policies.sql applied, seed pending).**
+  The RLS drop has been applied in Supabase. These steps still need running once
+  B seeds an offer:
+  1. **Accept** an offer → pickup goes `collected`, a `collected` row appears in
+     the `status_events` table, the tracking realtime ping fires, lands on
+     `/track/[id]`.
+  2. **Cancel** a `requested`/`scheduled` pickup → status `cancelled`, a
+     `cancelled` `status_events` row is written, lands on the cancelled tracking
+     view.
+  3. **Security:** a direct `pickups` UPDATE from a vendor session (as
+     `authenticated`) is denied by RLS (H2 closed).
+  4. **"View Offer"** button on `/scheduled` shows only when an offer exists.
+
+- **[T3] Phase 3 seam untested (blocked on B).** Code is in; these need data:
+  1. **handover → `/track/[id]`** primary CTA — only reachable *after* accepting
+     an offer, so blocked on B's seeded offer ([B-seed]).
+  2. **`/track` "View offer" CTA** (requested/scheduled bucket) — shows only when
+     an Offer row exists → blocked on [B-seed].
+  3. **Certified "View certificate"** button links `/certificates/[id]` — works
+     once B ships cert-by-id ([B-cert]) + seeds a certified pickup with a cert.
 
 ## Needs a decision
 
@@ -24,20 +45,41 @@
   add"). **Pending intern-head sign-off** — remove the "Recoverable materials"
   card in `offer-breakdown/page.tsx` if rejected.
 
-## Handover to B (not Batch A — don't edit B's files)
+## Handover to B — updated task list (hand this to B)
 
-- **[B-route] Dashboard row routing.** Recommend `requested` rows link to
-  `/scheduled?id=` (not `/track/`): the scheduled screen already shows a timeline
-  + is the natural place to wait for agent assignment and later view the offer.
-  `dashboard/page.tsx` is B's file.
-- **[B-req] Request-pickup button** on the dashboard still doesn't navigate —
-  B's file (`dashboard/page.tsx`).
-- **[B-seed] Seed an Offer (+ materialBreakdown) on PKP-3099** owned by the real
-  auth user — unblocks [T1]. B does **not** need any of A's Phase 1 changes to do
-  this; the Offer table/schema is unchanged (A only added read-side display
-  helpers in `lib/offer.ts`).
-- **[B-cert] Certificate page** read-by-id + `await params` — unblocks A's
-  certified "View certificate" button (Phase 3 seam).
+> These are B's files — A won't edit them. Ordered by how much they unblock A's
+> testing. Some restate items from `REVIEW_findings_2026-07-10.md`; the seed one
+> is expanded per a 2026-07-10 decision.
+
+1. **[B-seed] Fix + EXPAND the seed — highest priority (unblocks [T1] and [T2]).**
+   - Seed for the **real auth user** `business@test` (`efc87c57-…`), not
+     `kaykay@fourier`, and keep one pickup's IDs self-consistent (the current
+     function mixes PKP-6099 / PKP-3099 across pickup, statusEvents, offer, cert —
+     see review B-2).
+   - Seed **multiple offers** — several `scheduled` pickups for the real user,
+     each with its own Offer carrying a **distinct** `pathway`, `estimatedPrice`
+     (in **paise** — e.g. 18450000 = ₹1,84,500), `rationale`, and a
+     `materialBreakdown` (with `weight_kg` per material). A needs more than one so
+     the offer / offer-breakdown screens can be verified to change per pickup, not
+     just render one hardcoded case.
+   - Also seed a `certified` pickup **with** a Certificate row for the real user,
+     so A's certified tracking + "View certificate" + profile stats have data.
+2. **[B-route] Dashboard row routing by status.** `requested` rows → `/scheduled?id=`
+   (that screen shows the timeline, waits for agent assignment, and surfaces the
+   offer once it exists); all other statuses → `/track/[id]`. `dashboard/page.tsx`.
+3. **[B-req] Request-pickup button** on the dashboard must navigate to
+   `/request-pickup` (currently dead). Use a `<Link>`. `dashboard/page.tsx`.
+4. **[B-cert] Certificate page** read-by-pickup-ID (currently hardcoded PKP-2031)
+   + `await params` (Next 16 makes `params` a Promise — see review B-4). Unblocks
+   A's certified "View certificate" seam.
+5. **[B-compliance] Compliance link** `/certificate/${id}` → `/certificates/${id}`
+   (singular route 404s — review B-3), and the malformed `text-[#0E120E"` class
+   (review B-5).
+
+> Contract note for B: none of A's Phase 1/2 changes touch the Offer/Pickup
+> table or schema. A only added read-side display helpers (`lib/offer.ts`) and
+> service-role transition actions. B seeds via Prisma exactly as before — the two
+> lanes are decoupled through the unchanged schema.
 
 ## Parked-app boundary (out of scope this sprint)
 

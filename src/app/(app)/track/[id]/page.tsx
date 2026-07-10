@@ -166,6 +166,12 @@ export default async function TrackPage({
           <Banner variant="info">
             Your pickup is confirmed. We&apos;ll be in touch to arrange collection.
           </Banner>
+          {/* Only once the agent has priced the batteries (an Offer row exists) */}
+          {pickup.offer && (
+            <Link href={`/offer?id=${pickup.id}`} className="block">
+              <Button fullWidth>View offer</Button>
+            </Link>
+          )}
         </PagePadding>
       </AppShell>
     )
