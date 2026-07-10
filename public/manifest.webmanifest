@@ -1,0 +1,15 @@
+{
+  "name": "Back2Basics — Battery Recovery",
+  "short_name": "Back2Basics",
+  "description": "Vendor battery recovery & EPR compliance.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F8F5EE",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any maskable" },
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" }
+  ]
+}

@@ -81,6 +81,26 @@
 > service-role transition actions. B seeds via Prisma exactly as before — the two
 > lanes are decoupled through the unchanged schema.
 
+## Phase 4 — PWA DONE (code), deploy pending
+
+- **[PWA] ✅ Installable PWA** — `public/manifest.webmanifest`, generated PNG
+  icons (192/512 + apple-touch) from `public/icon.svg`, a hand-rolled
+  `public/sw.js` (network-first navigation + `/offline.html` fallback), and
+  `ServiceWorkerRegister` (production-only) wired in the root layout. Real
+  metadata replaces the "Create Next App" default.
+- **[PWA-offline] Future upgrade — swap in Workbox (`@ducanh2912/next-pwa`) IF:**
+  the demo needs to *navigate the app fully offline* (visited pages surviving
+  offline, not just a shell + fallback page), or richer runtime caching is
+  wanted. Deliberately NOT done now: it hooks the webpack build while this
+  project runs Turbopack (real build-breakage risk). Chose the hand-rolled SW —
+  installability is identical; only deep offline differs. Revisit only if that
+  situation arises.
+- **[PWA-deploy] ⏳ Deploy step:** add `SUPABASE_SERVICE_ROLE_KEY` (+ the other
+  env: `NEXT_PUBLIC_SUPABASE_URL`, `ANON_KEY`, `DATABASE_URL`, `DIRECT_URL`) to
+  the Vercel project env before/at deploy — the SW + service-role actions need
+  it. SW only registers in production, so install/offline is testable only on the
+  deployed build (or `npm run build && npm start` locally), not `npm run dev`.
+
 ## Parked-app boundary (out of scope this sprint)
 
 - **[P1] `requested → scheduled` transition + offer creation depend on the field
