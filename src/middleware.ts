@@ -41,9 +41,10 @@ export async function middleware(request: NextRequest) {
     return redirectTo(request, '/login', supabaseResponse)
   }
 
-  // Authenticated users shouldn't sit on the login/signup screens.
+  // Authenticated users shouldn't sit on the login/signup screens — send them to
+  // the dashboard (the app home), consistent with the root "/" redirect.
   if (user && (pathname === '/login' || pathname === '/signup')) {
-    return redirectTo(request, '/profile', supabaseResponse)
+    return redirectTo(request, '/dashboard', supabaseResponse)
   }
 
   return supabaseResponse

@@ -129,6 +129,22 @@
   `grants.sql` does NOT need re-running. Also add `SUPABASE_SERVICE_ROLE_KEY` to
   Vercel env before the Phase 4 deploy.
 
+## Post-deploy polish (done)
+
+- **[Perf-region] ✅** `vercel.json` pins functions to `syd1` — colocated with
+  Supabase (`ap-southeast-2` Sydney). Was defaulting to US East → cross-Pacific
+  round-trips per query. Biggest actual-latency fix.
+- **[Perf-loading] ✅** Added `loading.tsx` skeletons to the authed screens
+  (tab destinations + flow) via shared `screen-skeletons.tsx` — instant feedback
+  on navigation (perceived speed).
+- **[Perf-tabbar] ✅** Bottom tab bar now has `active:` press feedback.
+- **[Route-home] ✅** `/` (create-next-app boilerplate) now redirects to
+  `/dashboard`; middleware login/signup redirect also → `/dashboard` (was
+  `/profile`). Fixes the PWA relaunch landing on boilerplate.
+- **[Perf-auth] Deferred:** `auth.getUser()` runs twice per navigation
+  (middleware + page). Reducible but auth-sensitive; now cheap post-region-fix,
+  so only revisit if navigation still feels slow.
+
 ## Cosmetic / low priority
 
 - **[C1] tsconfig `baseUrl` deprecation.** Editor shows a red squiggle (its newer

@@ -164,7 +164,10 @@ function BottomTabBar({ className }: BottomTabBarProps) {
             href={tab.href}
             className={cn(
               "flex flex-1 flex-col items-center justify-center gap-1 py-3",
-              "transition-colors duration-100",
+              "transition-[color,background-color,transform] duration-100 ease-out",
+              // Tactile press feedback so taps feel acknowledged immediately,
+              // before the destination finishes rendering.
+              "active:bg-primary-black/[0.06] active:scale-[0.94]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-green",
               isActive ? "text-text-primary" : "text-text-disabled"
             )}
