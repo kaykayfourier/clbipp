@@ -25,3 +25,26 @@ const PATHWAY_LABELS: Record<RecoveryPathway, string> = {
 export function pathwayLabel(pathway: string): string {
   return PATHWAY_LABELS[pathway as RecoveryPathway] ?? pathway;
 }
+
+// One recovered material, WEIGHT ONLY. `Offer.materialBreakdown` also carries a
+// `value_paise` per line — deliberately dropped here: the locked rule forbids
+// rendering material/deduction ₹ to the vendor. Weight (kg) is allowed.
+export interface MaterialWeight {
+  material: string;
+  weightKg: number;
+}
+
+// Defensively parse the untyped materialBreakdown JSON into weight-only rows.
+// Anything malformed is skipped rather than crashing the offer screen.
+export function parseMaterialWeights(raw: unknown): MaterialWeight[] {
+  if (!Array.isArray(raw)) return [];
+  const rows: MaterialWeight[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const { material, weight_kg } = item as Record<string, unknown>;
+    if (typeof material === "string" && typeof weight_kg === "number") {
+      rows.push({ material, weightKg: weight_kg });
+    }
+  }
+  return rows;
+}

@@ -44,6 +44,18 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
     );
   }
 
+  // The offer is a sub-state of scheduled: it only exists once the field agent
+  // has assessed and priced the batteries. Until then there's nothing to view,
+  // so the "View Offer" CTA stays hidden (agent assignment / offer creation are
+  // parked field-agent work — B seeds/simulates them).
+  const { data: offer } = await supabase
+    .from("offers")
+    .select("pickup_id")
+    .eq("pickup_id", id)
+    .maybeSingle();
+
+  const hasOffer = Boolean(offer);
+
   const currentStage =
     pickup.status === "requested" || pickup.status === "scheduled"
       ? (pickup.status as "requested" | "scheduled")
@@ -143,12 +155,14 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
 
         {/* Actions */}
         <div className="flex flex-col gap-3 pt-1">
-          {/* Offer screen shortcut (demo flow) */}
-          <Link href={`/offer?id=${pickup.id}`} className="block">
-            <Button variant="primary" fullWidth>
-              View Offer
-            </Button>
-          </Link>
+          {/* Only surfaced once the agent has priced the batteries (offer exists) */}
+          {hasOffer && (
+            <Link href={`/offer?id=${pickup.id}`} className="block">
+              <Button variant="primary" fullWidth>
+                View Offer
+              </Button>
+            </Link>
+          )}
 
           <PickupActions pickupId={pickup.id} />
         </div>

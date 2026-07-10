@@ -5,7 +5,7 @@ import { AppShell, PagePadding, SectionLabel } from "@/components/layout/app-she
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { pathwayLabel, formatOfferPrice } from "@/lib/offer";
+import { pathwayLabel, formatOfferPrice, parseMaterialWeights } from "@/lib/offer";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 // Reads the same real Offer as /offer (RLS-scoped, same guard sequence).
@@ -40,13 +40,15 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
 
   const { data: offer } = await supabase
     .from("offers")
-    .select("pathway, estimated_price, rationale")
+    .select("pathway, estimated_price, rationale, material_breakdown")
     .eq("pickup_id", id)
     .single();
 
   if (!offer) redirect(`/scheduled?id=${id}`);
 
   const pathway = pathwayLabel(offer.pathway);
+  // Weight-only — parseMaterialWeights strips the forbidden per-line ₹ values.
+  const materials = parseMaterialWeights(offer.material_breakdown);
 
   return (
     <AppShell
@@ -76,6 +78,29 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
             {offer.rationale}
           </p>
         </Card>
+
+        {/* Recoverable materials — WEIGHT ONLY (no ₹ per locked rule).
+            Pending intern-head sign-off; see docs/BATCH_A_FLAGS.md. */}
+        {materials.length > 0 && (
+          <Card variant="default" className="flex flex-col gap-0">
+            <div className="pb-3">
+              <SectionLabel>Recoverable materials</SectionLabel>
+            </div>
+            {materials.map((m, i) => (
+              <div
+                key={m.material}
+                className={`flex items-center justify-between py-2.5 ${
+                  i > 0 ? "border-t border-border" : ""
+                }`}
+              >
+                <span className="text-sm text-text-secondary">{m.material}</span>
+                <span className="text-sm font-medium text-text-primary">
+                  {m.weightKg.toLocaleString("en-IN")} kg
+                </span>
+              </div>
+            ))}
+          </Card>
+        )}
 
         {/* Explanation */}
         <Card variant="outline">
