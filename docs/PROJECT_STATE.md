@@ -5,7 +5,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-07 (Task 5 done — A's Phase 2 lane complete; A moving into Phase 3 hardening H1/H2)
+**Last updated:** 2026-07-10 (Phase 3 netting-up: full test pass done, remediation plan agreed, seam+crash-fixes+PWA/deploy consolidated onto A — see below)
 **Current sprint:** Vendor / Client web app (PWA) — 2 week build
 **Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
 
@@ -29,6 +29,67 @@ Phase 1 is complete. Phase 2 is in progress. As of 2026-07-07:
 
 All of A's work through Task 4 is on `origin/main` (merged 2026-07-06). C's PR #10
 is merged and pulled locally.
+
+---
+
+## Phase 3 netting-up — remediation (2026-07-10)
+
+A full manual + automated test pass exposed that the app is two half-connected
+pickup stacks (C's query-param flow + A's state-driven `/track`) with no guards.
+Symptoms: dead dashboard "Request" button, `/scheduled` crash, static `mockOffer`
+shown for any id with no persistence/guards, cancelled-pickup dashboard crash,
+cert 404s, red `npm run build`. B's blocker-removal commit fixed the P0
+`pickups.updated_at` default (real migration on `main` ✅) but introduced these.
+
+- **Findings:** `docs/REVIEW_findings_2026-07-10.md` (what's broken, by owner).
+- **Plan:** `docs/REMEDIATION_PLAN.md` (batched fixes, by owner).
+- **Model decided:** status-routed navigation, both screen sets kept; offer is a
+  sub-state of `scheduled` (an Offer row exists); `/offer|offer-breakdown|handover`
+  are mid-flow only + guarded.
+- **Lane shift (logged in `LANE_OWNERSHIP.md` 2026-07-10):** the seam +
+  flow/component crash-fixes + PWA/deploy consolidated onto **A**. B keeps his
+  data batch; C does isolated visual polish.
+
+### A's resume plan — "Batch A" (start here in a fresh chat)
+Full execution detail: plan file `~/.claude/plans/cheerful-hugging-unicorn.md`.
+Phased so we stop where the day runs out:
+
+- **Phase 0 — crash-fixes / build green (no deps, do first):** remove `cancelled`
+  from ordered `LIFECYCLE_STAGES` (`tokens.ts`); add `cancelled` to badge
+  `STATUS_CONFIG` + `PickupStatus = LifecycleStage | "cancelled"`; fix `/scheduled`
+  server-side `onClick` crash (extract client `PickupActions`); fix
+  `design-system/page.tsx` broken imports.
+- **Phase 1 — real offer + guards:** `/offer` + `/offer-breakdown` read the real
+  Offer (retire `mockOffer`), vendor-scoped, gated by status (redirect if
+  missing/foreign/ahead). `/offer-breakdown` = price + qualitative rationale only
+  (no ₹ line items — locked rule; schema has no per-line price fields anyway).
+- **Phase 2 — persist accept + close RLS hole (H1/H2):** new
+  `src/lib/supabase/admin.ts` service-role client; rewrite `acceptOffer` (+ add
+  `cancelPickup`) to write via service role; drop the broad vendor UPDATE policy
+  in `policies.sql`. **GATED on the service-role key prereq below.**
+- **Phase 3 — seam:** `handover → /track/${id}`; `/track` shows "View offer" CTA
+  when an Offer exists; certified "View certificate" works once B ships cert-by-id.
+- **Phase 4 — PWA + deploy (last):** manifest + SW + install; Vercel env; needs
+  build green first.
+
+**Prerequisites A cannot self-serve (A↔B, do before Phase 2):**
+1. Add `SUPABASE_SERVICE_ROLE_KEY` to `.env.local` (+ Vercel) — absent today.
+2. Apply the `policies.sql` RLS change in the Supabase SQL editor.
+3. Confirm `Offer.estimatedPrice` unit with B (seed `18450000` implies paise →
+   display `/100`).
+
+**Deferred:** P5 signup input validation (not a demo blocker). **Parked-app
+boundary:** vendor can't create offers or advance collected→certified — B
+seeds/simulates those.
+
+### Other lanes' batches (handover)
+- **B (Khalid):** seed fix (one consistent pickup for real user `business@test`:
+  a `scheduled` pickup + real Offer w/ materialBreakdown, and a `certified` pickup
+  + Certificate); cert page read-by-id + `await params`; compliance link
+  `/certificate`→`/certificates`; dashboard request-button `<Link>` + row `href`
+  by status. Self-contained. Detail in `REMEDIATION_PLAN.md` "Batch B".
+- **C (Mohammed):** visual polish on his own flow screens, after A's crash-fixes
+  land. Off critical path.
 
 ---
 

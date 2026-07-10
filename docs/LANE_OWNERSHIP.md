@@ -31,6 +31,32 @@ reality doesn't match the original split — not free-for-all editing.
 
 ## Change log
 
+### 2026-07-10 — Netting-up: seam + flow/component crash-fixes + PWA/deploy → A
+- **Moved to A (Aamir):** the cross-lane navigation seam (dashboard↔flow↔track
+  routing), the flow-screen + component-library crash-fixes (`badge.tsx`,
+  `timeline.tsx`, `tokens.ts`, `scheduled/`, `offer/`, `offer-breakdown/`,
+  `handover/` incl. `handover/actions.ts`, `design-system/page.tsx`), and
+  **PWA + deploy**.
+- **Why:** manual testing showed the app was two half-connected pickup stacks
+  (C's query-param flow + A's state-driven `/track`) with no guards. The
+  connecting work spans all three lanes and needs whole-repo visibility;
+  screen-by-screen edits without it kept re-introducing seam bugs. PWA/deploy is
+  repo-wide config, a poor fit for anyone without full-repo sight. A is on Claude
+  Code (whole-repo view).
+- **B (Khalid) keeps:** all data/schema + his own screens — seed fix, cert-by-id,
+  compliance link, dashboard wiring (row routing + request-button link, done to
+  A's spec in `REMEDIATION_PLAN.md`). Unchanged lane otherwise.
+- **C (Mohammed) keeps:** component-library ownership generally; scoped this
+  round to **visual polish on his own flow screens** (no wiring/DB), done after
+  A's crash-fixes land. A's crash-fixes to C's component files are flagged here.
+- **A also owns (own lane):** `supabase/policies.sql` RLS tightening (H2) +
+  service-role client (`src/lib/supabase/admin.ts`) + the `acceptOffer`/
+  `cancelPickup` service-role rewrite (H1).
+- **One hard interaction (A↔B only):** B seeds the Offer that A's offer screen
+  reads; A+B share the `service_role` key + applying the RLS change on the DB.
+- **Agreed by:** flagged in GC 2026-07-10; plan in `docs/REMEDIATION_PLAN.md`,
+  findings in `docs/REVIEW_findings_2026-07-10.md`.
+
 ### 2026-07-05 — `(app)/layout.tsx` tab-bar wiring: C → A
 - **Moved to A (was implicitly C):** wiring `BottomTabBar` into
   `src/app/(app)/layout.tsx` so all authenticated screens get shared nav.
