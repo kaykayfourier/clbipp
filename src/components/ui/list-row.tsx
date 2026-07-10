@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./badge";
-import type { LifecycleStage } from "@/lib/tokens";
+import type { PickupStatus } from "./badge";
 
 // ─── ListRow ────────────────────────────────────────────────────────────────
 // The repeating pickup row seen in Dashboard (active) and Compliance log.
@@ -54,7 +54,7 @@ export interface ListRowProps extends React.ButtonHTMLAttributes<HTMLButtonEleme
   id: string;
   /** e.g. "Li-ion NMC · 24 units" */
   subtitle: string;
-  status: LifecycleStage;
+  status: PickupStatus;
   /** Whether to show the animated pulse on the status badge */
   pulseBadge?: boolean;
   /** Suppress chevron (e.g. non-interactive rows) */

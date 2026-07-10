@@ -159,7 +159,11 @@ export const zIndex = {
   tooltip: 50,
 } as const;
 
-// Lifecycle stage order — used by Timeline + status logic everywhere
+// Lifecycle stage order — used by Timeline + status logic everywhere.
+// This is the *ordered, linear* progression only. `cancelled` is a terminal
+// side-state that is NOT part of this array (it would render a phantom timeline
+// row and break the Record<LifecycleStage,…> maps). For a value that may also be
+// cancelled, use `PickupStatus` from components/ui/badge.
 export const LIFECYCLE_STAGES = [
   "requested",
   "scheduled",
@@ -168,7 +172,6 @@ export const LIFECYCLE_STAGES = [
   "processed",
   "recovered",
   "certified",
-  "cancelled",
 ] as const;
 
 export type LifecycleStage = (typeof LIFECYCLE_STAGES)[number];

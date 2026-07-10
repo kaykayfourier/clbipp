@@ -9,8 +9,13 @@ import type { LifecycleStage } from "@/lib/tokens";
 // is the right place for these since they are applied via style={} (dynamic),
 // not as static Tailwind classes.
 
+// A pickup's status is the linear lifecycle PLUS the terminal `cancelled`
+// side-state. Anything that renders a status (StatusBadge, ListRow) accepts
+// this wider union; the ordered LIFECYCLE_STAGES array stays cancelled-free.
+export type PickupStatus = LifecycleStage | "cancelled";
+
 const STATUS_CONFIG: Record<
-  LifecycleStage,
+  PickupStatus,
   { dot: string; bg: string; text: string; label: string }
 > = {
   requested: {
@@ -55,10 +60,16 @@ const STATUS_CONFIG: Record<
     text: colors.successText,
     label: "CERTIFIED",
   },
+  cancelled: {
+    dot: colors.textDisabled,
+    bg: colors.background,
+    text: colors.textSecondary,
+    label: "CANCELLED",
+  },
 };
 
 export interface StatusBadgeProps {
-  status: LifecycleStage;
+  status: PickupStatus;
   /** Pulse animation on the dot — use for "live / active" states */
   pulse?: boolean;
   className?: string;

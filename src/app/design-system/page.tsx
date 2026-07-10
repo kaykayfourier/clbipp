@@ -7,7 +7,9 @@
 
 import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
-import { Input, Select, Textarea, Field } from "@/components/ui/input";
+// NOTE: Input/Select/Textarea/Field were never built — ui/input.tsx is a
+// mislabeled copy of Card. The Inputs showcase section is omitted until real
+// form primitives exist. (Removing this unblocks `npm run build`.)
 import {
   Card,
   CardHeader,
@@ -168,54 +170,6 @@ export default function DesignSystemPage() {
             <Button disabled>Disabled</Button>
           </Row>
           <Button fullWidth>Request a pickup</Button>
-        </Section>
-
-        {/* ── 4. Inputs ──────────────────────────────────────────────── */}
-        <Section
-          title="Field / Input"
-          description="Field wraps Input, Select, or Textarea with label + hint + error."
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Company name" htmlFor="ds-company" required>
-              <Input
-                id="ds-company"
-                placeholder="Altigreen Propulsion"
-              />
-            </Field>
-
-            <Field
-              label="Battery type"
-              htmlFor="ds-battery"
-              hint="Select the primary chemistry"
-            >
-              <Select id="ds-battery">
-                <option value="">Select type</option>
-                <option>Li-ion NMC</option>
-                <option>LFP</option>
-                <option>NiMH</option>
-              </Select>
-            </Field>
-
-            <Field
-              label="EPR / Producer registration ID"
-              htmlFor="ds-epr"
-              error="This field is required"
-            >
-              <Input
-                id="ds-epr"
-                placeholder="EPR-PRO-XXXXXX"
-                error
-              />
-            </Field>
-
-            <Field
-              label="Notes (optional)"
-              htmlFor="ds-notes"
-              hint="Access details, contact on site…"
-            >
-              <Textarea id="ds-notes" rows={3} placeholder="Access via gate B…" />
-            </Field>
-          </div>
         </Section>
 
         {/* ── 5. Cards ───────────────────────────────────────────────── */}

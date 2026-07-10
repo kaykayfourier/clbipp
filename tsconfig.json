@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2017",
     "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": [

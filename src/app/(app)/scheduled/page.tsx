@@ -8,6 +8,7 @@ import { Timeline } from "@/components/ui/timeline";
 import { StatusBadge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { ErrorState } from "@/components/states/error-state";
+import { PickupActions } from "./PickupActions";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -149,27 +150,7 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
             </Button>
           </Link>
 
-          <Button
-            variant="secondary"
-            fullWidth
-            onClick={() => {
-              // TODO: wire to reschedule flow (Phase 3)
-              console.log("Reschedule:", pickup.id);
-            }}
-          >
-            Reschedule
-          </Button>
-
-          <Button
-            variant="destructive"
-            fullWidth
-            onClick={() => {
-              // TODO: wire to cancel flow with confirmation modal (Phase 3)
-              console.log("Cancel:", pickup.id);
-            }}
-          >
-            Cancel request
-          </Button>
+          <PickupActions pickupId={pickup.id} />
         </div>
 
       </PagePadding>
