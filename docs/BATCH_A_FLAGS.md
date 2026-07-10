@@ -100,6 +100,11 @@
   the Vercel project env before/at deploy — the SW + service-role actions need
   it. SW only registers in production, so install/offline is testable only on the
   deployed build (or `npm run build && npm start` locally), not `npm run dev`.
+  - **Repo-ownership workaround:** the GitHub repo is B's, but deployment is A's
+    task (lane-shifted from C). Vercel deploys a Vercel *account*, not a repo
+    owner — so A can `npx vercel` to push the local folder to A's own Vercel
+    account and get an installable HTTPS URL without owning the repo or wiring
+    GitHub. (Dashboard import also works if A is a repo collaborator.)
 
 ## Parked-app boundary (out of scope this sprint)
 
