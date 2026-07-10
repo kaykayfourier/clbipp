@@ -67,13 +67,18 @@ for insert
 to authenticated
 with check ((select auth.uid()) = vendor_id);
 
+-- NOTE: vendors intentionally have NO direct UPDATE policy on pickups. All
+-- lifecycle transitions (accept → collected, cancel → cancelled, and later the
+-- agent/admin advances) go through service-role server actions, which bypass
+-- RLS. With no permissive UPDATE policy, RLS denies any direct pickup update
+-- from a vendor session — so a vendor can't self-advance their own status
+-- (e.g. jump to certified) by calling the API directly. The UI is not the
+-- security boundary; RLS is.
+--
+-- The bare drop below (no matching create) removes the policy if an earlier
+-- version of this file created it, so re-running this file is what closes the
+-- hole. INSERT (request-pickup) and SELECT stay in place.
 drop policy if exists "Vendors can update their own pickups" on pickups;
-create policy "Vendors can update their own pickups"
-on pickups
-for update
-to authenticated
-using ((select auth.uid()) = vendor_id)
-with check ((select auth.uid()) = vendor_id);
 
 -- ---------------------------------------------------------------------------
 -- offers — read-only to the vendor; offers are written by the field-agent side.

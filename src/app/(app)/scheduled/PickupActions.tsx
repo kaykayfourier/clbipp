@@ -1,17 +1,37 @@
 "use client";
 
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { cancelPickup } from "../handover/actions";
 
 // Reschedule / Cancel actions for the scheduled screen.
 //
 // These were previously inline `onClick` handlers on the server-rendered page,
-// which crashed: a server component cannot pass an event handler to a client
-// component. Moving them into this "use client" island fixes that.
+// which crashed (a server component can't pass an event handler to a client
+// component). This "use client" island fixes that.
 //
-// Reschedule is disabled ("coming soon") — no reschedule flow exists yet.
-// Cancel is wired to the `cancelPickup` service-role server action in Phase 2;
-// for now it's a no-op placeholder so the screen renders without crashing.
+// Reschedule is disabled ("coming soon") — no reschedule flow exists this sprint.
+// Cancel calls the `cancelPickup` service-role server action (owner-checked,
+// pre-collection only), then routes to the cancelled tracking view.
 export function PickupActions({ pickupId }: { pickupId: string }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleCancel() {
+    if (!window.confirm("Cancel this pickup request? This can't be undone.")) return;
+    setError(null);
+    startTransition(async () => {
+      const { error } = await cancelPickup(pickupId);
+      if (error) {
+        setError(error);
+        return;
+      }
+      router.push(`/track/${pickupId}`);
+    });
+  }
+
   return (
     <>
       <Button
@@ -26,13 +46,15 @@ export function PickupActions({ pickupId }: { pickupId: string }) {
       <Button
         variant="destructive"
         fullWidth
-        onClick={() => {
-          // TODO(Phase 2): call cancelPickup(pickupId) server action + confirm modal
-          console.log("Cancel:", pickupId);
-        }}
+        loading={isPending}
+        onClick={handleCancel}
       >
         Cancel request
       </Button>
+
+      {error && (
+        <p className="text-sm text-error-text text-center">{error}</p>
+      )}
     </>
   );
 }

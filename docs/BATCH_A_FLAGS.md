@@ -49,12 +49,18 @@
 - **[P2] Reschedule** — no flow this sprint; button is disabled ("coming soon").
 - **[P3] Public realtime on `/t/[token]`** — deferred (pre-existing).
 
-## Wired in a later Batch A phase
+## Phase 2 — DONE (code), needs manual SQL apply
 
-- **[Ph2-cancel] Cancel request** button on `/scheduled` is a no-op placeholder
-  until Phase 2 wires it to the `cancelPickup` service-role action.
-- **[Ph2-accept] Accept offer** doesn't yet persist the `status_events` row
-  (RLS-dropped) — Phase 2 fixes via the service-role `acceptOffer`.
+- **[Ph2-cancel] ✅ Cancel request** now calls the `cancelPickup` service-role
+  action (owner-checked, pre-collection only) → routes to `/track/[id]`.
+- **[Ph2-accept] ✅ Accept offer** now persists via the service-role
+  `acceptOffer` — writes the `status_events` row (restores audit + realtime
+  ping) instead of the RLS-dropped vendor write.
+- **[Ph2-rls] ⏳ APPLY REQUIRED:** re-run the updated `supabase/policies.sql` in
+  the Supabase SQL editor to drop the broad "Vendors can update their own
+  pickups" UPDATE policy (closes H2 — vendor can no longer self-advance status).
+  `grants.sql` does NOT need re-running. Also add `SUPABASE_SERVICE_ROLE_KEY` to
+  Vercel env before the Phase 4 deploy.
 
 ## Cosmetic / low priority
 
