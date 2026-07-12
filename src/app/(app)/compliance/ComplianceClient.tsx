@@ -26,21 +26,19 @@ export default function ComplianceClient({
 
   const filtered = certificates.filter((cert) => {
     if (activeFilter === "All") return true
-    return cert.certifiedAt === activeFilter
+    // filter by year extracted from certifiedAt string
+    return cert.certifiedAt.includes(activeFilter)
   })
 
-  const totalWeight = filtered.reduce(
-    (sum, cert) => sum + cert.totalWeightKg,
-    0
-  )
+  const totalWeight = filtered.reduce((sum, cert) => sum + cert.totalWeightKg, 0)
 
   return (
     <div className="flex flex-col gap-4 p-4">
       <div>
-        <h1 className="font-serif text-2xl font-medium text-[#0E120E">
+        {/* fixed: closed bracket on color class */}
+        <h1 className="font-serif text-2xl font-medium text-[#0E120E]">
           Compliance log
         </h1>
-
         <p className="text-sm text-[#3B3F3B] mt-1">
           Every certificate in one place, ready for your CPCB return.
         </p>
@@ -64,13 +62,11 @@ export default function ComplianceClient({
 
       <div className="flex flex-col gap-2">
         {filtered.map((cert) => (
-          <Link
-            key={cert.id}
-            href={`/certificate/${cert.pickupId}`}
-          >
+          // fixed: plural /certificates
+          <Link key={cert.id} href={`/certificates/${cert.pickupId}`}>
             <ListRow
               id={cert.pickupId}
-              subtitle={`${cert.totalWeightKg} kg`}
+              subtitle={`${cert.totalWeightKg} kg · ${cert.certifiedAt}`}
               status="certified"
             />
           </Link>
@@ -79,13 +75,8 @@ export default function ComplianceClient({
 
       <Card variant="default">
         <CardContent className="flex justify-between items-center">
-          <span className="text-sm font-bold text-[#1F231F]">
-            Total certified
-          </span>
-
-          <span className="font-serif text-xl font-semibold">
-            {totalWeight} kg
-          </span>
+          <span className="text-sm font-bold text-[#1F231F]">Total certified</span>
+          <span className="font-serif text-xl font-semibold">{totalWeight} kg</span>
         </CardContent>
       </Card>
 

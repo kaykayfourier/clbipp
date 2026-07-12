@@ -3,25 +3,26 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { getCurrentProfile } from "@/lib/supabase/auth"
 import { redirect, notFound } from "next/navigation"
-export default async function CertificatePage({ params }: { params: { id: string } }) {
-  const current = await getCurrentProfile()
+import Link from "next/link"
 
-  if (!current) {
-    redirect("/login")
-  }
+// fixed: params is a Promise in Next 16
+export default async function CertificatePage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+
+  const current = await getCurrentProfile()
+  if (!current) redirect("/login")
 
   const vendorId = current.user.id
 
   const cert = await prisma.certificate.findFirst({
-    where: {
-      pickupId: params.id,
-      vendorId,
-    },
+    where: { pickupId: id, vendorId },
   })
 
-  if (!cert) {
-    notFound()
-  }
+  if (!cert) notFound()
 
   const summary = cert.materialSummary as Array<{ material: string; recovered_kg: number }>
 
@@ -40,7 +41,7 @@ export default async function CertificatePage({ params }: { params: { id: string
           <div className="text-[9px] tracking-widest uppercase opacity-80">Recycling</div>
         </div>
 
-        <div className="p-3.5 flex flex-col gap-0">
+        <div className="p-3.5 flex flex-col">
           <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
             <span className="text-[#6B6F6B]">Battery ID</span>
             <span className="font-bold font-mono">{cert.pickupId}</span>
@@ -60,7 +61,11 @@ export default async function CertificatePage({ params }: { params: { id: string
           <div className="flex justify-between py-1.5 text-[11.5px]">
             <span className="text-[#6B6F6B]">Date certified</span>
             <span className="font-bold font-mono">
-              {cert.certifiedAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+              {cert.certifiedAt.toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })}
             </span>
           </div>
 
@@ -82,7 +87,10 @@ export default async function CertificatePage({ params }: { params: { id: string
       </Card>
 
       <Button variant="primary" fullWidth>Download PDF</Button>
-      <Button variant="secondary" fullWidth>View compliance log</Button>
+      {/* fixed: plural /certificates */}
+      <Link href="/compliance">
+        <Button variant="secondary" fullWidth>View compliance log</Button>
+      </Link>
     </div>
   )
 }
