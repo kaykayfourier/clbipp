@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "reset-demo": "npx ts-node prisma/reset-demo.ts"
+
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
