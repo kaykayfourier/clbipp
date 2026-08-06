@@ -217,6 +217,12 @@ clbipp/
 
 ### 3B — The one schema migration (B)
 
+> **→ Full runbook: `docs/BATCH_0B_SCHEMA.md`.** That is B's working document —
+> paste-ready Prisma (already `prisma validate`-clean), migration-safety notes,
+> Storage buckets, the seed spec, PricingRate values, the A↔B contract, and a
+> checkbox runbook. **B should work from that file, not this section.** What
+> follows is the summary for everyone else.
+
 Designed to cover **all three apps at once** so no one is ever blocked on a
 migration again. New enums:
 
@@ -356,12 +362,14 @@ certificate PDF → dashboard impact. Nothing outside that path is P0.
 1. **Batch 0B lands before A3 (RLS) and A4 (booking) can finish.** Unavoidable —
    it is the schema. It is also the *only* unavoidable one, which is the whole
    point of doing one big migration.
-2. **A4 needs two things from B:** `estimateQuote(items, category)` (from B2) and
+2. **A4 needs two things from B:** `estimateQuote(items, rates)` (from B2) and
    the `createPickupWithItems(input)` server action that writes `Pickup` +
    `BatteryItem[]` in one transaction. **Both get stubbed** in
-   `packages/core/mock-data.ts` against the agreed shape, per the repo's existing
-   stub-data pattern, with `// TODO: swap for real <X> once B ships it`. A never
-   sits idle; the swap is a search-and-replace on imports.
+   `packages/core/src/mock-data.ts`, per the repo's existing stub-data pattern,
+   with `// TODO: swap for real <X> once B ships it`. A never sits idle; the swap
+   is a search-and-replace on imports.
+   **The exact signatures are pinned in `BATCH_0B_SCHEMA.md` §7** — both lanes
+   code against that, and whoever changes it says so the same day.
 
 Everything else is genuinely independent.
 
@@ -449,9 +457,13 @@ correctly — **if either app later needs a schema change, 0B was scoped wrong.*
 
 ## 10. First three moves
 
-1. **A** — branch `feat/turborepo`, execute §3A, do not stop until all five
+1. **A** — branch `feat/turborepo`, execute §3A, don't stop until all five
    definition-of-done checks pass.
-2. **B** — draft §3B in a scratch file *now*, making no repo edits; apply the
-   moment `feat/turborepo` merges.
-3. **B, immediately after** — B2 (pricing engine): a pure, unit-tested function
-   that unblocks A's booking quote step and depends on nothing.
+2. **B** — open **`docs/BATCH_0B_SCHEMA.md`** and work the runbook in §8. The
+   schema is written and validated; nothing needs designing. If `feat/turborepo`
+   hasn't merged yet, everything up to running the migration can still be
+   prepared — see §1 of that doc for which path to use.
+3. **B, immediately after the migration** — B2 (pricing engine): a pure,
+   unit-tested function that unblocks A's quote step and depends on nothing.
+
+**If you only read one thing:** A → §3A here. B → `BATCH_0B_SCHEMA.md`.

@@ -15,6 +15,10 @@ company flow gap review. Prior: 2026-07-28 lane map sync)
 
 ## READ FIRST — Plan v2 (2026-08-07)
 
+**Start here:** A → `docs/PLAN_V2_CUSTOMER_APP.md` §3A (Turborepo migration).
+**B → `docs/BATCH_0B_SCHEMA.md`** — self-contained runbook, validated schema,
+nothing to design.
+
 **`docs/PLAN_V2_CUSTOMER_APP.md` is the operative plan.** It supersedes the
 "Batch A" plan below for anything not already merged, and records seven decisions
 (D1–D7) that should not be re-litigated mid-build. Headlines:
