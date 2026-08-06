@@ -41,9 +41,23 @@ One repo, three apps separated by route folders. Shared code at root.
 - **Decision engine is NOT in the vendor app.** The vendor side never shows internal
   pricing mechanics. Offers + status changes are faked by an internal seed/sim
   surface (a protected route + seed script), not the real engine.
-- **No recovered value / no recovery rate shown to the vendor — ever.** Lead's
-  explicit instruction. Offer carries price + qualitative rationale only. Material
-  weights appear ONLY on the EPR certificate (a compliance doc), not on offer/tracking.
+- **No recovery rate % shown to the vendor — hard rule.** Lead's explicit
+  instruction; the company's flow document doesn't ask for it either.
+- **No recovered value shown to the vendor — a default, not a hard rule**
+  (corrected 2026-08-07; it had been recorded here as "ever"). Offer carries price
+  + qualitative rationale only; material weights appear on the EPR certificate (a
+  compliance doc), not on offer/tracking. **Build to this today**, but it follows
+  the company's ask and can change: the company flow document asks for an
+  indicative quote, an invoice and a wallet, all value-facing. Pending their
+  answer — see `COMPANY_FLOW_REVIEW_2026-08-07.md`.
+- **Battery *category* is the customer's question; *chemistry* is the field
+  agent's** (from the company flow document, 2026-08-07 — proposed, not yet
+  built). The doc's §3.A gives the customer a category (portable / automotive /
+  industrial / EV) and its §4 step 3 has the on-site partner tag chemistry. They
+  are near-independent axes — an EV pack may be NMC or LFP — so our `BatteryType`
+  enum can't answer "kg collected by category", which is how EPR reporting is
+  aggregated. Our booking form currently asks the customer for chemistry, i.e. the
+  field agent's question.
 - **Prisma stays** (already set up). B extends the existing Prisma schema with the
   vendor tables. RLS is written separately as raw SQL (Prisma has no RLS concept) —
   no conflict, different layers of the same database.
@@ -66,11 +80,26 @@ One repo, three apps separated by route folders. Shared code at root.
 
 ## Decisions explicitly deferred (do not build yet)
 
-- Green points / coupon / rewards system (future phase).
+- Green points / coupon / rewards system (future phase). **Update 2026-08-07:** the
+  company flow document lists a wallet with cash payout or redeemable rewards
+  (green coins, gold/silver, coupons) as a Customer App capability, and scopes
+  gamification to the *individual* segment. Asked them whether it's in this round
+  and for which customer type — still deferred until they answer.
 - Blockchain / crypto rewards idea (future, lead's long-term vision).
 - CPCB "return" export logic (flagged a vulnerable spot; lead to finalize ~July 1).
 - Decision-engine input tuning (waits on real feedback).
-- Bulk-sell flow for fleets (unconfirmed — may just be repeated requests).
+- ~~Bulk-sell flow for fleets (unconfirmed — may just be repeated requests).~~
+  **Confirmed real, 2026-08-07.** The company flow document (§5.4) asks for two
+  segments with genuinely different flows: individuals get a lightweight
+  high-frequency flow with rewards; bulk generators (societies, EV fleets,
+  retailers, telecom towers, UPS operators) get a B2B flow with scheduled/recurring
+  pickups, invoicing and EPR reporting. It is **not** just repeated requests — our
+  `Pickup` row encodes one vendor / one address / one date / one battery type, and
+  `Offer` and `Certificate` are both 1:1 with `Pickup`, so recurring collections
+  and one-invoice-many-pickups have nowhere to live. A's position: **split the
+  schema now, split the screens later**. Note §7.1 of the same document says to
+  pick one go-to-market wedge first — we've asked which. Still not started;
+  awaiting the company's reply.
 
 ---
 
@@ -111,6 +140,11 @@ conflict, always resolve by keeping `main`'s version:
 
 ## Key project files (in project knowledge)
 
+- `markdown-preview.pdf` — **the company's flow document**, sent by HR after they
+  reviewed our first vendor draft. Their intended flow for the app. Image-only PDF
+  (6 pages, no text layer — render it to read it).
+- `COMPANY_FLOW_REVIEW_2026-08-07.md` — that document reviewed against what we
+  built: gaps by area and owner, plus open questions sent back to the company.
 - `CLBIPP_Vendor_Wireframes_1.html` — current vendor UI, 17 screens. Source of truth for layout.
 - `CLBIPP_Vendor_Flows_v3.docx` — vendor-side process flows (V1–V6) behind the wireframe.
 - `CLBIPP_Vendor_Build_Plan.pdf` — the 2-week vendor build plan with lanes + phases.

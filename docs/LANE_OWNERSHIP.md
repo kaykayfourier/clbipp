@@ -64,7 +64,9 @@ reality doesn't match the original split — not free-for-all editing.
   Doing it here in Task 2 (tracking screen) rather than waiting for Phase 3 is a
   Phase 2 prerequisite (P1 in PROJECT_STATE.md). A's screens need the nav; so do
   B's existing screens. Doing it now prevents a Phase 3 merge scramble.
-- **C keeps:** `BottomTabBar` component ownership, PWA/offline, deployment. Also
+- **C keeps:** `BottomTabBar` component ownership, PWA/offline, deployment
+  (*superseded 2026-07-10 — PWA/offline + deployment moved to A, see entry
+  above*). Also
   retains the Phase 3 task of adding a max-width mobile container to AppShell.
 - **Agreed by:** flagged to C. C to acknowledge; A proceeding as P1 blocker.
 

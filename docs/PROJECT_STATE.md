@@ -5,9 +5,98 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-07-10 (Phase 3 netting-up: full test pass done, remediation plan agreed, seam+crash-fixes+PWA/deploy consolidated onto A — see below)
-**Current sprint:** Vendor / Client web app (PWA) — 2 week build
-**Build order across project:** Vendor app FIRST → then Field Agent app → then Admin dashboard
+**Last updated:** 2026-08-07 (all source documents now read; **Plan v2 written —
+see `docs/PLAN_V2_CUSTOMER_APP.md`, which is the operative plan**. Prior same-day:
+company flow gap review. Prior: 2026-07-28 lane map sync)
+**Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
+**Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
+
+---
+
+## READ FIRST — Plan v2 (2026-08-07)
+
+**`docs/PLAN_V2_CUSTOMER_APP.md` is the operative plan.** It supersedes the
+"Batch A" plan below for anything not already merged, and records seven decisions
+(D1–D7) that should not be re-litigated mid-build. Headlines:
+
+- **All three apps in 2 weeks.** Customer app rebuild first, ~2–2.5 days.
+- **Turborepo migration happens now, in full** (Aamir's call). Batch 0A.
+- **One consolidated schema migration covering all three apps** (Batch 0B) — so
+  nobody is ever blocked on a migration again. This is the fix for the single
+  failure mode that has stalled every phase of this project.
+- **We are no longer waiting on the company's reply.** The six open questions
+  went unanswered; assumptions are listed in §1.3 of the plan.
+- **Teammate C assumed unavailable** — C's lane is redistributed in §6 of the plan.
+- **Email OTP** (not phone SMS — that needs a paid provider + DLT registration).
+- **Payments: full model + simulated gateway.**
+
+### The three `.docx` files — READ, no longer outstanding
+
+- `Battery_Waste_App_Documentation.docx` — **same document** as
+  `markdown-preview.pdf`. Nothing new.
+- `Battery_App_Simple_Explanation.docx` — plain-language retelling. Nothing new.
+- `Battery_Waste_App_Build_Documentation.docx` — **the one that matters.** Its §6
+  gives the company's own data model, including a **`Battery Item`** entity
+  (`pickup_id, chemistry, condition, weight, price, photo`). That settles the
+  rework: **`Pickup` becomes a header row; battery detail moves to a child
+  `BatteryItem`.** One change delivers bulk pickups, the category/chemistry
+  split, condition flags, per-item photos, and per-item pricing.
+
+### Corrections to the record below (verified 2026-08-07)
+
+- **B's dashboard is done** — real Prisma, real stats, status-routed rows. The
+  "Blocked on B" table below is stale on this point.
+- Build is **green** (20 routes); tests **23 passing**.
+- Cruft found: `src/app/generated/prisma/` is tracked in git despite being
+  gitignored and is imported by nothing; `src/types/db.ts` is dead. Both are
+  deleted in Batch 0A.
+
+---
+
+## Company flow review — 2026-08-07 (superseded by Plan v2 above)
+
+The company reviewed our first vendor-app draft and HR sent back the flow they
+intend for the app: **`docs/markdown-preview.pdf`** (image-only PDF, 6 pages —
+render it to read it; there is no text layer). It was described to us as "minor
+tweaks". It is not minor.
+
+- **Full gap analysis: `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.** Read that
+  before planning any of this work.
+- **Nothing was built or changed.** The review is analysis only; no code, no
+  schema, no migration.
+- ~~**Blocked on the company.**~~ **Block lifted 2026-08-07** — the six open
+  questions went unanswered and there are 2 weeks left. We build to our best
+  reading of the documents; assumptions are listed in §1.3 of Plan v2.
+
+**Headline gaps** (detail in the review doc): category-first booking (doc wants
+portable/automotive/industrial/EV — we ask chemistry, which the doc assigns to the
+*field agent*, not the customer); photo upload at booking; condition flags
+(leaking/swollen/dead); indicative quote at booking; assigned-partner + ETA on
+tracking; a pickup receipt at collection separate from the final EPR certificate;
+invoice; CO₂ + materials on the impact dashboard; and **two customer segments with
+genuinely different flows** (bulk/recurring pickups for fleets) — the largest item,
+and a data-model change rather than a screen change.
+
+**Two things that need a team decision before anyone codes:**
+1. Adding `category` to `Pickup` is a **schema change → B's call**; the booking-form
+   restructure on top of it is **C's**.
+2. Fleet vs individual: A's position is **split the schema now, split the screens
+   later**. Note §7.1 of the company doc tells us to pick one go-to-market wedge
+   first — we have asked which one.
+
+**Rule change:** the "never show recovered value / material breakdown to the
+vendor" rule was recorded across our docs as *locked, do not revisit*. Per A it
+was always a **light rule that follows the company's ask**, and has been corrected
+to that in `CLAUDE.md`, `CONTEXT.md` and below. No screen changed — practical
+effect is unchanged until the company answers. The separate **no recovery-rate-%**
+rule is untouched (the company doc does not ask for it).
+
+~~**Also unreviewed:** three `.docx` files...~~ **All three read 2026-08-07** —
+findings folded into the "READ FIRST — Plan v2" section at the top of this file.
+
+> Everything below this section predates the company review. It is still the
+> accurate record of what is built and what was outstanding as of 2026-07-10 —
+> but the plan in it is now subject to whatever the company confirms.
 
 ---
 
@@ -109,9 +198,9 @@ Single repo for all three apps. Already contains:
 
 | Person | Owns |
 |---|---|
-| **A (me / Aamir)** | Supabase Auth, session/route protection, RLS policies, login + full signup flow, tracking screens (`/track/[id]`), track tab navigation, realtime, profile, public tracking link. |
+| **A (me / Aamir)** | Supabase Auth, session/route protection, RLS policies, login + full signup flow, tracking screens (`/track/[id]`), track tab navigation, realtime, profile, public tracking link. **PWA + offline, deployment/CI, and the cross-lane navigation seam** (shifted from C 2026-07-10). |
 | **B (Teammate 1)** | Prisma schema + types, post-signup KYC, dashboard, compliance, certificate PDF, seed/sim surface. |
-| **C (Teammate 2)** | Component library, request → offer → handover flow, PWA + offline, deployment/CI. |
+| **C (Teammate 2)** | Component library, request → offer → handover flow. (PWA + offline and deployment/CI moved to A on 2026-07-10.) |
 
 **Note on track tab:** A wired `BottomTabBar` into `(app)/layout.tsx` (logged in
 `LANE_OWNERSHIP.md`). Track tab navigation logic (`/track/page.tsx`) is A's.
@@ -171,7 +260,7 @@ Person C — request → offer → handover flow SHIPPED (PR #10, merged 2026-07
 
 **Phase 3 — PWA, hardening, ship** — STARTING. This is the whole-app netting-up
 phase: full design pass (once all screens exist), correct end-to-end DB
-linking/inserts/updates, input validation (P5, A+B), PWA + offline + deploy (C),
+linking/inserts/updates, input validation (P5, A+B), PWA + offline + deploy (A),
 and hardening. It splits into two kinds of work:
 
 - **Concentrated / lane-owned** — clear, single-owner tasks that need no
@@ -463,7 +552,9 @@ A can assign or absorb any of these solo once ahead.
 **P3 — polish + ship**
 - [ ] Design consistency pass across all screens (design tokens). Each person
       polishes own screens; C drives overall consistency.
-- [ ] C: PWA + offline, deploy/CI.
+- [x] A: PWA + offline — shipped (manifest, icons, SW, `offline.html`, install).
+- [ ] A: deploy/CI — pending; needs `SUPABASE_SERVICE_ROLE_KEY` + env in Vercel
+      (see `docs/BATCH_A_FLAGS.md` → PWA-deploy).
 - [ ] Optional robustness: move A's tracking-specific `timeline.tsx` tweaks into a
       track-local wrapper so a C re-upload can't clobber them (see Task 2 detail).
 
@@ -496,13 +587,24 @@ To test recovery summary, B needs to seed an offer with `materialBreakdown` for 
 
 ---
 
-## Open rules (locked, do not revisit)
+## Open rules
 
-- **Never render `Offer.materialBreakdown` / `Offer.deductions` as ₹ values
-  on any vendor-facing screen.** Weight (kg) only. This rule applies to A, B, and C.
-- **No recovery rate % shown to vendor anywhere.**
-- Status lifecycle (locked): `requested → scheduled → collected → tested → processed → recovered → certified` (+ `cancelled`)
+**Locked (do not revisit):**
+
+- Status lifecycle: `requested → scheduled → collected → tested → processed → recovered → certified` (+ `cancelled`)
 - `src/middleware.ts` must stay under `src/` — not project root.
+- **No recovery rate % shown to vendor anywhere.** The company flow document does
+  not ask for it, so this one stands.
+
+**Default, but changeable on the company's ask (corrected 2026-08-07):**
+
+- **Don't render `Offer.materialBreakdown` / `Offer.deductions` as ₹ values on
+  vendor-facing screens** — weight (kg) only. Applies to A, B, and C.
+  **This is a light rule, not a hard one** (it was previously mis-recorded here as
+  locked). The company flow document asks for an indicative quote, an invoice and a
+  wallet, all value-facing — so it may be relaxed. **Nothing changes until the
+  company answers open question 2** in `COMPANY_FLOW_REVIEW_2026-08-07.md`; until
+  then, keep building to the rule as written above.
 
 ---
 

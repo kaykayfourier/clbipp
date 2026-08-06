@@ -32,10 +32,17 @@ decisions made and why. This section is the quick version.
   later Field Agent app.
 - Any existing field-agent intake-flow code.
 
-**No recovered value / recovery rate shown to the vendor, anywhere.** Offer
-screens show price + qualitative rationale only. `Offer.materialBreakdown` /
-`Offer.deductions` may exist in the DB but must never render on `offer`,
-`offer-breakdown`, or tracking screens. Fine on the certificate (compliance doc).
+**No recovery rate % shown to the vendor, anywhere.** This one is hard — the
+company's flow document doesn't ask for it either.
+
+**No recovered value shown to the vendor — default, not a hard rule.** Offer
+screens show price + qualitative rationale only; `Offer.materialBreakdown` /
+`Offer.deductions` may exist in the DB but don't render them on `offer`,
+`offer-breakdown`, or tracking screens (they're fine on the certificate, a
+compliance doc). **Build to this today**, but treat it as a default that follows
+the company's ask, not a locked rule — the company flow document asks for an
+indicative quote, an invoice and a wallet, all of which are value-facing. Pending
+their confirmation; see `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
 
 **Status lifecycle (locked contract):**
 `requested → scheduled → collected → tested → processed → recovered → certified`
@@ -61,9 +68,9 @@ screens show price + qualitative rationale only. `Offer.materialBreakdown` /
 
 | Area | Owner |
 |------|-------|
-| Supabase Auth, session/route protection, RLS policies (all tables), login + full signup/account-creation flow (account-type selector, individual & fleet forms, `auth.signUp` + initial profile-row insert), the 3 realtime tracking screens, profile screen | Person A |
+| Supabase Auth, session/route protection, RLS policies (all tables), login + full signup/account-creation flow (account-type selector, individual & fleet forms, `auth.signUp` + initial profile-row insert), the 3 realtime tracking screens, profile screen, **PWA + offline, deployment/CI**, **the cross-lane navigation seam** (dashboard↔flow↔track routing) | Person A |
 | Prisma schema + types, post-signup KYC upload + verification, dashboard, compliance, certificate PDF generation, internal seed/simulation surface | Person B |
-| Component library (from wireframe), the full request → offer → handover flow, PWA + offline, deployment/CI | Person C |
+| Component library (from wireframe), the full request → offer → handover flow | Person C |
 
 **Do not edit another lane's area, even if faster** — unless ownership has been
 shifted by agreement and logged in `docs/LANE_OWNERSHIP.md` (lanes are
@@ -112,7 +119,17 @@ keeps every lane moving in parallel without anyone touching another's files.
 - `docs/PROJECT_STATE.md` — live status, current phase, open questions. Check first.
 - `docs/CONTEXT.md` — decisions made and why, conventions, deferred items.
 - `docs/LANE_OWNERSHIP.md` — lane-shift policy (strict-by-default, flexible-with-flagging) + the log of ownership changes.
+- `docs/markdown-preview.pdf` — **the company's flow document** (sent by HR after
+  they reviewed our first draft). The company's intended flow for the app. It is
+  an image-only PDF — render the pages to read it, there is no text layer.
+- `docs/COMPANY_FLOW_REVIEW_2026-08-07.md` — that document reviewed against what
+  we've actually built: every gap, by area and by owner, plus the open questions
+  sent back to the company. **Read this before planning any work against the flow
+  document.** Status: awaiting the company's reply — don't start building to the
+  flow document until they confirm.
 - `docs/CLBIPP_Vendor_Wireframes_1.html` — UI source of truth for this sprint.
+  Note it predates the company flow document; where the two disagree, the flow
+  document wins (once confirmed).
 - `prisma/schema.prisma` — the real vendor schema (Profile, Pickup, Offer,
   StatusEvent, Certificate). Read before writing any RLS policy or auth code
   that touches these tables. Owned by Person B — don't edit directly.
