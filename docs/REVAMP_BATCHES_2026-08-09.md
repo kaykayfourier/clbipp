@@ -19,8 +19,8 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 |---|---|---|---|
 | 1 | **0A — Turborepo migration** | A | ✅ done, committed `a5c15e2` |
 | 2 | **0B — schema v2 + buckets + seed + RLS** | B | ✅ done, staged |
-| 3 | **B2 — pricing engine + `createPickupWithItems`** | B | ⏭ **next** |
-| 4 | A2/A3 — address book + storage upload helper | A | pending |
+| 3 | **B2 — pricing engine + `createPickupWithItems`** | B | ✅ done, staged |
+| 4 | A2/A3 — address book + storage upload helper | A | ⏭ **next** |
 | 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | pending |
 | 6 | A1 — email OTP + `/verify` + roles | A | pending |
 | 7 | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | pending |
@@ -101,6 +101,48 @@ supabase/                policies.sql etc — stayed at repo root
 `/scheduled` and public `/t/[token]` all 200 with zero server errors; the
 `/offer` status guard still redirects a `recovered` pickup to `/track`.
 
+### Batch 3 — pricing engine + `createPickupWithItems`
+
+Three new files in `packages/core/src`, all exported from `index.ts`:
+
+- **`booking.ts`** — `BookingLineItem` / `QuoteLine` / `QuoteResult`,
+  `estimateQuote(items, rates)` (pure, no DB, no clock) and `getQuote(items)`
+  (loads only rates that are active *and* inside their effective window, then
+  calls the pure one). Rate lookup is category-first with a chemistry-null
+  fallback, because the customer is never asked for chemistry at booking.
+- **`booking-actions.ts`** — `createPickupWithItems(input)`: one
+  `prisma.$transaction` writing `Pickup` + `BatteryItem[]` + the initial
+  `requested` `StatusEvent`. Generates `PKP-YYYY-XXXXXX` (random suffix, retried
+  on a unique-key collision).
+- **`booking.test.ts`** — 12 tests. Workspace total is now **35**.
+
+**Two deliberate divergences from the §7 contract — both are A's call while A
+covers both lanes, but Khalid should know:**
+
+1. **`CreatePickupInput` gains `vendorId`.** The contract implied the function
+   resolves the session itself; that would make `packages/core` depend on
+   `@clbipp/auth` and stop it being callable from a seed or a test. The customer
+   app wraps it in a `"use server"` action that resolves the logged-in user and
+   passes the id down. **Batch 5 must do that wrapping — core does not
+   authenticate.**
+2. **Lines with no weight are still quoted**, using a per-category typical unit
+   weight (`TYPICAL_UNIT_WEIGHT_KG`, demo placeholders like the rates) and
+   flagged `basis: "per_unit"` with a customer-visible "we'll confirm the real
+   weight when we collect" note. A `ratePerUnitPaise` on the rate row wins over
+   the estimate when one exists; none are seeded today.
+
+Other decisions worth knowing: `weightKg` on a line is the **line total, not per
+unit** (matches the seed — 14 automotive batteries = 196 kg); notes are
+qualitative only, never a rupee deduction or a percentage; `Pickup.photoUrls` is
+kept as the deduped union of the item photos so older header-field reads still
+work; and the address is looked up scoped to `vendorId`, so a guessed
+`addressId` can't attach a booking to someone else's address.
+
+**Verified against the real database** (script run then deleted, seed data left
+untouched): a 3-line basket quoted ₹15,204 and wrote one pickup, 3 battery
+items and one `requested` status event in a single transaction; the empty-basket
+and foreign-address paths both return `{ ok: false }` without writing.
+
 ---
 
 ## ⚠ Defect found in `BATCH_0B_SCHEMA.md` §2 — **tell Khalid**
@@ -156,7 +198,7 @@ both; a naive parser does not (see `packages/database/prisma/env.ts`).
 
 ---
 
-## The A↔B contract for Batch 3 (unchanged, from `BATCH_0B_SCHEMA.md` §7)
+## The A↔B contract for Batch 3 (shipped — see the two divergences above)
 
 `packages/core/src/booking.ts` must export exactly:
 
