@@ -236,13 +236,36 @@ explicitly asked to.
 - Wrap Supabase calls (Storage, Realtime, auth) in helpers inside
   `packages/auth` rather than scattering client calls across pages.
 - All money is **integer paise** — never a float, never rupees, anywhere. Format
-  it with `formatPaise` from `@clbipp/core`, never a local `/100`.
+  it with `formatPaise` from `@clbipp/core`, never a local `/100`. From a
+  **client** component import it from **`@clbipp/core/format`** instead: the
+  package barrel re-exports `booking-actions` / `payment-actions`, so a value
+  import from `@clbipp/core` would pull Prisma into the browser bundle. The
+  subpath resolves to `documents.ts`, which imports nothing.
+- **The two tracking screens share one implementation.** `/track/[id]` and
+  `/t/[token]` both render `packages/ui/src/components/ui/lifecycle-view.tsx`
+  (`buildStages`, `LifecycleHeader`, `RecoverySummary`, `CancelledTimeline`).
+  Change the lifecycle presentation there, not in a screen.
+  ⚠ **Sharing the layout does not share the data.** The public page
+  deliberately gets no photos (`includePhotos: false` skips *minting* the signed
+  URLs), no partner card, no realtime and no auth-only CTA — the token is a
+  forwardable bearer capability. The reasoning is at the top of
+  `t/[token]/page.tsx`; read it before passing that page anything new.
+- **Pickup row routing lives in `apps/customer/src/lib/pickup-nav.ts`**
+  (`pickupHref`, `pickupSubtitle`). The dashboard and `/history` both import it —
+  don't re-derive a row's destination inside a screen.
+- **Profile writes go through the server Supabase client, not Prisma**, so
+  `supabase/grants.sql`'s column allowlist applies (Prisma bypasses it).
+  `updatePhone` in `profile/actions.ts` is the pattern. Use Prisma for profile
+  data only when you genuinely need a transaction, and then re-enforce ownership
+  in code.
 - **CO₂e factors live only in `packages/core/src/impact.ts`** — never write CO₂
-  arithmetic in a screen or a seed. They are cited literature estimates, not a
-  certified LCA; the header says so, and replacing them with the company's or a
-  CPCB-accepted set is a value change in that one file. `packages/database`
-  restates the table (it must not import `packages/core` — the cycle breaks the
-  generated client), and Batch 9's verification asserts the two agree.
+  arithmetic in a screen or a seed. ⚠ **The values there are a placeholder and
+  the citations are unverified** (only the relative ordering is defensible) —
+  read the file header before quoting a number anywhere. Awaiting the company's
+  CPCB-accepted set, open question 7 in `COMPANY_FLOW_REVIEW_2026-08-07.md`;
+  their answer is a value change in that one file. `packages/database` restates
+  the table (it must not import `packages/core` — the cycle breaks the generated
+  client), and Batch 9's verification asserts the two agree.
 - Branch naming: `feat/<scope>`. No direct pushes to `main` — branch → PR →
   1 review → merge.
 - Inline error handling at API route / async boundaries; let internal pure

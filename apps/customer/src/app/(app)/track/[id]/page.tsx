@@ -2,50 +2,35 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getCurrentProfile } from '@clbipp/auth'
 import { prisma } from '@clbipp/database'
+import { parseMaterialWeights } from '@clbipp/core'
 import { AppShell, PagePadding } from '@clbipp/ui'
-import { Timeline, Connector } from '@clbipp/ui'
+import { Timeline } from '@clbipp/ui'
 import { Banner } from '@clbipp/ui'
 import { Button } from '@clbipp/ui'
 import { Card } from '@clbipp/ui'
-import { StatusBadge } from '@clbipp/ui'
 import { CustodyLog, PartnerCard } from '@clbipp/ui'
-import { TrackingRealtime } from './TrackingRealtime'
-import { isLifecycleStage } from '@clbipp/ui'
+import {
+  buildStages,
+  CancelledTimeline,
+  lastRecordedStage,
+  LifecycleHeader,
+  RecoverySummary,
+} from '@clbipp/ui'
 import type { LifecycleStage } from '@clbipp/ui'
+import { TrackingRealtime } from './TrackingRealtime'
 import { buildCustodyEntries } from '@/lib/custody'
 
-// Offer.materialBreakdown JSON shape (stable keys — do not rename without
-// updating every consumer). value_paise must NEVER be displayed on vendor screens.
-type MaterialItem = {
-  material: string
-  weight_kg: number
-  value_paise: number
-}
-
-// No local copy of the stage list — `isLifecycleStage` reads LIFECYCLE_STAGES
-// from @clbipp/ui, which is the same array Timeline renders and the same order
-// as `enum PickupStatus`. Batch 7A removed the duplicate that used to live here.
-
-function buildStages(
-  events: Array<{ status: string; occurredAt: Date }>
-): Partial<Record<LifecycleStage, { timestamp: string }>> {
-  const map: Partial<Record<LifecycleStage, { timestamp: string }>> = {}
-  for (const e of events) {
-    if (isLifecycleStage(e.status)) {
-      map[e.status] = {
-        timestamp: new Date(e.occurredAt).toLocaleDateString('en-IN', {
-          day: '2-digit',
-          month: 'short',
-        }),
-      }
-    }
-  }
-  return map
-}
-
-function safeBreakdown(json: unknown): MaterialItem[] {
-  return Array.isArray(json) ? (json as MaterialItem[]) : []
-}
+// ─── /track/[id] — the authenticated tracking screen ─────────────────────────
+// Batch 10 moved the shared presentation (LifecycleHeader, RecoverySummary, the
+// cancelled card, buildStages) into @clbipp/ui/lifecycle-view, because
+// /t/[token] rendered its own copy of all of it and kept falling behind. What
+// stays here is what is genuinely authenticated-only: the partner card, the
+// realtime subscription, the document CTAs, and this screen's own banner copy.
+//
+// Material weights come from `parseMaterialWeights` (@clbipp/core), which
+// already drops `value_paise` defensively. This screen used to declare its own
+// `MaterialItem` type that NAMED value_paise — a type spelling out the one
+// field the locked rule forbids rendering is a footgun, and it is gone.
 
 /**
  * The ETA line on the partner card. Wording depends on the stage, not just on
@@ -63,56 +48,6 @@ function etaLine(status: string, etaMinutes: number | null): string | null {
 
 // Tab bar lives in (app)/layout.tsx, which also owns the bottom clearance for
 // it — so AppShell only needs hideNav here to avoid rendering a second bar.
-
-function LifecycleHeader({ status }: { status: LifecycleStage }) {
-  return (
-    <div className="flex items-center justify-between">
-      <p className="text-xs font-bold uppercase tracking-widest text-text-secondary">Lifecycle</p>
-      <StatusBadge status={status} />
-    </div>
-  )
-}
-
-// Recovery summary: stat box (kg) + expandable material breakdown.
-// ₹ values and recovery rate are intentionally omitted — lead's instruction.
-function RecoverySummary({ breakdown }: { breakdown: MaterialItem[] }) {
-  const totalKg = breakdown.length > 0
-    ? breakdown.reduce((sum, item) => sum + (item.weight_kg ?? 0), 0)
-    : null
-  return (
-    <Card>
-      <p className="text-xs font-bold uppercase tracking-widest text-text-secondary mb-3">
-        Recovery summary
-      </p>
-      <div className="inline-flex flex-col rounded-lg border border-border px-4 py-3">
-        <span className="text-2xl font-bold text-text-primary">
-          {totalKg !== null ? `${totalKg} kg` : '—'}
-        </span>
-        <span className="text-xs text-text-secondary mt-0.5">
-          {totalKg !== null ? 'Recovered' : 'Pending finalisation'}
-        </span>
-      </div>
-      {breakdown.length > 0 && (
-        <details className="mt-4">
-          <summary className="cursor-pointer select-none text-sm font-medium text-text-primary">
-            View material breakdown
-          </summary>
-          <ul className="mt-3 flex flex-col">
-            {breakdown.map((item) => (
-              <li
-                key={item.material}
-                className="flex justify-between border-t border-border py-2 text-sm"
-              >
-                <span className="text-text-secondary">{item.material}</span>
-                <span className="font-medium text-text-primary">{item.weight_kg} kg</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </Card>
-  )
-}
 
 export default async function TrackPage({
   params,
@@ -147,7 +82,7 @@ export default async function TrackPage({
 
   const stages = buildStages(pickup.statusEvents)
   const status = pickup.status
-  const breakdown = safeBreakdown(pickup.offer?.materialBreakdown)
+  const materials = parseMaterialWeights(pickup.offer?.materialBreakdown)
 
   // The query above is already scoped by vendorId, which is what makes signing
   // these photo paths safe — see the ownership note in @/lib/custody.
@@ -192,29 +127,10 @@ export default async function TrackPage({
 
   // ── Cancelled ─────────────────────────────────────────────────────────────
   if (status === 'cancelled') {
-    // Show timeline up to the last recorded lifecycle stage, then the error banner.
-    const lastLifecycleEvent = [...pickup.statusEvents]
-      .reverse()
-      .find(e => isLifecycleStage(e.status))
-    // Fall back to 'requested' so the timeline always renders, even with no events
-    const lastStage = (lastLifecycleEvent?.status ?? 'requested') as LifecycleStage
     return (
       <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav>
         <PagePadding className="flex flex-col gap-4">
-          <Card className="overflow-visible">
-            <Timeline currentStage={lastStage} stages={stages} />
-            <Connector completed={false} />
-            <div className="flex items-start gap-3">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-error">
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                  <path d="M3 3l4 4M7 3l-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </span>
-              <div className="flex-1 min-h-[1.75rem] pb-0.5">
-                <span className="block text-sm font-semibold leading-tight text-error">Cancelled</span>
-              </div>
-            </div>
-          </Card>
+          <CancelledTimeline lastStage={lastRecordedStage(pickup.statusEvents)} stages={stages} />
           <Banner variant="error">This pickup was cancelled.</Banner>
           {/* No partner card — there is nobody coming. The custody log stays:
               what was recorded before the cancellation is still the record. */}
@@ -306,7 +222,7 @@ export default async function TrackPage({
                 pulse: recovered is the active frontier (certified still pending). */}
             <Timeline currentStage="recovered" stages={stages} pulse />
           </Card>
-          <RecoverySummary breakdown={breakdown} />
+          <RecoverySummary materials={materials} />
           <Banner variant="tinted">
             Your EPR certificate becomes available once certified.
           </Banner>
@@ -325,7 +241,7 @@ export default async function TrackPage({
         <Card>
           <Timeline currentStage="certified" stages={stages} />
         </Card>
-        <RecoverySummary breakdown={breakdown} />
+        <RecoverySummary materials={materials} />
         <Banner variant="success">Certificate ready — added to your compliance log.</Banner>
         <Link href={`/certificates/${pickup.id}`}>
           <Button fullWidth>View certificate</Button>

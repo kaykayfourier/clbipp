@@ -39,6 +39,24 @@ const LIFECYCLE = [
   "certified",
 ] as const
 
+/**
+ * A stable `publicToken` for a demo pickup, derived from its serial.
+ *
+ * `PKP-2026-000103` → `00000000-0000-4000-8000-000000000103`.
+ *
+ * A valid v4-shaped UUID (version nibble 4, variant nibble 8) so it satisfies
+ * both the Postgres `uuid` column and the format guard in `/t/[token]`, and
+ * obviously synthetic so nobody mistakes a seeded token for a real one.
+ *
+ * DEMO ROWS ONLY. Real pickups keep the `gen_random_uuid()` column default —
+ * the token is a bearer capability for a real customer's data, and a derivable
+ * one would let anyone who knows a pickup id read its public page.
+ */
+function demoPublicToken(pickupId: string): string {
+  const serial = (pickupId.split("-").pop() ?? "0").padStart(12, "0")
+  return `00000000-0000-4000-8000-${serial}`
+}
+
 // Delhi NCR, roughly — the demo pickups all sit in this area.
 const GEO = { lat: 28.5355, lng: 77.391 }
 
@@ -556,6 +574,13 @@ async function seed() {
       data: {
         id: spec.id,
         vendorId,
+        // Batch 10. `publicToken` defaults to gen_random_uuid(), which made the
+        // one screen with NO SESSION — /t/<token> — the one screen `npm run
+        // smoke` could never cover, because the URL changed on every reseed.
+        // Deriving it from the pickup's own serial fixes that at no cost: these
+        // are demo rows, the token is not a secret in a seeded database, and
+        // real pickups still get a random one from the column default.
+        publicToken: demoPublicToken(spec.id),
         agentId: hasAgent ? agentId : null,
         category: spec.category,
         addressId: warehouse.id,

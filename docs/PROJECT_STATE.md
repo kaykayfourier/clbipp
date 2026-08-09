@@ -5,8 +5,8 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
-+ 8 + 9 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
+**Last updated:** 2026-08-10 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
++ 8 + 9 + 10 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
 booking quote engine + `createPickupWithItems` shipped in `packages/core`, the
 address book + Storage upload helper landed, **the 4-step booking wizard at
 `/book` is done** — the centrepiece of the revamp — **email OTP + `/verify` + the
@@ -17,15 +17,21 @@ ETA, and a chain-of-custody log rendering real per-event GPS and real photos out
 of the private bucket — **Batch 8 shipped the three PDF documents, payouts and
 the wallet**, which makes the P0 demo path run end to end for the first time, and
 **Batch 9 shipped the cited per-chemistry CO₂ table, the dashboard impact card
-and the working CPCB CSV export**.
-Next: **Batch 10, P2 screens (invoices, history, profile, `/t` parity) + deploy**.
+and the working CPCB CSV export**, and **Batch 10 shipped the P2 tier —
+invoices, history + repeat booking, the profile phone edit, and `/t/[token]`
+parity delivered as a real de-duplication into `@clbipp/ui` rather than a second
+copy of the layout — plus deploy PREP (`docs/DEPLOY.md`), with the deploy itself
+deliberately held until after Batch 11 so OAuth redirect URLs are registered
+once**.
+Next: **Batch 11, Google / Apple sign-in + `/onboarding`**; then **Batch 12,
+the actual deploy**.
 Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
 ---
 
-## READ FIRST — resume point (2026-08-09)
+## READ FIRST — resume point (2026-08-10)
 
 **→ `docs/REVAMP_BATCHES_2026-08-09.md` is the live status file and the place to
 resume.** It has the batch tracker, what batches 1–2 delivered, the demo
@@ -35,7 +41,7 @@ accounts + passwords, the commands, and the known gaps.
 decisions D1–D7). This file (`PROJECT_STATE.md`) is now largely **historical
 below this section** — it describes the pre-monorepo, pre-schema-v2 app.
 
-### The three structural facts that invalidate most of the detail below
+### The structural facts that invalidate most of the detail below
 
 1. **The repo is a Turborepo monorepo** (Batch 0A, commit `a5c15e2`). Every path
    written below as `src/...` now lives at `apps/customer/src/...`, and shared
@@ -80,7 +86,8 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    pass `hideNav` to `AppShell` and nothing else. (b) The seed creates an Offer
    from **`scheduled`** onward, not `recovered` — before this, no seeded pickup
    could satisfy the `/offer` status guard, so both offer screens redirected for
-   every id. `PKP-2026-000102` is the offer demo pickup.
+   every id. (⚠ Superseded by Batch 7A: offers now seed from **`offered`**
+   onward and the offer demo pickup is **`PKP-2026-000104`**, not `…000102`.)
    ⚠ Also flagged, not fixed: **`/handover` calls `acceptOffer()` during a GET
    render**, so it mutates on page load. It is excluded from `npm run smoke` for
    that reason. Should become a POST before launch.
@@ -113,12 +120,16 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
 9. **Impact numbers have one source as of Batch 9**:
    `packages/core/src/impact.ts`. `CO2E_AVOIDED_KG_PER_KG` (per `BatteryType`)
    plus a deliberately conservative `…_BY_CATEGORY` fallback for pre-collection
-   loads, where `BatteryItem.chemistry` is still null. Sources and published
-   ranges are named in the file header, which also states plainly that these are
-   **literature estimates, not a certified LCA** — they must be swapped for the
-   company's or a CPCB-accepted set before any real filing, and that swap is a
-   value change in that one file. It replaced a flat `weight * 8` in the seed
-   that overstated lead-acid by ~4×. **Never write CO₂ arithmetic in a screen.**
+   loads, where `BatteryItem.chemistry` is still null. It replaced a flat
+   `weight * 8` in the seed that overstated lead-acid by ~4×.
+   **Never write CO₂ arithmetic in a screen.**
+   🔴 **The factor VALUES are a placeholder and the citations are unverified.**
+   Only the relative ordering (Li-ion NMC ≫ LFP > lead-acid) is defensible; the
+   absolute numbers were not read off any source. **Waiting on the company —
+   open question 7 in `COMPANY_FLOW_REVIEW_2026-08-07.md`** — because EPR
+   compliance may mandate a CPCB-accepted set, which would make anything we
+   source ourselves moot. Their answer is a value change in that one file, plus
+   the copy restated in the seed. Read the file header before quoting a number.
    `packages/database` restates the table (it must not import `packages/core` —
    the cycle breaks the generated client), and the Batch 9 verification asserts
    the two agree.
@@ -131,6 +142,41 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    no signed URL, no cache). The column set lives in `COLUMNS` in
    `apps/customer/src/lib/compliance-export.ts` and is an open question for the
    company.
+10. **The P2 screens exist and the two tracking pages share one implementation
+   (Batch 10).** New routes: `(app)/invoices`, `(app)/invoices/[id]`,
+   `(app)/history`, and `/book?from=<pickupId>` for repeat booking. The build is
+   **34 routes** and `npm run smoke` covers **40**.
+   - **`/invoices/[id]` renders from `getInvoiceDoc`**, the same mapper
+     `@clbipp/pdf` uses — so the screen and its PDF cannot disagree. Keyed by
+     pickup id, like every other detail screen.
+   - **`apps/customer/src/lib/pickup-nav.ts` owns pickup row routing**
+     (`pickupHref`, `pickupSubtitle`). The dashboard and `/history` both import
+     it; don't re-derive a row's destination in a screen. The dashboard now caps
+     "Recent Pickups" at 5 with "View all" → `/history`.
+   - **`packages/ui/src/components/ui/lifecycle-view.tsx` is the shared
+     lifecycle presentation** — `buildStages`, `LifecycleHeader`,
+     `RecoverySummary`, `CancelledTimeline`. `/track/[id]` and `/t/[token]` both
+     render it instead of carrying ~120 duplicated lines each. Both now use
+     `parseMaterialWeights` from `@clbipp/core`; the private `MaterialItem`
+     types that named `value_paise` are gone.
+     ⚠ **Sharing the layout does NOT share the data.** `/t` still gets no
+     photos, no partner card, no realtime and no auth-only CTA — deliberate, and
+     now asserted by the smoke test rather than merely intended.
+   - **Repeat booking never copies photos** — `draftFromPickup` in
+     `book/types.ts`. A photo is evidence of one consignment.
+   - **`updatePhone` writes through the SERVER SUPABASE CLIENT, not Prisma**, so
+     `grants.sql`'s column allowlist applies. That is the pattern any future
+     profile write (including Batch 11's `/onboarding` insert) should follow.
+   - **Demo pickups have derived `publicToken`s** (`00000000-0000-4000-8000-
+     0000000001NN`) so `/t` is smoke-testable. **Real pickups keep the random
+     column default** — a guessable bearer token would be a leak.
+   - **`@clbipp/core/format` is a new subpath export** → `documents.ts`, which
+     imports nothing, so client components can value-import `formatPaise`
+     without dragging Prisma into the browser bundle. The last local `/100` is
+     gone.
+   - **The app is NOT deployed.** `docs/DEPLOY.md` is the runbook; it runs after
+     Batch 11. The Vercel build command must go through turbo — the generated
+     Prisma client is gitignored.
 
 **Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
 cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts

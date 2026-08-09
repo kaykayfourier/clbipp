@@ -6,7 +6,7 @@ import { prisma } from '@clbipp/database'
 import { AppShell, Button, Card, PagePadding } from '@clbipp/ui'
 
 import { BookingWizard } from './BookingWizard'
-import type { AddressOption } from './types'
+import { draftFromPickup, type AddressOption, type InitialDraft } from './types'
 
 // ─── /book — the 4-step booking wizard ───────────────────────────────────────
 // Server component: resolves the caller and loads their addresses, then hands a
@@ -21,7 +21,13 @@ import type { AddressOption } from './types'
 // the server action re-resolves it from the session cookie rather than trusting
 // anything the client sends back.
 
-export default async function BookPage() {
+export default async function BookPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>
+}) {
+  const { from } = await searchParams
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -62,7 +68,50 @@ export default async function BookPage() {
     isDefault: a.isDefault,
   }))
 
-  return <BookingWizard userId={user.id} addresses={options} />
+  // ── Repeat booking: /book?from=<pickupId> ──────────────────────────────────
+  // Scoped by vendorId, because Prisma bypasses RLS — ownership is enforced
+  // here in code, the same rule as @/lib/custody and @/lib/documents. An id
+  // belonging to someone else simply finds nothing and the wizard opens blank,
+  // which is the right failure: a "not yours" error would confirm it exists.
+  //
+  // Photos are NOT read at all, let alone copied — see draftFromPickup.
+  let initialDraft: InitialDraft | null = null
+  if (from) {
+    const source = await prisma.pickup.findFirst({
+      where: { id: from, vendorId: user.id },
+      select: {
+        id: true,
+        category: true,
+        addressId: true,
+        items: {
+          select: { quantity: true, weightKg: true, condition: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    })
+
+    if (source) {
+      // Only if the address is still bookable. `options` is already filtered to
+      // operational addresses, so an address that has since been marked not
+      // operational (or deleted) falls back to the default rather than
+      // preselecting something the picker won't show.
+      const addressStillBookable = options.some((a) => a.id === source.addressId)
+
+      initialDraft = draftFromPickup({
+        pickupId: source.id,
+        category: source.category,
+        addressId: addressStillBookable ? source.addressId : null,
+        lines: source.items.map((item) => ({
+          quantity: item.quantity,
+          // Decimal → number at the boundary; nothing raw crosses to the client.
+          weightKg: item.weightKg === null ? null : Number(item.weightKg),
+          condition: item.condition,
+        })),
+      })
+    }
+  }
+
+  return <BookingWizard userId={user.id} addresses={options} initialDraft={initialDraft} />
 }
 
 // A booking cannot be written without an `addressId`, so this is a hard

@@ -18,7 +18,25 @@
 // Replacing them is a value change here and nowhere else — that is the point of
 // this file existing.
 //
-// Sources:
+// ⚠⚠ THE ATTRIBUTIONS BELOW ARE UNVERIFIED (flagged 2026-08-09, Batch 9).
+//
+// They were written from recall as the papers that report figures of this
+// magnitude. Nobody has opened them to confirm the volume/page numbers, and —
+// more importantly — **the specific values in the tables below were NOT read off
+// a table in any of these papers.** They are plausible mid-range picks.
+//
+// What IS defensible, and is the substance of what this file fixed: the RELATIVE
+// ORDERING. High Ni/Co cathodes displace far more virgin-production burden than
+// LFP or lead-acid, which is well established and is why the flat 8 kg/kg this
+// replaced was wrong. The absolute numbers are a placeholder of the right shape.
+//
+// Deliberately not chased down (Aamir, 2026-08-09): the company is in EPR
+// compliance and may be *required* to use CPCB-accepted emission factors, which
+// would make any figure sourced here irrelevant regardless of how well cited.
+// So this waits on them — see open question 7 in COMPANY_FLOW_REVIEW_2026-08-07.
+// Treat "cited" as "attributed" until that closes.
+//
+// Attributions (unverified):
 //   [1] Dunn, Gaines, Kelly, James & Gallagher (2015), "The significance of
 //       Li-ion batteries in electric vehicle life-cycle energy and emissions and
 //       recycling's role in its reduction", Energy & Environmental Science 8,

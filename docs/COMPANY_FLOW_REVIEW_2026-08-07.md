@@ -230,6 +230,27 @@ framing is wrong: two-segment support is a data-model change, not a tweak.
 5. **Payments (gateway / UPI)** — customer payouts in scope this round?
 6. **Which segment is the go-to-market wedge** (per §7.1) — added so that the
    two-flow item can be scoped as "schema now, second flow when you pick".
+7. **CO₂e emission factors — do you have CPCB-accepted ones we must use?**
+   (added 2026-08-09, Batch 9.) The impact dashboard and the EPR certificate both
+   state a kg-CO₂e-avoided figure. It is currently computed from a per-chemistry
+   table in `packages/core/src/impact.ts` whose values are **plausible
+   literature-magnitude estimates that have not been traced to a source**, and
+   whose paper attributions are unverified. The relative ordering
+   (Li-ion NMC ≫ LFP > lead-acid) is sound; the absolute numbers are a
+   placeholder of the right shape. Since this is EPR compliance you may be
+   *required* to use a specific factor set, which would make anything we source
+   ourselves irrelevant — so we are waiting rather than researching. **Their
+   answer is a value change in that one file** (plus the copy restated in the
+   seed, which the Batch 9 drift check guards).
+8. **CPCB return format** (added 2026-08-09, Batch 9) — what columns does the
+   return actually want? The CSV export at `/api/exports/compliance` is one row
+   per certificate with a stable column set; `COLUMNS` in
+   `apps/customer/src/lib/compliance-export.ts` is the one place their answer
+   lands.
+9. **GST on scrap bought from an unregistered individual** (carried from Batch
+   8) — does it apply, and at what rate? Every invoice currently shows
+   `taxPaise: 0`. The column and the PDF line exist so the answer is a value
+   change, not a schema change.
 
 ---
 

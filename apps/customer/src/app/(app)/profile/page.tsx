@@ -6,6 +6,7 @@ import { formatPaise } from '@clbipp/core'
 import { AppShell, PagePadding, SectionLabel } from '@clbipp/ui'
 import { Card, CardContent } from '@clbipp/ui'
 import { logout } from './actions'
+import { PhoneForm } from './PhoneForm'
 
 // Vendor profile / account screen. Server component — reads the caller's own
 // profile via getCurrentProfile() (RLS-scoped) and renders it. Fleet business
@@ -51,6 +52,28 @@ function Stat({ value, label }: { value: string; label: string }) {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// A tappable row that navigates somewhere. Distinct from `Row` below, which is
+// information only — the chevron is what tells them apart at a glance.
+function NavRow({ href, label, hint }: { href: string; label: string; hint: string }) {
+  return (
+    <Link href={href} className="flex items-center justify-between gap-3 py-3">
+      <span className="flex min-w-0 flex-col">
+        <span className="text-sm font-semibold text-text-primary">{label}</span>
+        <span className="truncate text-xs text-text-secondary">{hint}</span>
+      </span>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0">
+        <path
+          d="M6 4l4 4-4 4"
+          stroke="var(--color-text-disabled)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </Link>
   )
 }
 
@@ -150,6 +173,18 @@ export default async function ProfilePage() {
           </Card>
         </Link>
 
+        {/* Manage — the screens with no tab of their own. The bottom bar is
+            fixed at four, so addresses, invoices and history all hang off here,
+            the same way the wallet does. */}
+        <Card>
+          <SectionLabel className="mb-1">Manage</SectionLabel>
+          <div className="divide-y divide-border">
+            <NavRow href="/history" label="Pickup history" hint="Every request, and book again" />
+            <NavRow href="/invoices" label="Invoices" hint="Payout invoices and their PDFs" />
+            <NavRow href="/addresses" label="Saved addresses" hint="Where we collect from" />
+          </div>
+        </Card>
+
         {/* Account */}
         <Card>
           <SectionLabel className="mb-3">Account</SectionLabel>
@@ -158,6 +193,9 @@ export default async function ProfilePage() {
               <Row label="Name" value={profile.full_name} />
             )}
             <Row label="Email" value={email} />
+            {/* The one editable field on this screen. `phone` is on the
+                grants.sql UPDATE allowlist; nothing else here is. */}
+            <PhoneForm phone={profile?.phone ?? null} />
             <Row label="Account type" value={isFleet ? 'Fleet' : 'Individual'} />
           </div>
         </Card>

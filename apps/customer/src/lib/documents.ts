@@ -149,6 +149,22 @@ async function receiptDoc(pickupId: string, vendorId: string): Promise<ReceiptDo
   }
 }
 
+/**
+ * Exported (Batch 10) so `/invoices/[id]` renders from the SAME mapper the PDF
+ * template consumes. An invoice screen that disagreed with its own invoice PDF
+ * — different line split, different total — is the worst bug this surface could
+ * have, and sharing the mapper makes it unrepresentable.
+ *
+ * ⚠ Same rule as `getDocument`: CALLER MUST PASS THE SESSION'S OWN vendorId.
+ * The scope is enforced here in code, because Prisma bypasses RLS.
+ */
+export async function getInvoiceDoc(
+  pickupId: string,
+  vendorId: string,
+): Promise<InvoiceDoc | null> {
+  return invoiceDoc(pickupId, vendorId)
+}
+
 async function invoiceDoc(pickupId: string, vendorId: string): Promise<InvoiceDoc | null> {
   const invoice = await prisma.invoice.findFirst({
     where: { pickupId, vendorId },
@@ -196,10 +212,11 @@ async function invoiceDoc(pickupId: string, vendorId: string): Promise<InvoiceDo
         }))
       : [
           {
-            description: `${categoryLabel} batteries — ${invoice.pickup.items.reduce(
-              (sum, i) => sum + i.quantity,
-              0,
-            )} units`,
+            // Description carries no quantity: `quantity` is its own field, the
+            // PDF renders it as its own column, and /invoices/[id] renders it
+            // alongside the label — so a "— N units" suffix here printed the
+            // same number twice on both surfaces.
+            description: `${categoryLabel} batteries`,
             quantity: invoice.pickup.items.reduce((sum, i) => sum + i.quantity, 0),
             weightKg: invoice.pickup.items.reduce(
               (sum, i) => sum + num(i.confirmedWeightKg ?? i.weightKg),

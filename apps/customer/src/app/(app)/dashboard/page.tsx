@@ -9,24 +9,16 @@ import { Button } from "@clbipp/ui"
 import { Card, CardContent, DetailRow, SectionLabel } from "@clbipp/ui"
 import type { Pickup } from "@clbipp/database"
 import { AddressChip } from "../addresses/AddressChip"
-import { CATEGORY_LABELS } from "../book/copy"
+import { pickupHref, pickupSubtitle } from "@/lib/pickup-nav"
 
-function pickupSubtitle(pickup: PickupRow): string {
-  const lines = pickup._count.items
-  // Seeded and wizard-created pickups both have items; the handful of legacy
-  // rows written by the old request form have none, so fall back to the
-  // superseded columns rather than showing "0 lines".
-  if (lines === 0) {
-    return [pickup.batteryType, pickup.approxQuantity].filter(Boolean).join(" · ") || "Pickup"
-  }
-  return `${CATEGORY_LABELS[pickup.category]} · ${lines} line${lines === 1 ? "" : "s"}`
-}
-
-// A Pickup plus its line count. The row subtitle used to read `batteryType` +
-// `approxQuantity`, but schema v2 superseded both and the Batch 5 booking wizard
-// leaves them null — a new pickup rendered "null · null". Category plus the
-// BatteryItem count is the shape that's actually populated now.
+// A Pickup plus its line count. `pickupSubtitle` and `pickupHref` moved to
+// @/lib/pickup-nav in Batch 10, when /history became a second list of these
+// same rows — two pickup lists that route or describe differently is a drift
+// bug, and the status routing is a Batch 7A decision that deserves one home.
 type PickupRow = Pickup & { _count: { items: number } }
+
+/** How many rows the home screen shows before deferring to /history. */
+const RECENT_LIMIT = 5
 
 type DashboardStats = {
   pickupCount: number
@@ -167,26 +159,25 @@ function PopulatedDashboardPage({
 
       <ImpactCard impact={impact} />
 
-      <p className="text-[11px] font-semibold tracking-widest uppercase text-[#666666]">
-        Recent Pickups
-      </p>
+      <div className="flex items-baseline justify-between">
+        <p className="text-[11px] font-semibold tracking-widest uppercase text-[#666666]">
+          Recent Pickups
+        </p>
+        {/* The home screen used to render EVERY pickup — an account with forty
+            of them scrolled forty rows before reaching the end. */}
+        {pickups.length > RECENT_LIMIT && (
+          <Link
+            href="/history"
+            className="text-[11px] font-semibold text-text-primary underline underline-offset-2"
+          >
+            View all {pickups.length}
+          </Link>
+        )}
+      </div>
 
       <div className="flex flex-col gap-2">
-        {pickups.map((pickup) => (
-          <Link
-            key={pickup.id}
-            // Status-routed: requested → the request screen, offered → straight
-            // to the offer (it's the one stage waiting on the customer, so the
-            // row should land on the decision, not on tracking), everything
-            // else → tracking.
-            href={
-              pickup.status === "requested"
-                ? `/scheduled?id=${pickup.id}`
-                : pickup.status === "offered"
-                  ? `/offer?id=${pickup.id}`
-                  : `/track/${pickup.id}`
-            }
-          >
+        {pickups.slice(0, RECENT_LIMIT).map((pickup) => (
+          <Link key={pickup.id} href={pickupHref(pickup.status, pickup.id)}>
             <ListRow
               id={pickup.id}
               subtitle={pickupSubtitle(pickup)}

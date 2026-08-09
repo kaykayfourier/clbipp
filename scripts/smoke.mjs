@@ -55,6 +55,13 @@ const ROUTES = [
   '/payment/PKP-2026-000106',
   '/wallet',
   '/certificates/PKP-2026-000109',
+  // Batch 10 — the P2 screens.
+  '/invoices',
+  '/invoices/PKP-2026-000106',
+  '/history',
+  // Repeat booking. 109 is certified and carries real booking photos, which is
+  // exactly why it's the one used here — see the assertion below.
+  '/book?from=PKP-2026-000109',
   // ⚠ Do NOT add '/handover?id=…' here. That page calls acceptOffer() during
   // render, so a plain GET advances the pickup to `collected` — it would mutate
   // the demo data on every run and break the two offer routes above, which need
@@ -189,7 +196,74 @@ const APP_CONTENT = {
     'CERT-2026-PKP-2026-000109-',
     'Download PDF',
   ],
+  // ── Batch 10 ──────────────────────────────────────────────────────────────
+  // The invoice number is DERIVED from the pickup serial by the seed and by
+  // `invoiceNumber()` independently, so asserting it here proves the list ran
+  // the real scoped query rather than rendering an empty state.
+  '/invoices': ['Invoices', 'INV-2026-000106', '₹', 'Paid'],
+  // Rendered from the same `getInvoiceDoc` the PDF template consumes — these
+  // assert the shared mapper actually produced lines and totals.
+  '/invoices/PKP-2026-000106': [
+    'INV-2026-000106',
+    'Items',
+    'Subtotal',
+    'Total',
+    'Download invoice',
+    '₹',
+  ],
+  '/history': ['Pickup history', 'Book this again', 'PKP-2026-000109', 'Completed'],
+  // Repeat booking. Asserted as two separate substrings on purpose: React
+  // splits `Copied from {id}` into separate text nodes with `<!-- -->` markers
+  // between them, so the concatenated sentence never appears in the HTML.
+  // "Copied from" proves the prefill branch ran; the id proves it read THIS
+  // pickup.
+  '/book?from=PKP-2026-000109': ['Copied from', 'PKP-2026-000109', 'Portable'],
 }
+
+// The half of repeat booking that actually matters. PKP-2026-000109 carries
+// real booking photos in the private bucket, and `draftFromPickup` deliberately
+// copies none of them — a photo is evidence of one specific consignment.
+// `token=` is the tell: it appears in the HTML only if a signed URL was minted
+// for a stored object, so its ABSENCE here proves no old photo rode along.
+const BOOK_PREFILL_ISOLATION = {
+  '/book?from=PKP-2026-000109': ['token='],
+}
+
+// ── /t/<publicToken> — the public tracking page (Batch 10) ───────────────────
+// Never smoke-tested before this batch, because `publicToken` defaulted to
+// gen_random_uuid() and changed on every reseed. The seed now derives it from
+// the pickup serial (`demoPublicToken` in reset-demo.ts), so these URLs are
+// stable.
+//
+// Fetched ANONYMOUSLY — that is the whole point of the route, and it is also
+// why they are not in ROUTES: under `--blocked` every app route must bounce to
+// /login and these must not.
+//
+// Each asserts BOTH halves: that the page rendered, and that the deliberate
+// isolation held. The `mustNotContain` list is the load-bearing one — the
+// equivalent of 7B's `token=` and 8's `%PDF-`. `token=` appearing here would
+// mean a signed photo URL was minted for an anonymous bearer of a forwardable
+// link, and `Collection partner` would mean an agent's personal phone number
+// was handed to a stranger.
+const PUBLIC_TRACK_ROUTES = {
+  // arrived — the richest case: this pickup HAS custody photos and an assigned
+  // agent on the authenticated screen, so it is the one where a leak would show.
+  '/t/00000000-0000-4000-8000-000000000103': {
+    mustContain: ['PKP-2026-000103', 'Lifecycle', 'Chain of custody', 'Agent arrived', 'View location'],
+    mustNotContain: ['token=', 'Collection partner', 'Ravi Kumar'],
+  },
+  '/t/00000000-0000-4000-8000-000000000109': {
+    mustContain: ['PKP-2026-000109', 'Recovery summary', 'certified'],
+    mustNotContain: ['token=', 'Collection partner', 'View certificate'],
+  },
+  '/t/00000000-0000-4000-8000-000000000110': {
+    mustContain: ['PKP-2026-000110', 'Cancelled', 'cancelled'],
+    mustNotContain: ['token=', 'Collection partner'],
+  },
+}
+
+/** A well-formed but unknown token must 404, not 500 and not leak a page. */
+const PUBLIC_TRACK_UNKNOWN = '/t/00000000-0000-4000-8000-000000000999'
 
 // Public auth screens. Checked separately because the role gate must NOT touch
 // them — if `--blocked` bounced these too, a rejected agent would have no way
@@ -312,12 +386,24 @@ async function main() {
     else if (expectBounce) verdict = redirectedToLogin ? 'blocked (correct)' : 'LEAKED THROUGH'
     else if (redirectedToLogin) verdict = 'BOUNCED TO LOGIN'
     else if (leaked.length) verdict = `GUARD LEAKED: ${leaked.join(' | ')}`
-    else if (mustNotContain.length) verdict = 'guarded (correct)'
+    // `missing` is checked BEFORE the guarded-verdict shortcut. It used to come
+    // after, which silently skipped every mustContain whenever mustNotContain
+    // was also set — fine while the only user was APP_REJECTS (no mustContain),
+    // wrong for the Batch 10 /t routes, which have to prove BOTH that the page
+    // rendered AND that the isolation held. A rejected guard still reports
+    // "guarded (correct)" because its mustContain list is empty.
     else if (missing.length) verdict = `MISSING: ${missing.join(' | ')}`
+    else if (mustNotContain.length)
+      // Distinguish "rejected, nothing rendered" from "rendered AND withheld
+      // the things it must withhold" — the /t routes and the repeat-booking
+      // prefill are the second kind, and reporting both as plain "guarded"
+      // would hide that their content assertions ran at all.
+      verdict = mustContain.length ? 'ok + isolation held' : 'guarded (correct)'
     else if (badNav) verdict = `${navCount} TAB BARS (expected 1)`
     else verdict = 'ok'
 
-    if (!['ok', 'blocked (correct)', 'guarded (correct)'].includes(verdict)) failures++
+    const PASSING = ['ok', 'blocked (correct)', 'guarded (correct)', 'ok + isolation held']
+    if (!PASSING.includes(verdict)) failures++
     console.log(`  ${String(status).padEnd(3)} ${route.padEnd(34)} ${verdict} ${note}`)
   }
 
@@ -328,6 +414,7 @@ async function main() {
     await probe(route, {
       expectBounce: blocked,
       mustContain: blocked ? [] : (APP_CONTENT[route] ?? []),
+      mustNotContain: blocked ? [] : (BOOK_PREFILL_ISOLATION[route] ?? []),
     })
   }
 
@@ -465,6 +552,26 @@ async function main() {
     await probe(route, { anon: true, mustContain: CONTENT[route] ?? [] })
   }
 
+  // Batch 10. Anonymous by definition — these must render with NO session, in
+  // both normal and --blocked mode, so they are never given `expectBounce`.
+  console.log('\n  — public tracking links (logged out, isolation asserted) —')
+  for (const [route, expected] of Object.entries(PUBLIC_TRACK_ROUTES)) {
+    await probe(route, { anon: true, ...expected })
+  }
+
+  // A well-formed token that matches no pickup. Checked with a bare fetch
+  // rather than probe(), because the pass condition is a STATUS (404) and
+  // probe() reads no body on a non-200 — it would report "ok" for a 500.
+  {
+    const r = await fetch(`${BASE}${PUBLIC_TRACK_UNKNOWN}`, { redirect: 'manual' })
+    const ok = r.status === 404
+    if (!ok) failures++
+    console.log(
+      `  ${String(r.status).padEnd(3)} ${PUBLIC_TRACK_UNKNOWN.padEnd(34)} ` +
+        (ok ? 'not found (correct)' : 'EXPECTED 404'),
+    )
+  }
+
   const total =
     ROUTES.length +
     Object.keys(APP_REJECTS).length +
@@ -472,7 +579,9 @@ async function main() {
     DOCUMENT_REJECTS.length +
     Object.keys(EXPORT_ROUTES).length +
     1 + // EXPORT_EMPTY
-    PUBLIC_ROUTES.length
+    PUBLIC_ROUTES.length +
+    Object.keys(PUBLIC_TRACK_ROUTES).length +
+    1 // PUBLIC_TRACK_UNKNOWN
   console.log(
     failures === 0
       ? `\nAll ${total} routes behaved as expected.\n`

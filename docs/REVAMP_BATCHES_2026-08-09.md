@@ -28,8 +28,9 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 7B | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | ✅ done, staged |
 | 8 | B3/B6 — PDF generation + payment + receipt screens | B | ✅ done, staged |
 | 9 | **B4/B5 — dashboard impact (CO₂) + compliance CSV** | B | ✅ done, staged |
-| 10 | P2 screens (invoices, history, profile, `/t` parity) + **deploy** | A | ⏭ **next — start here** |
-| 11 | **Google / Apple sign-in** (new — see below, has a real blocker) | A | pending |
+| 10 | P2 screens (invoices, history, profile, `/t` parity) + **deploy prep** | A | ✅ done, staged |
+| 11 | **Google / Apple sign-in** (new — see below, has a real blocker) | A | ⏭ **next — start here** |
+| 12 | **Deploy** — deferred out of 10 on purpose, see `docs/DEPLOY.md` | A | pending, after 11 |
 
 > **No demo is being shown right now** (changed 2026-08-09). Aamir is finishing
 > the revamp and the remaining batches first, then deploying a proper link. So
@@ -724,9 +725,24 @@ year rolled over. The "Total certified" card also gained a CO₂e line.
 
 ### Known gaps in this batch
 
-- **The factors are literature estimates, not a certified LCA.** Stated in the
-  file header and in the on-screen footnote. Replacing them is a value change in
-  `packages/core/src/impact.ts` alone — plus the restated copy in the seed.
+- 🔴 **THE FACTOR VALUES ARE UNSOURCED AND THE CITATIONS ARE UNVERIFIED.** The
+  most important caveat in this batch, and it was initially undersold — the batch
+  summary said "cited" when the honest word is **attributed**. The papers were
+  named from recall; nobody opened them to check the volume/page numbers, and the
+  specific numbers in the tables **were not read off a table in any of them**.
+  They are plausible mid-range picks.
+  **What is defensible, and is the substance of the fix, is the relative
+  ordering** — high Ni/Co ≫ LFP > lead-acid is well established, and it is why
+  the flat 8 kg/kg this replaced was wrong. The absolute values are a placeholder
+  of the right shape.
+  **Deliberately not chased down (Aamir, 2026-08-09):** the company is in EPR
+  compliance and may be *required* to use CPCB-accepted factors, which would make
+  anything we source ourselves irrelevant. So this waits on them —
+  **open question 7** in `COMPANY_FLOW_REVIEW_2026-08-07.md`. Nothing overclaims
+  in the meantime: the file header, the batch tracker and the on-screen footnote
+  all say estimate. Replacing them is a value change in
+  `packages/core/src/impact.ts` alone, plus the copy restated in the seed (which
+  the drift check guards).
 - **The exact CPCB column set is an open question for the company**, same class
   as the invoice's zero `taxPaise`. Their answer changes `COLUMNS` and the mapper
   in `compliance-export.ts` and nothing else.
@@ -739,44 +755,252 @@ year rolled over. The "Total certified" card also gained a CO₂e line.
 
 ---
 
-## ▶ Next: Batch 10 — P2 screens + deploy
+## What Batch 10 delivered — invoices, history, profile, `/t` parity, deploy prep
 
-Per Plan v2 §4 and the cut order in §8. `/wallet` was listed here originally but
-**shipped in Batch 8**, so what's left is:
+The last of the P2 tier from Plan v2 §4. Four screens plus the one refactor the
+public tracking page needed, and the repo half of deploy.
 
-- **Invoices** — `(app)/invoices[/id]`. The data and the PDF already exist
-  (`Invoice` rows are written by `settlePayment`, and
-  `/api/documents/invoice/[id]` streams them); this is a list screen plus a
-  detail screen over them. `/payment/[id]` already links to the PDF directly, so
-  this is genuinely additive.
-- **History / repeat booking** — `(app)/history`. Pure UI over existing data; the
-  "book again" path prefills the wizard from a past pickup.
-- **Profile** — phone + an addresses link. Small.
-- **`/t/[token]` parity** with the current tracking screen. ⚠ Re-read the 7B
-  reasoning first: the public page deliberately gets the custody log and GPS but
-  **not photos and not the partner card**, and `includePhotos: false` **skips
-  minting the signed URLs** rather than hiding rendered images. Parity means the
-  *layout*, not lifting that isolation.
-- **A6 — deploy.** Vercel project + env vars + PWA. Note this interacts with
-  Batch 11: OAuth redirect URLs are per-origin, so the Vercel URL has to be
-  registered with the providers.
+### The three decisions taken before any code
 
-**What Batch 9 leaves teed up for it:**
+1. **Deploy is prepped, NOT executed** (Aamir, 2026-08-10). OAuth redirect URLs
+   are per-origin, so standing the site up before Batch 11 means registering
+   callbacks with Google/Apple twice. `docs/DEPLOY.md` is the runbook; the
+   Vercel project goes up after 11. Tracked as Batch 12 in the table above.
+2. **Profile phone is display + inline edit**, not display-only. `phone` was
+   already on the `grants.sql` UPDATE allowlist and `normaliseIndianPhone`
+   already existed — a phone row nobody can fill is a dead row.
+3. **`/t` parity is delivered by EXTRACTION**, not by copying the current
+   layout across. See below — this is the substance of the batch.
 
-- **The export route is now the pattern for any new file the app hands out**,
-  alongside the document route: ownership-scoped read → stream the bytes → no
-  signed URL → `Cache-Control: private, no-store`. An invoices CSV, if one is
-  ever wanted, is a copy of `compliance-export.ts` with a different `COLUMNS`.
-- **`formatPaise` is still the app's only ₹ formatter.** The invoice screens must
-  use it, never a local `/100`.
-- **`impact.ts` is where any impact number comes from now** — if a history screen
-  wants per-pickup CO₂, call `co2eAvoidedKg()` on the pickup's items rather than
-  writing arithmetic in the screen.
-- **`smoke.mjs` has three probe shapes now** — `probe` (HTML),
-  `probeDocument` (PDF bytes), `probeExport` (CSV). Add new screens to `ROUTES`
-  with content assertions, not just a status check.
-- Deploy note: the export's `verification_link` is built from the **request
-  origin**, so it will point at the Vercel URL automatically — nothing to change.
+### Invoices — `(app)/invoices` + `(app)/invoices/[id]`
+
+The screen renders from **`getInvoiceDoc`, the same mapper `@clbipp/pdf`'s
+invoice template consumes** (`apps/customer/src/lib/documents.ts`, exported this
+batch). That is the whole design: an invoice screen showing a different line
+split or total from the PDF it links to would be the worst bug this surface
+could have, and there is now no second implementation that could drift.
+
+- Keyed by **pickup id**, like every other detail screen and like the document
+  route. `Invoice.pickupId` is nullable in the schema for a future period-level
+  invoice; nothing writes one, so the list renders those as non-navigable rows
+  rather than inventing a second route for a shape that does not exist.
+- `notFound()` when the mapper returns null — a foreign id and a missing invoice
+  are the same answer, per the Batch 8 posture.
+- Reached from `/profile` and `/wallet`. No tab: the bar is fixed at four.
+- `taxPaise` is still 0 and the line still renders, so the company's answer
+  stays a value change.
+
+**🐛 Fixed while here:** the fallback invoice line description was
+`"Portable batteries — 12 units"` while `quantity` was *also* its own field —
+so the PDF printed the quantity twice (its own column plus the description) and
+the new screen would have too. The description is now plain.
+
+### History — `(app)/history` + repeat booking
+
+Server/client split follows `compliance/` exactly. Filter chips (`All · Active ·
+Completed · Cancelled`) are **derived from the data**, per the Batch 9 lesson
+about the hard-coded `["All", "2026"]` year list.
+
+`historyBucket` files only `certified` as completed. `recovered` means the
+materials are out but the EPR certificate — the thing the customer is actually
+waiting for — has not been issued, so counting it as done would say the job is
+finished when it is not.
+
+**`apps/customer/src/lib/pickup-nav.ts` is new**: `pickupHref`, `pickupSubtitle`,
+and the bucket helper, lifted out of `dashboard/page.tsx`. Two lists of the same
+rows routing or describing differently is a drift bug, and the status routing
+(`requested → /scheduled`, `offered → /offer`) is a Batch 7A decision that
+deserves one home. It lives in the app, not `@clbipp/ui`, because it is app
+routing rather than a UI primitive.
+
+**Dashboard also gained a cap.** Its `findMany` had no `take`, so an account
+with forty pickups rendered forty rows on the home screen. Now five, with
+"View all N" → `/history`.
+
+**Repeat booking is `/book?from=<pickupId>`**, via a pure `draftFromPickup` in
+`book/types.ts`. Carries category, per-line quantity/weight/condition, and the
+address (only if it is still `operational`, else the default).
+
+> ⚠ **Photos are deliberately NOT copied, and that is why the function exists
+> rather than a spread.** A photo is evidence of one specific consignment;
+> carrying last month's images onto a new booking would attach pictures of
+> batteries nobody has seen to a load nobody has assessed, and the agent would
+> arrive expecting the photographed goods. Same reasoning as 7B's "custody
+> photos only on `arrived` and `collected`". `preferredDate` and `notes` are
+> dropped for smaller reasons. Step 1 says all of this on screen.
+
+### Profile — phone, and the screens with no tab
+
+- Phone row with an inline edit form (`PhoneForm.tsx`, collapsed by default).
+- `updatePhone` goes through the **server Supabase client, not Prisma** — the
+  opposite of `addresses/actions.ts`, and for the opposite reason. Addresses
+  needed a transaction so it took Prisma and re-enforced ownership in code.
+  This is a single-column write with no invariant, and the thing worth keeping
+  is exactly what Prisma would bypass: the `grants.sql` column allowlist.
+  `phone` is on it; `role`, `kyc_status`, `wallet_balance_paise` and
+  `phone_verified` are not. **A bug here cannot escalate — the database refuses
+  the column.**
+- Validation is `normaliseIndianPhone` from `@clbipp/core`, the same normaliser
+  signup uses, so both paths store `+91XXXXXXXXXX`. Two formats in one column is
+  how a later SMS integration breaks on half the rows.
+- Clearing the field is supported: phone is nullable and optional at signup.
+- New "Manage" card links `/history`, `/invoices`, `/addresses`.
+
+### `/t/[token]` parity — the refactor, not a copy
+
+`/t/[token]` and `/track/[id]` carried ~120 duplicated lines each
+(`buildStages`, `safeBreakdown`, `RecoverySummary`, `LifecycleHeader`, the
+cancelled-card markup). The public page had fallen behind the authenticated one
+three times, always the same way: a change made in one file and not the other.
+
+**This is the same hazard Batch 7A fixed one layer down** — both files used to
+carry a private copy of `LIFECYCLE_STAGES` too. Copying the current layout
+across would have reset the clock, not fixed anything.
+
+New `packages/ui/src/components/ui/lifecycle-view.tsx` exports `buildStages`,
+`LifecycleHeader`, `RecoverySummary`, `CancelledTimeline` and
+`lastRecordedStage`. Both screens now render it.
+
+- **Both screens switched to `parseMaterialWeights` from `@clbipp/core`**, which
+  already drops `value_paise` defensively. This deletes the two private
+  `MaterialItem` types that *named* `value_paise` in screen files — a type
+  spelling out the one field the locked rule forbids rendering is a footgun one
+  autocomplete away from a violation. `RecoveredMaterialWeight` in the shared
+  component has nowhere to put a value, by design.
+- **The isolation is now an explicit prop, not an absence.** `/t` still gets no
+  photos (`includePhotos: false` skips *minting* the signed URLs, not just
+  hiding images), no partner card, no realtime, no auth-only CTA — and the
+  reasoning for each is written at the top of the file. Sharing the layout does
+  not share the data; do not relax one because the layouts now match.
+
+### Seed: deterministic public tokens — `/t` is finally smoke-tested
+
+`publicToken` defaulted to `gen_random_uuid()`, which changed on every reseed.
+That is why **the one screen with no session was the one screen `npm run smoke`
+could never cover.** `demoPublicToken` in `reset-demo.ts` now derives it from
+the pickup serial: `PKP-2026-000103` → `00000000-0000-4000-8000-000000000103`.
+Valid v4 shape, obviously synthetic.
+
+> **DEMO ROWS ONLY.** Real pickups keep the column default. The token is a
+> bearer capability for a real customer's data; a derivable one would let anyone
+> who knows a pickup id read its public page.
+
+### 🐛 A real bug in the smoke test itself
+
+`probe()` checked `mustNotContain` **before** `mustContain`, and returned
+`'guarded (correct)'` as soon as nothing leaked — **silently skipping every
+content assertion on any route that had both.** Harmless while the only user was
+`APP_REJECTS` (no `mustContain`), wrong the moment the `/t` routes needed to
+prove *both* that the page rendered *and* that the isolation held. Reordered,
+and routes asserting both now report `ok + isolation held` so it is visible that
+two checks ran rather than one.
+
+### Collateral fix — the last duplicate ₹ formatter
+
+`book/copy.ts` had its own `formatPaise` doing a local `/100`, which the
+repo-wide rule forbids. It survived Batch 8 for a real reason: `StepReview` is a
+**client** component, and a value import from the `@clbipp/core` barrel pulls in
+`booking-actions`/`payment-actions` — and therefore Prisma — at bundle time.
+
+Fixed properly with a subpath export: `@clbipp/core/format` → `documents.ts`,
+which imports nothing at all. Same split, same reasoning, as `@clbipp/auth`'s
+`storage` vs `storage-server`. `copy.ts` now re-exports rather than
+reimplements, so no caller changed.
+
+### Deploy prep — `docs/DEPLOY.md`
+
+Repo half only, per decision 1. Vercel project settings, the full env manifest,
+the Supabase redirect-URL steps, a PWA check, and the post-deploy
+`SMOKE_BASE_URL=` command.
+
+**The load-bearing fact in it:** the generated Prisma client is gitignored, so
+the Vercel build command **must** go through turbo
+(`cd ../.. && npx turbo run build --filter=customer`) — `turbo.json`'s
+`^db:generate` dependency is what generates it. A bare `next build` fails with
+missing types and an error that does not obviously point at Prisma.
+
+Also read-and-reported, **not** changed: the `middleware` → `proxy` deprecation
+(Next 16.2.6). It is a rename of the file enforcing the role gate and every
+route guard, and deploy day is the worst place to find out a renamed auth
+boundary behaves differently. Reasoning and a suggested handling are in §7 of
+`DEPLOY.md`.
+
+### Verified
+
+- `npm run build` green (**34 routes** — `/invoices`, `/invoices/[id]`,
+  `/history` new), `npm run lint --force` clean, **119 tests** (unchanged — see
+  the gap below).
+- `npm run reset-demo` — **required this batch**, the public tokens changed.
+- `npm run smoke` — **all 40 routes** (was 32). New: the three P2 screens, the
+  prefilled wizard, **three `/t/<token>` public routes fetched logged-out**, and
+  a 404 assertion for a well-formed unknown token.
+- `npm run smoke -- agent@test demo1234 --blocked` — all 40 correct: every new
+  *authenticated* route bounces, and the three `/t` routes correctly do **not**.
+- **The load-bearing assertions this batch** — both negative, in the 7B `token=`
+  tradition:
+  1. `/t/…103` must contain the custody log **and must NOT contain `token=`,
+     `Collection partner` or `Ravi Kumar`.** `token=` appears only if a signed
+     URL was minted, so its absence proves an anonymous bearer of a forwardable
+     link got no photo capability and no agent phone number.
+  2. `/book?from=PKP-2026-000109` must NOT contain `token=` either. The
+     verification below confirms that source pickup **genuinely has photos**, so
+     that is a real result rather than a vacuous one.
+- **Against the real database** (throwaway script, deleted after) — **20 checks,
+  all passing**: every `publicToken` equals the derived value and all ten are
+  distinct; the three ids smoke hard-codes are at the expected stages; a foreign
+  `vendorId` sees zero invoices and gets null on a real pickup id; invoice
+  `total = subtotal + tax`, lines sum to subtotal, amounts are integers, and the
+  **invoice total equals the settled payout**; the history buckets partition
+  every pickup; and the repeat-booking source has lines, an address and photos.
+
+### Known gaps in this batch
+
+- **`draftFromPickup` has no unit test**, which the plan called for. `CLAUDE.md`
+  is explicit that apps hold no tests and the customer app has no test runner,
+  and the function is app-local UI-draft logic that does not belong in
+  `packages/core`. Covered end-to-end instead by the `token=` absence assertion
+  above — arguably the stronger check, since it proves the whole path rather
+  than a literal `photos: []` in the source.
+- **No deployment exists.** Deliberate (decision 1). `docs/DEPLOY.md` §2–4 is
+  the click-through; it needs Aamir's Vercel and Supabase dashboards.
+- **`middleware` → `proxy` not done.** See above and `DEPLOY.md` §7.
+- **No invoice list filtering or CSV.** If one is ever wanted, it is a copy of
+  `compliance-export.ts` with a different `COLUMNS`.
+- **`/handover` still mutates on GET.** Untouched for the fourth batch running.
+  Still the highest-value small fix outstanding, and deliberately not bundled
+  into a P2-screens commit.
+- **Needs a real handset** (added to the manual list): the history filter chips
+  and the invoice line rows at phone width, and the profile phone form's
+  keyboard behaviour (`type="tel"`).
+
+---
+
+## ▶ Next: Batch 11 — Google / Apple sign-in
+
+Full brief is further down this file ("Batch 11 — Google / Apple sign-in"), and
+it is unchanged. The short version: **the OAuth wiring is the easy half**; the
+real work is that OAuth creates an `auth.users` row but no `profiles` row, and
+the Batch 6 role gate signs out any session whose profile read returns
+`PGRST116`. So the batch is OAuth **plus a post-callback `/onboarding` step**
+that collects account type + the individual/fleet fields.
+
+**What Batch 10 leaves teed up for it:**
+
+- **`docs/DEPLOY.md` §6 is the OAuth-origin checklist**, written while the
+  reasoning was fresh. Batch 11's dashboard work and the deploy's dashboard work
+  are the same pass.
+- **Prerequisites Aamir must do outside the repo**, and they gate testing:
+  a GCP OAuth client (free) for Google; a **paid Apple Developer account
+  ($99/yr)** for Apple. If the Apple account isn't wanted, ship Google alone.
+- The new profile write path (`updatePhone` in `profile/actions.ts`) is the
+  pattern `/onboarding`'s insert should follow: **server Supabase client, so the
+  `grants.sql` allowlist applies.** `role` must stay server-defaulted —
+  `authenticated` has no INSERT privilege on that column, and there is a unit
+  test asserting it.
+- `smoke.mjs` has four probe shapes now — `probe` (HTML, with both
+  `mustContain` and `mustNotContain` working since this batch), `probeDocument`
+  (PDF bytes), `probeExport` (CSV), plus the anonymous `/t` block. `/onboarding`
+  should land in `ROUTES` with content assertions.
 
 ### ⚠ Still true, still not a code task
 
@@ -1525,13 +1749,26 @@ npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
 npm run test           # 119 tests (20 decision-engine + 24 auth + 75 core)
 npm run lint           # add -- --force when turbo replays a stale cache hit
-npm run smoke          # 32 routes since Batch 9 — needs `npm run dev` running
+npm run smoke          # 40 routes since Batch 10 — needs `npm run dev` running
 npm run smoke -- agent@test demo1234 --blocked   # role gate MUST block these
+                       # (the three /t/<token> routes must NOT bounce)
 npm run reset-demo     # wipe + reseed: 10 pickups + Storage photos
                        # (slow — it uploads real objects; give it ~2 min)
 npm run create-buckets --workspace=@clbipp/database
 npm run db:migrate --workspace=@clbipp/database   # = prisma migrate dev
 ```
+
+> ⚠ **`npm run dev` straight after `npm run build` 404s EVERY route**, including
+> `/` and `/login`, with no error in the log — just "Ready in 355ms" and a wall
+> of 404s. `next build` and the Turbopack dev server share `apps/customer/.next`
+> and the production output confuses dev. Fix:
+> `rm -rf apps/customer/.next` and restart. Hit during Batch 10; it looks
+> exactly like a broken router, which is the trap.
+
+> **Public tracking links (Batch 10).** `publicToken` is now derived from the
+> pickup serial for demo rows, so these URLs are stable across reseeds:
+> `/t/00000000-0000-4000-8000-0000000001NN` where `NN` is the pickup number
+> (e.g. `…000103` = the `arrived` pickup). Real pickups still get a random token.
 
 > **Applying a hand-written migration:** `npm run db:migrate` runs
 > `prisma migrate dev`, which also diffs for drift. For a migration folder you
@@ -1630,6 +1867,9 @@ Items batches have explicitly deferred to one real-device pass:
    and it can only be checked on a handset. Also the payment screen's radio
    cards at phone width.
 6. **PWA install + offline**, and visual/layout polish generally.
+7. **Batch 10 screens at phone width** — the `/history` filter chips, the
+   `/invoices/[id]` line rows, and the `/profile` phone form's keyboard
+   (`type="tel"` should bring up the numeric pad).
 
 ---
 
@@ -1652,14 +1892,41 @@ Items batches have explicitly deferred to one real-device pass:
   screen in simulated mode rather than hiding it.
 - **`/handover` accepts the offer during a GET render** — see the Batch 6.5
   section. Excluded from the smoke test for that reason; should become a POST.
-  **Still the highest-value small fix outstanding**, and Batch 7A made it
-  slightly more urgent: a prefetch that fires `acceptOffer` now advances the one
-  pickup at `offered`, which is the only pickup the offer screens admit — so an
-  accidental accept doesn't just mutate demo data, it empties the offer demo.
+  **Still the highest-value small fix outstanding** (untouched in 7B, 8, 9 and
+  10), and Batch 7A made it slightly more urgent: a prefetch that fires
+  `acceptOffer` now advances the one pickup at `offered`, which is the only
+  pickup the offer screens admit — so an accidental accept doesn't just mutate
+  demo data, it empties the offer demo.
 - **The custody log renders photos on `/track/[id]` but not on `/t/[token]`.**
   Deliberate (the token is a forwardable bearer capability), and
   `includePhotos: false` skips minting the signed URLs rather than hiding them.
   Flag it if the company wants photos on the public link.
+  **Since Batch 10 this is asserted, not just intended**: the smoke test fetches
+  three `/t/<token>` routes logged-out and fails if `token=` or
+  `Collection partner` appears in the body.
+- **The lifecycle presentation is shared, the DATA is not** (Batch 10).
+  `/track/[id]` and `/t/[token]` now render the same components from
+  `@clbipp/ui/lifecycle-view`. Do not read "the layouts match" as licence to
+  pass the public page a partner card, photos or an auth-only CTA — the
+  isolation is an explicit prop and the reasoning is at the top of
+  `t/[token]/page.tsx`.
+- **Repeat booking never copies photos** (Batch 10). `/book?from=<id>` carries
+  category, lines and address only. A photo is evidence of one consignment;
+  see `draftFromPickup` in `book/types.ts` before "improving" this.
+- **Demo pickups have DERIVED public tokens** (Batch 10) so `/t` can be smoke
+  tested. Real pickups keep `gen_random_uuid()`. Don't extend the derivation to
+  real rows — a guessable bearer token is a leak.
+- **No unit test for `draftFromPickup`.** Apps hold no tests (`CLAUDE.md`) and
+  the customer app has no test runner; it is covered end-to-end by the
+  `token=`-absence assertion in `npm run smoke` instead.
+- **The app is not deployed** (Batch 10 decision, deliberate). `docs/DEPLOY.md`
+  holds the runbook; it happens after Batch 11 so OAuth redirect URLs are
+  registered once. ⚠ The Vercel build command **must** go through turbo — the
+  generated Prisma client is gitignored.
+- **`middleware` → `proxy` deprecation (Next 16) is unaddressed.** Read and
+  written up in `DEPLOY.md` §7, deliberately not changed in Batch 10: it renames
+  the file enforcing the role gate and every route guard, and it must stay under
+  `src/` whatever it is called.
 - **`wipeStorage` in `reset-demo.ts` is not a fix for orphaned draft uploads.** It
   sweeps the demo users' whole subtree in `pickup-photos` (and, since Batch 8,
   in `certificates` / `receipts` / `invoices`) on **reseed** — which is
@@ -1675,13 +1942,15 @@ Items batches have explicitly deferred to one real-device pass:
 - Bottom-nav clearance is owned by `(app)/layout.tsx` since Batch 6.5. New `(app)`
   screens must pass `hideNav` to `AppShell` and must **not** add their own bottom
   padding.
-- ~~CO₂ in the seed uses ~8 kg CO₂e/kg (Li-ion) inline~~ — **done in Batch 9**:
-  `packages/core/src/impact.ts` is the canonical per-chemistry table, with named
-  sources, published ranges, and a header saying plainly that these are
-  literature estimates rather than a certified LCA. **They still must be replaced
-  with the company's or a CPCB-accepted set before any real compliance filing** —
-  that swap is a value change in that one file (plus the copy restated in the
-  seed, which the Batch 9 drift check guards).
+- ~~CO₂ in the seed uses ~8 kg CO₂e/kg (Li-ion) inline~~ — **structurally fixed
+  in Batch 9**: `packages/core/src/impact.ts` is the canonical per-chemistry
+  table, and no screen or seed does CO₂ arithmetic anymore.
+  🔴 **But the VALUES are still a placeholder.** They are unsourced mid-range
+  picks and the paper attributions are unverified — see the Batch 9 known-gaps
+  entry. Only the *relative ordering* is defensible. **Waiting on the company
+  (open question 7)** rather than being researched, because EPR compliance may
+  mandate a CPCB-accepted factor set. Their answer is a value change in that one
+  file, plus the copy restated in the seed.
 - **The compliance CSV's column set is an open question for the company** (Batch
   9), same class as the invoice's zero `taxPaise`. `COLUMNS` in
   `apps/customer/src/lib/compliance-export.ts` is the single place their answer

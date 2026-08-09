@@ -1,34 +1,51 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@clbipp/database'
+import { parseMaterialWeights } from '@clbipp/core'
 import { AppShell, PagePadding } from '@clbipp/ui'
-import { Timeline, Connector } from '@clbipp/ui'
+import { Timeline } from '@clbipp/ui'
 import { Banner } from '@clbipp/ui'
 import { Card } from '@clbipp/ui'
-import { StatusBadge } from '@clbipp/ui'
 import { CustodyLog } from '@clbipp/ui'
-import { isLifecycleStage } from '@clbipp/ui'
+import {
+  buildStages,
+  CancelledTimeline,
+  lastRecordedStage,
+  LifecycleHeader,
+  RecoverySummary,
+} from '@clbipp/ui'
 import type { LifecycleStage } from '@clbipp/ui'
 import { buildCustodyEntries } from '@/lib/custody'
 
-// Public tracking view for `/t/<publicToken>`. Anyone holding the token can see
-// a pickup's lifecycle — no login required (see middleware: `/t` is a public
-// path). Prisma bypasses RLS on the service-role connection, so the token itself
-// is the capability. This route is deliberately self-contained: it mirrors the
-// authenticated /track/[id] screen's structure but strips everything that needs
-// a session (back-nav, realtime, the auth-only certificate link). Renders no
-// vendor identity and no ₹ value / recovery-rate — same locked rules as the
-// authenticated screen.
-
-// Offer.materialBreakdown JSON shape (stable keys — do not rename without
-// updating every consumer). value_paise must NEVER be displayed on vendor screens.
-type MaterialItem = {
-  material: string
-  weight_kg: number
-  value_paise: number
-}
-
-// Stage order comes from LIFECYCLE_STAGES in @clbipp/ui via `isLifecycleStage`
-// — the local duplicate that used to live here was removed in Batch 7A.
+// ─── /t/<publicToken> — the public tracking view ─────────────────────────────
+// Anyone holding the token can see a pickup's lifecycle — no login (see
+// middleware: `/t` is a public path). Prisma bypasses RLS on the service-role
+// connection, so THE TOKEN ITSELF IS THE CAPABILITY.
+//
+// Batch 10: the lifecycle presentation is now shared with /track/[id] via
+// @clbipp/ui/lifecycle-view instead of being a copy of it. That is the parity
+// fix — this page had drifted behind the authenticated one three times, always
+// because a change was made in one file and not the other.
+//
+// ⚠ SHARING THE LAYOUT DOES NOT SHARE THE DATA. Everything withheld from an
+// anonymous viewer is still withheld, and it is withheld deliberately:
+//
+//   · NO PHOTOS. `includePhotos: false` SKIPS MINTING THE SIGNED URLS ENTIRELY
+//     rather than hiding rendered images — an unrendered signed URL is still a
+//     live capability if it reaches the client. This token is a bearer
+//     capability that can be forwarded to anyone, and photos of a customer's
+//     premises and stock are more sensitive than the stage timestamps and
+//     recovered weights this page already shows.
+//   · NO PARTNER CARD. An anonymous link must not hand out an agent's personal
+//     phone number.
+//   · NO REALTIME. The subscription runs on the anon browser client, which RLS
+//     scopes to the owning vendor — it would silently no-op here.
+//   · NO AUTH-ONLY CTAs. /offer, /certificates, /payment and /receipt would all
+//     bounce an anonymous viewer to /login.
+//   · NO VENDOR IDENTITY, and no ₹ / recovery-rate — same locked rules as the
+//     authenticated screen.
+//
+// Deliberate defaults. Flag them if the company wants otherwise; don't relax
+// one because the layouts now match.
 
 // publicToken is a Postgres uuid column — passing a non-UUID string makes the
 // query throw on cast rather than return null. Guard the format so a garbage
@@ -36,77 +53,6 @@ type MaterialItem = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 function isUuid(value: string) {
   return UUID_RE.test(value)
-}
-
-function buildStages(
-  events: Array<{ status: string; occurredAt: Date }>
-): Partial<Record<LifecycleStage, { timestamp: string }>> {
-  const map: Partial<Record<LifecycleStage, { timestamp: string }>> = {}
-  for (const e of events) {
-    if (isLifecycleStage(e.status)) {
-      map[e.status] = {
-        timestamp: new Date(e.occurredAt).toLocaleDateString('en-IN', {
-          day: '2-digit',
-          month: 'short',
-        }),
-      }
-    }
-  }
-  return map
-}
-
-function safeBreakdown(json: unknown): MaterialItem[] {
-  return Array.isArray(json) ? (json as MaterialItem[]) : []
-}
-
-function LifecycleHeader({ status }: { status: LifecycleStage }) {
-  return (
-    <div className="flex items-center justify-between">
-      <p className="text-xs font-bold uppercase tracking-widest text-text-secondary">Lifecycle</p>
-      <StatusBadge status={status} />
-    </div>
-  )
-}
-
-// Recovery summary: stat box (kg) + expandable material breakdown.
-// ₹ values and recovery rate are intentionally omitted — locked rule.
-function RecoverySummary({ breakdown }: { breakdown: MaterialItem[] }) {
-  const totalKg = breakdown.length > 0
-    ? breakdown.reduce((sum, item) => sum + (item.weight_kg ?? 0), 0)
-    : null
-  return (
-    <Card>
-      <p className="text-xs font-bold uppercase tracking-widest text-text-secondary mb-3">
-        Recovery summary
-      </p>
-      <div className="inline-flex flex-col rounded-lg border border-border px-4 py-3">
-        <span className="text-2xl font-bold text-text-primary">
-          {totalKg !== null ? `${totalKg} kg` : '—'}
-        </span>
-        <span className="text-xs text-text-secondary mt-0.5">
-          {totalKg !== null ? 'Recovered' : 'Pending finalisation'}
-        </span>
-      </div>
-      {breakdown.length > 0 && (
-        <details className="mt-4">
-          <summary className="cursor-pointer select-none text-sm font-medium text-text-primary">
-            View material breakdown
-          </summary>
-          <ul className="mt-3 flex flex-col">
-            {breakdown.map((item) => (
-              <li
-                key={item.material}
-                className="flex justify-between border-t border-border py-2 text-sm"
-              >
-                <span className="text-text-secondary">{item.material}</span>
-                <span className="font-medium text-text-primary">{item.weight_kg} kg</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </Card>
-  )
 }
 
 export default async function PublicTrackPage({
@@ -129,16 +75,9 @@ export default async function PublicTrackPage({
 
   const stages = buildStages(pickup.statusEvents)
   const status = pickup.status
-  const breakdown = safeBreakdown(pickup.offer?.materialBreakdown)
+  const materials = parseMaterialWeights(pickup.offer?.materialBreakdown)
 
-  // Timestamps and GPS, but NOT photos — and `includePhotos: false` skips
-  // minting the signed URLs entirely rather than just hiding the images.
-  //
-  // Deliberate default, flag it if the company wants otherwise: this token is a
-  // bearer capability that can be forwarded to anyone, and photos of a
-  // customer's premises and stock are more sensitive than the stage timestamps
-  // and recovered weights this page already shows. No partner card here either
-  // — an anonymous link should not hand out an agent's personal phone number.
+  // Timestamps and GPS, but NOT photos — see the isolation note above.
   const custody = await buildCustodyEntries(pickup.statusEvents, { includePhotos: false })
 
   // hideNav drops the bottom tab bar and its padding — anonymous visitors have
@@ -146,27 +85,10 @@ export default async function PublicTrackPage({
 
   // ── Cancelled ─────────────────────────────────────────────────────────────
   if (status === 'cancelled') {
-    const lastLifecycleEvent = [...pickup.statusEvents]
-      .reverse()
-      .find(e => isLifecycleStage(e.status))
-    const lastStage = (lastLifecycleEvent?.status ?? 'requested') as LifecycleStage
     return (
       <AppShell title={pickup.id} hideNav>
         <PagePadding className="flex flex-col gap-4">
-          <Card className="overflow-visible">
-            <Timeline currentStage={lastStage} stages={stages} />
-            <Connector completed={false} />
-            <div className="flex items-start gap-3">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-error">
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                  <path d="M3 3l4 4M7 3l-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </span>
-              <div className="flex-1 min-h-[1.75rem] pb-0.5">
-                <span className="block text-sm font-semibold leading-tight text-error">Cancelled</span>
-              </div>
-            </div>
-          </Card>
+          <CancelledTimeline lastStage={lastRecordedStage(pickup.statusEvents)} stages={stages} />
           <Banner variant="error">This pickup was cancelled.</Banner>
           <CustodyLog entries={custody} showPhotos={false} />
         </PagePadding>
@@ -176,7 +98,8 @@ export default async function PublicTrackPage({
 
   // ── Pre-collection (requested / scheduled / arrived / offered) ────────────
   // Mirrors the authenticated screen's bucket, minus the offer call to action:
-  // /offer is auth-only and would bounce an anonymous viewer to /login.
+  // /offer is auth-only and would bounce an anonymous viewer to /login. The
+  // copy is third-person throughout — this reader is not the vendor.
   if (
     status === 'requested' ||
     status === 'scheduled' ||
@@ -231,7 +154,7 @@ export default async function PublicTrackPage({
           <Card className="overflow-visible">
             <Timeline currentStage="recovered" stages={stages} pulse />
           </Card>
-          <RecoverySummary breakdown={breakdown} />
+          <RecoverySummary materials={materials} />
           <Banner variant="tinted">
             The EPR certificate becomes available once certified.
           </Banner>
@@ -251,7 +174,7 @@ export default async function PublicTrackPage({
         <Card>
           <Timeline currentStage="certified" stages={stages} />
         </Card>
-        <RecoverySummary breakdown={breakdown} />
+        <RecoverySummary materials={materials} />
         <Banner variant="success">This pickup has been certified.</Banner>
         <CustodyLog entries={custody} showPhotos={false} />
       </PagePadding>

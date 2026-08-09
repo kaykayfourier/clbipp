@@ -41,10 +41,22 @@ export const CONDITION_HINTS: Record<BatteryCondition, string> = {
 // Order runs healthy → hazardous, so the safe default sits first.
 export const CONDITION_ORDER: BatteryCondition[] = ['healthy', 'dead', 'swollen', 'leaking']
 
-/** Paise → "₹1,84,500". Same convention as formatOfferPrice in @clbipp/core. */
-export function formatPaise(paise: number): string {
-  return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-}
+/**
+ * Paise → "₹1,84,500". RE-EXPORTED, not reimplemented.
+ *
+ * This used to be a second local implementation, which the repo-wide rule
+ * ("format ₹ with formatPaise from @clbipp/core, never a local /100")
+ * specifically forbids. It survived Batch 8 for a real reason: `StepReview` is
+ * a CLIENT component, and a value import from the `@clbipp/core` barrel pulls
+ * in `booking-actions` / `payment-actions` — and therefore Prisma — at bundle
+ * time.
+ *
+ * The subpath fixes that properly. `@clbipp/core/format` resolves to
+ * `documents.ts`, which imports nothing at all, so a client component can value
+ * import it safely. Same split, and the same reasoning, as @clbipp/auth's
+ * `storage` vs `storage-server`.
+ */
+export { formatPaise } from '@clbipp/core/format'
 
 export const STEP_TITLES = [
   'What are we collecting?',

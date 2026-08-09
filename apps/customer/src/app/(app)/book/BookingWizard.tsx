@@ -19,6 +19,7 @@ import {
   parseWeight,
   type AddressOption,
   type DraftItem,
+  type InitialDraft,
 } from './types'
 
 // ─── The 4-step booking wizard ───────────────────────────────────────────────
@@ -37,17 +38,31 @@ const TOTAL_STEPS = 4
 export function BookingWizard({
   userId,
   addresses,
+  initialDraft = null,
 }: {
   userId: string
   addresses: AddressOption[]
+  /**
+   * Batch 10 — "book this again". A draft copied from a past pickup (see
+   * `draftFromPickup`). Seeds the initial state only; from the first keystroke
+   * onward this is an ordinary draft with no link back to its source.
+   */
+  initialDraft?: InitialDraft | null
 }) {
   const [step, setStep] = useState(1)
 
-  const [category, setCategory] = useState<BatteryCategory | null>(null)
-  const [items, setItems] = useState<DraftItem[]>([emptyItem()])
+  const [category, setCategory] = useState<BatteryCategory | null>(
+    initialDraft?.category ?? null,
+  )
+  const [items, setItems] = useState<DraftItem[]>(initialDraft?.items ?? [emptyItem()])
   const [addressId, setAddressId] = useState<string>(
-    // Preselect the default so the common case is zero taps on step 3.
-    () => addresses.find((a) => a.isDefault)?.id ?? addresses[0]?.id ?? '',
+    // Preselect the copied address if it's still bookable, else the default, so
+    // the common case is zero taps on step 3.
+    () =>
+      initialDraft?.addressId ??
+      addresses.find((a) => a.isDefault)?.id ??
+      addresses[0]?.id ??
+      '',
   )
   const [preferredDate, setPreferredDate] = useState('')
   const [notes, setNotes] = useState('')
@@ -141,6 +156,18 @@ export function BookingWizard({
     >
       <PagePadding className="flex flex-col gap-4 pb-8">
         <StepHeader step={step} />
+
+        {/* Said out loud rather than left for the customer to notice. A wizard
+            that silently arrives pre-filled is confusing, and the photo
+            exclusion in particular is something they need to know BEFORE they
+            reach step 2 and wonder where their pictures went. */}
+        {initialDraft && step === 1 && (
+          <Banner variant="info">
+            Copied from {initialDraft.sourcePickupId} — same category, lines and
+            address. Add fresh photos for this load; the old ones stay with the
+            pickup they were taken for.
+          </Banner>
+        )}
 
         {step === 1 && <StepCategory value={category} onChange={setCategory} />}
 

@@ -1,4 +1,4 @@
-import type { BatteryCondition } from '@clbipp/database'
+import type { BatteryCategory, BatteryCondition } from '@clbipp/database'
 
 // ─── Wizard draft shapes ─────────────────────────────────────────────────────
 // Shared by the wizard and its four step components. Deliberately separate from
@@ -47,6 +47,67 @@ export function emptyItem(): DraftItem {
     weightKg: '',
     condition: 'healthy',
     photos: [],
+  }
+}
+
+// ─── Repeat booking (Batch 10) ───────────────────────────────────────────────
+
+/** What `/book?from=<pickupId>` carries over into a fresh draft. */
+export type InitialDraft = {
+  category: BatteryCategory
+  items: DraftItem[]
+  addressId: string | null
+  /** The pickup this was copied from — the wizard says so on step 1. */
+  sourcePickupId: string
+}
+
+/** The subset of a past pickup's line that can seed a new one. */
+export type SourceLine = {
+  quantity: number
+  /** Prisma Decimal is mapped to a number (or null) by the caller. */
+  weightKg: number | null
+  condition: BatteryCondition
+}
+
+/**
+ * Build a fresh wizard draft from a past pickup.
+ *
+ * Pure, so it can be tested without a database or a browser.
+ *
+ * ⚠ PHOTOS ARE DELIBERATELY NOT COPIED, and that is the point of this function
+ * existing rather than a spread. A photo is evidence of one specific
+ * consignment. Carrying last month's images onto a new booking would attach
+ * pictures of batteries nobody has seen to a load nobody has assessed — the
+ * agent would arrive expecting the photographed goods. Same reasoning that put
+ * custody photos only on `arrived` and `collected` in Batch 7B.
+ *
+ * `preferredDate` and `notes` are dropped for smaller reasons: the date is in
+ * the past, and the notes described a different load.
+ */
+export function draftFromPickup(source: {
+  pickupId: string
+  category: BatteryCategory
+  addressId: string | null
+  lines: SourceLine[]
+}): InitialDraft {
+  const items: DraftItem[] = source.lines.map((line, index) => ({
+    // Index-based rather than time+random: this array is built once, in one
+    // pass, and a deterministic key keeps the function pure (and testable).
+    key: `from-${source.pickupId}-${index}`,
+    quantity: String(line.quantity),
+    weightKg: line.weightKg === null ? '' : String(line.weightKg),
+    condition: line.condition,
+    photos: [],
+  }))
+
+  return {
+    category: source.category,
+    // A pickup with no BatteryItem rows (the handful of legacy ones) has
+    // nothing to copy, so fall back to a single blank line rather than an empty
+    // basket the customer then has to notice is empty.
+    items: items.length > 0 ? items : [emptyItem()],
+    addressId: source.addressId,
+    sourcePickupId: source.pickupId,
   }
 }
 

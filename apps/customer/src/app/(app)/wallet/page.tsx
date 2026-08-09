@@ -114,11 +114,18 @@ export default async function WalletPage() {
           your bank when you accept them.
         </Banner>
 
-        <Link href="/dashboard">
-          <Button variant="secondary" fullWidth>
-            Back to home
-          </Button>
-        </Link>
+        <div className="flex flex-col gap-3">
+          <Link href="/invoices">
+            <Button variant="secondary" fullWidth>
+              View invoices
+            </Button>
+          </Link>
+          <Link href="/dashboard">
+            <Button variant="ghost" fullWidth>
+              Back to home
+            </Button>
+          </Link>
+        </div>
       </PagePadding>
     </AppShell>
   )
