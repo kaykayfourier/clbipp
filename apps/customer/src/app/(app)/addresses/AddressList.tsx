@@ -81,7 +81,9 @@ export function AddressCard({ address }: { address: AddressCardData }) {
             </p>
 
             {address.hasCoords && (
-              <p className="mt-1 text-[11px] text-text-secondary">📍 GPS location saved</p>
+              <p className="mt-1 text-[11px] text-text-secondary">
+                📍 Map pin saved for the collection partner
+              </p>
             )}
           </div>
         </div>

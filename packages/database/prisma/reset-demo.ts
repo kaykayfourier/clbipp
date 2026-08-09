@@ -483,7 +483,14 @@ async function seed() {
       ])
     }
 
-    if (reachedIndex >= LIFECYCLE.indexOf("recovered")) {
+    // An Offer exists from `scheduled` onward. The locked model treats the offer
+    // as a sub-state of `scheduled` ("an Offer row exists"), and offer/page.tsx
+    // only admits `requested` or `scheduled` — so seeding offers from
+    // `recovered`, as this did, meant every pickup carrying an offer was already
+    // past the stage that renders it. The offer screens were unreachable in the
+    // demo: the offer-bearing pickups redirected to /track, and the one
+    // `scheduled` pickup had no offer and redirected to /scheduled.
+    if (reachedIndex >= LIFECYCLE.indexOf("scheduled")) {
       await prisma.offer.create({
         data: {
           pickupId: spec.id,
@@ -499,7 +506,10 @@ async function seed() {
             { material: "Copper", weight_kg: Math.round(weight * 0.09) },
           ],
           deductions: [],
-          createdAt: day(spec.daysAgo - 5),
+          // Clamped: the `scheduled` pickup is only 3 days old, so the old
+          // unclamped `daysAgo - 5` would have dated its offer 2 days into the
+          // future.
+          createdAt: day(Math.max(spec.daysAgo - 5, 0)),
         },
       })
     }

@@ -60,6 +60,7 @@ export default async function OfferPage({ searchParams }: PageProps) {
       title={`Offer · ${pickup.id}`}
       showBack
       backHref={`/scheduled?id=${pickup.id}`}
+      hideNav
     >
       <PagePadding className="flex flex-col gap-5">
 

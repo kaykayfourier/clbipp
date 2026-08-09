@@ -12,10 +12,8 @@ import { logout } from './actions'
 // The wireframe HTML shows an "Avg recovery rate" row — that is stale and is
 // intentionally not rendered here.
 
-// The bottom tab bar lives in (app)/layout.tsx, so AppShell renders with
-// hideNav; this restores the bottom padding hideNav would otherwise drop, so
-// content clears the fixed nav bar. (Same pattern as the tracking screen.)
-const NAV_PADDING = 'pb-[calc(4rem+env(safe-area-inset-bottom,0px))]'
+// The bottom tab bar lives in (app)/layout.tsx, which also owns the clearance
+// under it, so AppShell only needs hideNav to avoid rendering a second bar.
 
 // Up-to-two-letter monogram for the avatar, from the account's display name.
 function initials(name: string): string {
@@ -100,7 +98,7 @@ export default async function ProfilePage() {
   const recycledKg = Number(weightAgg._sum.totalWeightKg ?? 0)
 
   return (
-    <AppShell title="Profile" hideNav contentClassName={NAV_PADDING}>
+    <AppShell title="Profile" hideNav>
       <PagePadding className="flex flex-col gap-4">
         {/* Identity */}
         <Card className="flex items-center gap-3">

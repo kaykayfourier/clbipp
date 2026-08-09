@@ -8,8 +8,8 @@ import { AppShell, Button, PagePadding } from '@clbipp/ui'
 import { AddressCard } from './AddressList'
 
 // AppShell renders its own BottomTabBar unless hideNav is set, and (app)/layout
-// already renders one — so hideNav + manual bottom padding, same as track/[id].
-const NAV_PADDING = 'pb-[calc(4rem+env(safe-area-inset-bottom,0px))]'
+// already renders one (and owns the clearance under it) — so hideNav, same as
+// track/[id].
 
 export default async function AddressesPage() {
   const result = await getCurrentProfile()
@@ -23,7 +23,7 @@ export default async function AddressesPage() {
   })
 
   return (
-    <AppShell title="Pickup addresses" showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+    <AppShell title="Pickup addresses" showBack backHref="/dashboard" hideNav>
       <PagePadding className="flex flex-col gap-4">
         {addresses.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center">

@@ -32,7 +32,7 @@ export default async function HandoverPage({ searchParams }: PageProps) {
 
   if (acceptError) {
     return (
-      <AppShell title="Handover" showBack backHref={`/offer?id=${id}`}>
+      <AppShell title="Handover" showBack backHref={`/offer?id=${id}`} hideNav>
         <PagePadding>
           <ErrorState
             heading="Couldn't confirm handover"

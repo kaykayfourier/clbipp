@@ -3,7 +3,6 @@ import { AppShell, PagePadding } from '@clbipp/ui'
 import { AddressForm } from '../AddressForm'
 import { createAddress } from '../actions'
 
-const NAV_PADDING = 'pb-[calc(4rem+env(safe-area-inset-bottom,0px))]'
 
 // Server shell around the client form. Validation failures come back as
 // ?error= rather than a thrown exception so the screen still renders.
@@ -20,7 +19,6 @@ export default async function NewAddressPage({
       showBack
       backHref="/addresses"
       hideNav
-      contentClassName={NAV_PADDING}
     >
       <PagePadding className="flex flex-col gap-4">
         {error ? (

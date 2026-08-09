@@ -36,7 +36,24 @@ const ROUTES = [
   '/track',
   '/profile',
   '/compliance',
+  // The offer flow. These take an ?id= and are status-guarded, so before the
+  // Batch 6.5 seed fix they redirected for every seeded pickup and could not be
+  // demoed at all. They are content-asserted below precisely so a silent
+  // regression to redirecting shows up as a failure rather than a green 307.
+  '/offer?id=PKP-2026-000102',
+  '/offer-breakdown?id=PKP-2026-000102',
+  // ⚠ Do NOT add '/handover?id=…' here. That page calls acceptOffer() during
+  // render, so a plain GET advances the pickup to `collected` — it would mutate
+  // the demo data on every run and break the two offer routes above, which need
+  // a pickup still at `scheduled`. See the Batch 6.5 notes.
 ]
+
+// Content that must appear on a logged-in route. A redirect returns no body, so
+// asserting on text is also what proves the route RENDERED rather than bounced.
+const APP_CONTENT = {
+  '/offer?id=PKP-2026-000102': ['Estimated Offer', 'Why this price?'],
+  '/offer-breakdown?id=PKP-2026-000102': ['Estimated Value', 'Why this valuation?'],
+}
 
 // Public auth screens. Checked separately because the role gate must NOT touch
 // them — if `--blocked` bounced these too, a rejected agent would have no way
@@ -139,11 +156,19 @@ async function main() {
     const redirectedToLogin = note.includes('/login')
     const missing = mustContain.filter((s) => !body.includes(s))
 
+    // Exactly one bottom tab bar. AppShell renders its own unless `hideNav` is
+    // passed, and (app)/layout.tsx renders one for every authenticated screen —
+    // so a page that forgets `hideNav` stacks two. Cheap to assert, and it can
+    // only regress by someone adding an AppShell without the flag.
+    const navCount = (body.match(/aria-label="Main navigation"/g) ?? []).length
+    const badNav = status === 200 && !anon && navCount !== 1
+
     let verdict
     if (errored || status >= 500) verdict = 'ERROR PAGE'
     else if (expectBounce) verdict = redirectedToLogin ? 'blocked (correct)' : 'LEAKED THROUGH'
     else if (redirectedToLogin) verdict = 'BOUNCED TO LOGIN'
     else if (missing.length) verdict = `MISSING: ${missing.join(' | ')}`
+    else if (badNav) verdict = `${navCount} TAB BARS (expected 1)`
     else verdict = 'ok'
 
     if (verdict !== 'ok' && verdict !== 'blocked (correct)') failures++
@@ -151,7 +176,14 @@ async function main() {
   }
 
   console.log('  — app routes —')
-  for (const route of ROUTES) await probe(route, { expectBounce: blocked })
+  for (const route of ROUTES) {
+    // In --blocked mode the pass condition is a bounce to /login, so there is no
+    // body to assert against.
+    await probe(route, {
+      expectBounce: blocked,
+      mustContain: blocked ? [] : (APP_CONTENT[route] ?? []),
+    })
+  }
 
   // Fetched WITHOUT the session cookie — that is the state they're built for,
   // and a logged-in hit on /login legitimately redirects to /dashboard, which

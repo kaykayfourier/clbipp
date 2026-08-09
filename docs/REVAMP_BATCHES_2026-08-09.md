@@ -23,10 +23,12 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 4 | A2/A3 — address book + storage upload helper | A | ✅ done, committed `73bc512` |
 | 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | ✅ done, committed `a8684fa` |
 | 6 | **A1 — email OTP + `/verify` + roles** | A | ✅ done, staged |
+| 6.5 | **Demo-blocking fixes from the first manual pass** | A | ✅ done, staged |
 | 7 | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | ⏭ **next — start here** |
 | 8 | B3/B6 — PDF generation + payment + receipt screens | B | pending |
 | 9 | B4/B5 — dashboard impact (CO₂) + compliance CSV | B | pending |
 | 10 | P2 screens (wallet, invoices, history, profile, `/t` parity) + **deploy** | A | pending |
+| 11 | **Google / Apple sign-in** (new — see below, has a real blocker) | A | pending |
 
 **Cut order if time runs short** (Plan v2 §8): P2 screens → wallet → invoices →
 receipt PDF (keep the screen) → address GPS.
@@ -50,6 +52,17 @@ Two things Batch 6 leaves teed up for it:
   has a real number to show for agent profiles rather than a placeholder. The
   seeded `agent@test` profile has one.
 
+### ⚠ Read the Batch 6.5 section below first
+
+Batch 6.5 (the first manual test pass) landed between 6 and 7 and changed two
+things Batch 7 touches directly:
+
+- **Bottom-nav clearance is now owned by `(app)/layout.tsx`.** Do not add
+  `contentClassName={NAV_PADDING}` to a new screen — it will double-pad. Any new
+  `(app)` screen using `AppShell` must pass `hideNav`.
+- **Offers now exist from `scheduled` onward in the seed**, so the offer screens
+  are reachable and smoke-covered. `PKP-2026-000102` is the offer demo pickup.
+
 ### ⚠ One thing to action before the demo (not a code task)
 
 Email OTP delivers a **6-digit code only if the Supabase email template contains
@@ -60,6 +73,159 @@ screen to be the actual demo path, edit
 *Authentication → Email Templates → Magic Link* in the Supabase dashboard to
 include `{{ .Token }}`. That is dashboard config, not repo state, so it cannot be
 committed here.
+
+---
+
+## What Batch 6.5 delivered — first manual test pass, demo-blocking fixes
+
+Aamir ran the first manual pass since the revamp began. Five findings; three were
+fixed here, two are deferred with write-ups below.
+
+### The scroll bug was one root cause, not three
+
+Reported as: the last dashboard pickup is clipped, the booking wizard's Back
+button is unreachable, and `/submitted`'s "back to home" is unreachable — all
+only visible by over-scrolling.
+
+`(app)/layout.tsx` renders a `position: fixed` `BottomTabBar` for every
+authenticated screen, but **clearance under it was each page's own job**
+(`contentClassName={NAV_PADDING}` on `AppShell`). Pages forgot. The audit:
+
+| Screen | State before |
+|---|---|
+| `dashboard` | No `AppShell` at all → no clearance |
+| `book/BookingWizard` · `submitted` · `handover` | `hideNav` passed, padding not → bottom control fully under the bar |
+| `track/[id]` · `profile` · `addresses` · `addresses/new` | Padded, but at `4rem` = 64px against a ~66px bar |
+
+**Fix: the layout that renders the bar now pays for it.** `(app)/layout.tsx`
+wraps `{children}` in `pb-[calc(5rem+env(safe-area-inset-bottom,0px))]`, and the
+per-page `NAV_PADDING` consts are deleted. A page cannot opt out of a bar it
+doesn't render, so it shouldn't have been the page's responsibility.
+
+**Convention going forward:** never add bottom-nav padding to an `(app)` screen.
+Do pass `hideNav` to `AppShell` there — the layout already renders the bar.
+
+### Two further defects found while tracing it
+
+1. **`pb-safe` was a no-op.** `packages/ui/src/components/ui/tabs.tsx` used
+   `pb-safe`, which is not a Tailwind v4 built-in and is defined nowhere in this
+   repo — it compiled to nothing, so the tab bar had **no iOS home-indicator
+   allowance at all**. Now `pb-[env(safe-area-inset-bottom,0px)]`.
+2. **Double tab bar.** `offer`, `offer-breakdown`, `scheduled` and `handover`'s
+   error branch called `AppShell` *without* `hideNav`, so `AppShell` rendered a
+   second `BottomTabBar` on top of the layout's. All four now pass `hideNav`, and
+   the smoke test asserts **exactly one** `aria-label="Main navigation"` per
+   authenticated page so it can't come back.
+
+### Offer screens were unreachable — a seed gap, not a bug
+
+`offer/page.tsx` Guard 3 admits only `requested` or `scheduled`, but
+`reset-demo.ts` created offers only from `recovered` onward. So every pickup with
+an offer was already past the stage that renders it, and the one `scheduled`
+pickup had no offer. **No seeded pickup could satisfy both conditions**, and both
+offer screens redirected for every id.
+
+This also contradicted the locked model in `PROJECT_STATE.md` — "the offer is a
+sub-state of `scheduled` (an Offer row exists)" — so the seed was what was wrong.
+Offers are now created from `scheduled` onward (6 offers, was 2), and
+`createdAt` is clamped with `Math.max(spec.daysAgo - 5, 0)` because the
+`scheduled` pickup is only 3 days old and the old arithmetic dated its offer two
+days into the **future**.
+
+**`PKP-2026-000102` (scheduled, automotive) is the offer demo pickup.**
+`/offer?id=PKP-2026-000102` and `/offer-breakdown?id=…` are now in the smoke
+test with content assertions — a redirect returns no body, so asserting on text
+is what proves the screen rendered rather than bounced.
+
+### GPS in the address form now explains itself
+
+The capture worked correctly all along — `lat`/`lng` flow into `Decimal(10,7)`
+columns and are read by nobody *yet* (the field agent app navigates by them;
+Batch 7's custody log renders per-event GPS). It read as broken because it never
+autofills the form. `AddressForm.tsx` now shows the coordinates to 5 dp, links to
+a plain `google.com/maps?q=` URL to sanity-check the pin (no API key, no
+billing), and says the pin is saved *alongside* the typed address rather than
+replacing it. No schema or action change.
+
+**Reverse-geocode autofill was considered and rejected for now** — Google
+Geocoding needs a billed key, and free OSM/Nominatim has rate limits and weaker
+Indian address coverage. Revisit if the company asks for it.
+
+### 🚩 Flagged, NOT fixed — `/handover` mutates on GET
+
+`handover/page.tsx` calls `acceptOffer(id)` **during render of a GET request**,
+advancing the pickup to `collected`. Consequences:
+
+- It is deliberately **excluded from the smoke test**, which is documented as
+  read-only — including it would advance `PKP-2026-000102` on every run and break
+  the two offer routes. There's a comment in `scripts/smoke.mjs` saying so.
+- More seriously, a link prefetch, a bot, or a browser preload can accept an
+  offer with no user intent. `handover/loading.tsx` exists, so Next's default
+  partial prefetch probably stops at the loading boundary today — but that is a
+  framework detail holding up a correctness guarantee, not a design.
+
+**The fix is to make accepting a POST / form action** rather than a page render.
+Left alone here because it changes the accept flow's shape and the demo path
+works as-is. Worth a small task before launch.
+
+### Verified
+
+- `npm run build` green (**26 routes**), `npm run lint` clean (forced past the
+  turbo cache), **78 tests** (unchanged — this batch adds no new logic).
+- `npm run reset-demo` then `npm run smoke` — **all 13 routes** ok, including the
+  two new offer routes at 200 with their content assertions, and exactly one tab
+  bar on every authenticated page.
+- `npm run smoke -- agent@test demo1234 --blocked` — all 13 still bounce, so the
+  role gate survived the layout change; the new offer routes bounce too.
+- **Against the real database** (throwaway script, deleted after): the seed is
+  still 8 pickups; offers went 2 → 6; **no offer is future-dated**; and exactly
+  one offer (`PKP-2026-000102`) is reachable through the `/offer` status guard.
+
+### Deferred out of this batch
+
+- **Google / Apple sign-in → Batch 11** (see below). Not a small change.
+- **Certificate template** → the company will supply the authoritative format.
+  Batch 8 must build PDF generation with the layout swappable, not hard-coded.
+
+---
+
+## Batch 11 — Google / Apple sign-in (new, deferred from 6.5)
+
+Requested by Aamir. **The OAuth wiring is the easy half.** The real blocker:
+
+**OAuth creates an `auth.users` row but no `profiles` row**, and the Batch 6 role
+gate signs out any session whose profile read returns `PGRST116`. So a Google
+sign-in today would land, be found profile-less, be signed out, and bounce to
+`/login` — the exact unrecoverable loop that `shouldCreateUser: false` was added
+to prevent for OTP (Batch 6 decision 1).
+
+It cannot be fixed by relaxing the gate: the app genuinely needs `vendor_type`
+(individual vs fleet), which decides which business fields and which KYC apply,
+and OAuth never collects it.
+
+**So the batch is really: OAuth + a post-callback onboarding step.**
+
+1. `signInWithOAuth({ provider })` in `packages/auth/src/supabase/auth.ts`,
+   redirecting to the existing `/auth/callback` — which already handles the PKCE
+   `?code=` shape and already refuses off-origin `next` values.
+2. `/auth/callback` gains a branch: session exists but no `profiles` row →
+   redirect to a new `/onboarding` that collects account type + the individual or
+   fleet fields, then inserts the profile row through the same allowlisted path
+   `signUpWithProfile` uses (remember `role` must stay server-defaulted —
+   `grants.sql` has no INSERT privilege on that column, and there's a unit test).
+3. Buttons on `/login` and `/signup`.
+
+**Prerequisites Aamir must do in dashboards, not in the repo:**
+
+- **Google** — free: a GCP OAuth client, then client id/secret into Supabase
+  → Authentication → Providers → Google. Add the callback URL for both
+  `localhost:3000` and the deployed origin.
+- **Apple** — needs a **paid Apple Developer account ($99/yr)**. Nothing is
+  testable before that exists, so if the account isn't wanted, ship Google alone
+  and leave Apple as a follow-up.
+
+Note this interacts with deploy (Batch 10): OAuth redirect URLs are per-origin,
+so the Vercel URL has to be registered with both providers.
 
 ---
 
@@ -524,6 +690,7 @@ just needs to know so he doesn't re-introduce it from an older copy.
 npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
 npm run test           # 78 tests (20 decision-engine + 24 auth + 34 core)
+npm run smoke          # 13 routes since Batch 6.5 (incl. the two offer screens)
 npm run lint           # add -- --force when turbo replays a stale cache hit
 npm run smoke          # logged-in smoke test — needs `npm run dev` running
 npm run smoke -- agent@test demo1234 --blocked   # role gate MUST block these
@@ -593,6 +760,16 @@ feel of the multi-step flows.
 ## Known gaps / deliberate deferrals
 
 - `Certificate.pdfUrl` is `""` in the seed — real PDFs land in Batch 8.
+- **The company will supply the authoritative certificate format** (flagged by
+  Aamir 2026-08-09). Whatever they send is the one that gets followed and
+  downloaded, so Batch 8 must keep the certificate **layout swappable** — template
+  separate from the data query — rather than hard-coding our own design. Don't
+  spend design time on the current certificate look.
+- **`/handover` accepts the offer during a GET render** — see the Batch 6.5
+  section. Excluded from the smoke test for that reason; should become a POST.
+- Bottom-nav clearance is owned by `(app)/layout.tsx` since Batch 6.5. New `(app)`
+  screens must pass `hideNav` to `AppShell` and must **not** add their own bottom
+  padding.
 - CO₂ in the seed uses ~8 kg CO₂e/kg (Li-ion) inline. The **canonical constants
   table with a cited source** is Batch 9 (`packages/core/src/impact.ts`). This is
   a compliance-adjacent claim — it needs a real citation before any demo.

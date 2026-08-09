@@ -146,8 +146,10 @@ function BottomTabBar({ className }: BottomTabBarProps) {
         "fixed bottom-0 left-0 right-0 z-30",
         "flex items-stretch",
         "bg-surface border-t border-border",
-        // safe area padding for iOS home indicator
-        "pb-safe",
+        // Safe-area padding for the iOS home indicator. This was `pb-safe`,
+        // which is not a Tailwind v4 built-in and is defined nowhere in this
+        // repo — it compiled to nothing, so the bar had no allowance at all.
+        "pb-[env(safe-area-inset-bottom,0px)]",
         className
       )}
       aria-label="Main navigation"

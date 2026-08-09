@@ -110,7 +110,9 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
           Location (optional)
         </span>
         <p className="text-[11px] text-text-secondary">
-          Sharing GPS coordinates helps the collection partner find you. You can skip this.
+          Saved <em>alongside</em> the address above — it doesn&apos;t fill the form in.
+          Warehouse gates and loading bays are often hard to find from a street
+          address alone, so the collection partner gets a map pin too. You can skip this.
         </p>
 
         <Button
@@ -124,9 +126,23 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
         </Button>
 
         {captured && (
-          <p className="text-[11px] text-text-primary">
-            Location captured — accurate to about {geo.accuracy} m.
-          </p>
+          <div className="flex flex-col gap-1">
+            <p className="text-[11px] text-text-primary">
+              Pin saved: {geo.lat.toFixed(5)}, {geo.lng.toFixed(5)} — accurate to
+              about {geo.accuracy} m.
+            </p>
+            {/* Plain maps URL, deliberately not an embedded picker: an embed
+                needs a billed Maps key, and all this has to do is let someone
+                sanity-check the pin landed in the right place. */}
+            <a
+              href={`https://www.google.com/maps?q=${geo.lat},${geo.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-medium text-primary-green underline underline-offset-2"
+            >
+              Check this pin on a map
+            </a>
+          </div>
         )}
         {geo.kind === 'failed' && (
           <p className="text-[11px] text-text-secondary">{geo.message}</p>

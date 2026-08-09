@@ -112,6 +112,18 @@ One repo, three apps separated by route folders. Shared code at root.
   not configured via dashboard clicks (reproducible + reviewable).
 - Wrap Supabase calls in helpers in `src/lib/supabase-*.ts` rather than scattering
   client calls across pages.
+- **Bottom-nav clearance belongs to `(app)/layout.tsx`, never to a page** (Batch
+  6.5). That layout renders the fixed `BottomTabBar`, so it also owns the padding
+  that keeps content clear of it. A new authenticated screen passes `hideNav` to
+  `AppShell` (so a second bar isn't rendered) and adds **no bottom padding of its
+  own** — adding some double-pads. This was previously each page's job and four
+  screens forgot, which put their bottom-most control underneath the bar where it
+  was only reachable by over-scrolling. `npm run smoke` asserts exactly one
+  `aria-label="Main navigation"` per authenticated page.
+- **Don't mutate on a GET render.** A server component that performs a write when
+  the page loads (as `handover/page.tsx` still does) can't be smoke-tested,
+  double-fires on refresh, and can be triggered by a link prefetch. Writes go in
+  a `"use server"` action invoked by a form or a POST.
 
 ## Git workflow (learned 2026-07-06 — do not repeat these mistakes)
 

@@ -44,9 +44,8 @@ function safeBreakdown(json: unknown): MaterialItem[] {
   return Array.isArray(json) ? (json as MaterialItem[]) : []
 }
 
-// Tab bar lives in (app)/layout.tsx. AppShell uses hideNav so it doesn't render
-// a second tab bar; bottom padding keeps content clear of the fixed nav.
-const NAV_PADDING = 'pb-[calc(4rem+env(safe-area-inset-bottom,0px))]'
+// Tab bar lives in (app)/layout.tsx, which also owns the bottom clearance for
+// it — so AppShell only needs hideNav here to avoid rendering a second bar.
 
 function LifecycleHeader({ status }: { status: LifecycleStage }) {
   return (
@@ -131,7 +130,7 @@ export default async function TrackPage({
     // Fall back to 'requested' so the timeline always renders, even with no events
     const lastStage = (lastLifecycleEvent?.status ?? 'requested') as LifecycleStage
     return (
-      <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+      <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav>
         <PagePadding className="flex flex-col gap-4">
           <Card className="overflow-visible">
             <Timeline currentStage={lastStage} stages={stages} />
@@ -156,7 +155,7 @@ export default async function TrackPage({
   // ── Early (requested / scheduled) ─────────────────────────────────────────
   if (status === 'requested' || status === 'scheduled') {
     return (
-      <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+      <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav>
         <TrackingRealtime pickupId={pickup.id} />
         <PagePadding className="flex flex-col gap-4">
           <LifecycleHeader status={status as LifecycleStage} />
@@ -180,7 +179,7 @@ export default async function TrackPage({
   // ── In-progress (collected / tested / processed) ───────────────────────────
   if (status === 'collected' || status === 'tested' || status === 'processed') {
     return (
-      <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+      <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav>
         <TrackingRealtime pickupId={pickup.id} />
         <PagePadding className="flex flex-col gap-4">
           <LifecycleHeader status={status as LifecycleStage} />
@@ -201,7 +200,7 @@ export default async function TrackPage({
   // ── Recovered ─────────────────────────────────────────────────────────────
   if (status === 'recovered') {
     return (
-      <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+      <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav>
         <TrackingRealtime pickupId={pickup.id} />
         <PagePadding className="flex flex-col gap-4">
           <LifecycleHeader status="recovered" />
@@ -221,7 +220,7 @@ export default async function TrackPage({
 
   // ── Certified ─────────────────────────────────────────────────────────────
   return (
-    <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav contentClassName={NAV_PADDING}>
+    <AppShell title={pickup.id} showBack backHref="/dashboard" hideNav>
       <PagePadding className="flex flex-col gap-4">
         <LifecycleHeader status="certified" />
         <Card>

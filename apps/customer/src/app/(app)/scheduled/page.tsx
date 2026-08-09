@@ -33,7 +33,7 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
 
   if (error || !pickup) {
     return (
-      <AppShell title="Scheduled" showBack backHref="/dashboard">
+      <AppShell title="Scheduled" showBack backHref="/dashboard" hideNav>
         <PagePadding>
           <ErrorState
             heading="Pickup not found"
@@ -66,6 +66,7 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
       title={pickup.id}
       showBack
       backHref="/dashboard"
+      hideNav
     >
       <PagePadding className="flex flex-col gap-5">
 

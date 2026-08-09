@@ -55,6 +55,7 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
       title="How we valued it"
       showBack
       backHref={`/offer?id=${pickup.id}`}
+      hideNav
     >
       <PagePadding className="flex flex-col gap-5">
 

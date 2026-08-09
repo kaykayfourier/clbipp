@@ -5,13 +5,13 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 + 6 executed** — repo
-is now a Turborepo monorepo, schema v2 is live, the booking quote engine +
+**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 executed** —
+repo is now a Turborepo monorepo, schema v2 is live, the booking quote engine +
 `createPickupWithItems` shipped in `packages/core`, the address book + Storage
 upload helper landed, **the 4-step booking wizard at `/book` is done** — the
-centrepiece of the revamp — and **email OTP + `/verify` + the role gate are
-live**. Next: **Batch 7, tracking upgrade (partner card, chain-of-custody)**.
-Prior: 2026-08-07 Plan v2 written)
+centrepiece of the revamp — **email OTP + `/verify` + the role gate are live**,
+and **Batch 6.5 cleared the first manual test pass**. Next: **Batch 7, tracking
+upgrade (partner card, chain-of-custody)**. Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
@@ -64,7 +64,18 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    invent a `wallet_balance_paise`. Applied to the live database. Read it before
    touching profile writes — an insert or update naming a column outside the
    allowlist now fails with a 403 rather than an RLS error.
-6. **Booking now happens at `/book`, not `/request-pickup`** (Batch 5). The
+6. **Bottom-nav clearance and the offer seed changed in Batch 6.5.** Two things
+   below are now stale: (a) any instruction to give a screen its own
+   `NAV_PADDING` / bottom padding — `(app)/layout.tsx` owns clearance for the
+   fixed `BottomTabBar` and per-page padding now double-pads; new `(app)` screens
+   pass `hideNav` to `AppShell` and nothing else. (b) The seed creates an Offer
+   from **`scheduled`** onward, not `recovered` — before this, no seeded pickup
+   could satisfy the `/offer` status guard, so both offer screens redirected for
+   every id. `PKP-2026-000102` is the offer demo pickup.
+   ⚠ Also flagged, not fixed: **`/handover` calls `acceptOffer()` during a GET
+   render**, so it mutates on page load. It is excluded from `npm run smoke` for
+   that reason. Should become a POST before launch.
+7. **Booking now happens at `/book`, not `/request-pickup`** (Batch 5). The
    4-step wizard is the only way a customer creates a pickup, and it goes through
    the `"use server"` actions in `apps/customer/src/app/(app)/book/actions.ts` →
    `getQuote` + `createPickupWithItems`. `/request-pickup` is a redirect; the old
