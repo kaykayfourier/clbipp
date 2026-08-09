@@ -90,11 +90,16 @@ function PopulatedDashboardPage({
         {pickups.map((pickup) => (
           <Link
             key={pickup.id}
-            // requested → /scheduled?id=, everything else → /track/[id]
+            // Status-routed: requested → the request screen, offered → straight
+            // to the offer (it's the one stage waiting on the customer, so the
+            // row should land on the decision, not on tracking), everything
+            // else → tracking.
             href={
               pickup.status === "requested"
                 ? `/scheduled?id=${pickup.id}`
-                : `/track/${pickup.id}`
+                : pickup.status === "offered"
+                  ? `/offer?id=${pickup.id}`
+                  : `/track/${pickup.id}`
             }
           >
             <ListRow

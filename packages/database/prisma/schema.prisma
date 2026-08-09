@@ -147,9 +147,19 @@ enum KycStatus {
   rejected
 }
 
+// Ordered lifecycle + the terminal `cancelled` side-state. `arrived` and
+// `offered` were added 2026-08-09 (Batch 7A): the company flow document puts
+// assessment and quoting ON SITE, and until this change "an offer exists" was an
+// implicit sub-state of `scheduled` rather than a status — which is what made
+// the offer screens unreachable in Batch 6.5.
+//
+// The customer-facing display order lives in `LIFECYCLE_STAGES`
+// (packages/ui/src/tokens.ts) and must match this list.
 enum PickupStatus {
   requested
   scheduled
+  arrived
+  offered
   collected
   tested
   processed

@@ -5,9 +5,14 @@ export const vendortypeSchema = z.enum([
     "fleet",
 ]);
 
+// Must stay in step with `enum PickupStatus` (schema.prisma) and the ordered
+// `LIFECYCLE_STAGES` (packages/ui/src/tokens.ts). `arrived` + `offered` added
+// in Batch 7A.
 export const pickupstatusSchema = z.enum([
     "requested",
     "scheduled",
+    "arrived",
+    "offered",
     "collected",
     "tested",
     "processed",

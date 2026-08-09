@@ -6,6 +6,8 @@ export * from "./components/ui/badge";
 export * from "./components/ui/banner";
 export * from "./components/ui/button";
 export * from "./components/ui/card";
+export * from "./components/ui/custody-log";
+export * from "./components/ui/partner-card";
 export * from "./components/ui/list-row";
 export * from "./components/ui/tabs";
 export * from "./components/ui/timeline";

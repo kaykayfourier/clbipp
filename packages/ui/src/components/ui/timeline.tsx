@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "../../utils";
 import type { LifecycleStage } from "../../tokens";
-import { LIFECYCLE_STAGES } from "../../tokens";
+import { LIFECYCLE_STAGES, STAGE_LABELS } from "../../tokens";
 
 // ─── Timeline ───────────────────────────────────────────────────────────────
 // Presentational. Renders the vertical lifecycle timeline seen on the
@@ -35,20 +35,12 @@ export interface TimelineProps {
   endStage?: LifecycleStage;
 }
 
-// Human-readable labels for each stage
-const STAGE_LABELS: Record<LifecycleStage, string> = {
-  requested: "Requested",
-  scheduled: "Scheduled",
-  collected: "Collected",
-  tested: "Tested",
-  processed: "Processed",
-  recovered: "Recovered",
-  certified: "Certified",
-};
+// Stage labels come from ../../tokens so the custody log uses the same ones.
 
 // Default sublabels for pending stages
 const PENDING_SUBLABELS: Partial<Record<LifecycleStage, string>> = {
-  collected: "Awaiting agent",
+  arrived: "Awaiting agent",
+  offered: "Priced on site",
   recovered: "In progress",
 };
 

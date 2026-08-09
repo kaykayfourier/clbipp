@@ -8,6 +8,8 @@ import { Timeline } from "@clbipp/ui";
 import { StatusBadge } from "@clbipp/ui";
 import { Banner } from "@clbipp/ui";
 import { ErrorState } from "@clbipp/ui";
+import { isStageBefore } from "@clbipp/ui";
+import type { LifecycleStage } from "@clbipp/ui";
 import { PickupActions } from "./PickupActions";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -44,10 +46,11 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
     );
   }
 
-  // The offer is a sub-state of scheduled: it only exists once the field agent
-  // has assessed and priced the batteries. Until then there's nothing to view,
-  // so the "View Offer" CTA stays hidden (agent assignment / offer creation are
-  // parked field-agent work — B seeds/simulates them).
+  // An offer only exists once the field agent has assessed and priced the
+  // batteries on site. Until then there's nothing to view, so the "View Offer"
+  // CTA stays hidden. Since Batch 7A that moment is its own status (`offered`)
+  // rather than a sub-state of `scheduled` — but this screen still keys off the
+  // row existing, because it is reachable from earlier stages too.
   const { data: offer } = await supabase
     .from("offers")
     .select("pickup_id")
@@ -56,10 +59,11 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
 
   const hasOffer = Boolean(offer);
 
-  const currentStage =
-    pickup.status === "requested" || pickup.status === "scheduled"
-      ? (pickup.status as "requested" | "scheduled")
-      : "scheduled";
+  // This screen's timeline is truncated at `collected`, so any status at or
+  // past collection is clamped back to the last stage it can render.
+  const currentStage = isStageBefore(pickup.status, "collected")
+    ? (pickup.status as LifecycleStage)
+    : "collected";
 
   return (
     <AppShell
@@ -86,7 +90,9 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
             pulse
             stages={{
               requested: { sublabel: formatDate(pickup.created_at) },
-              collected: { sublabel: "Awaiting agent" },
+              // Not "Awaiting agent" — `arrived` carries that sublabel now, and
+              // two consecutive rows saying the same thing reads as a bug.
+              collected: { sublabel: "Awaiting handover" },
             }}
           />
         </Card>

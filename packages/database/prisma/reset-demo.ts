@@ -14,6 +14,7 @@ import { createClient } from "@supabase/supabase-js"
 import { prisma } from "../src/client"
 import type { BatteryCategory, BatteryCondition, BatteryType, PickupStatus } from "../src/generated/client"
 import { loadAppEnv } from "./env"
+import { solidPng, PHOTO_COLOURS } from "./placeholder-image"
 
 const CUSTOMER_EMAIL = "business@test"
 const AGENT_EMAIL = "agent@test"
@@ -22,9 +23,15 @@ const ADMIN_EMAIL = "admin@test"
 // accounts exist so the Agent and Admin apps have something to log into.
 const DEMO_PASSWORD = "demo1234"
 
+// Ordered lifecycle, `cancelled` excluded (it leaves the progression rather
+// than sitting on it). Must match `enum PickupStatus` in schema.prisma and
+// LIFECYCLE_STAGES in packages/ui/src/tokens.ts. `arrived` + `offered` added in
+// Batch 7A, which is why the seed is 10 pickups (one per stage) and not 8.
 const LIFECYCLE = [
   "requested",
   "scheduled",
+  "arrived",
+  "offered",
   "collected",
   "tested",
   "processed",
@@ -157,6 +164,100 @@ async function seedReferenceData() {
   })
 }
 
+// ─── Demo photos ──────────────────────────────────────────────────────────────
+// The chain-of-custody log (Batch 7B) renders stored photos through
+// `createSignedUrl`, and every bucket is private — so an empty `photo_urls`
+// array means the whole signed-URL path renders nothing and is never actually
+// proven to work. These uploads give it something real to sign.
+//
+// Path layout matches `buildObjectPath` in @clbipp/auth/storage:
+// `<uploader-uid>/<segments>/<filename>`. Every storage RLS policy checks
+// `storage.foldername(name)[1] = auth.uid()`, so the uid prefix is not cosmetic.
+// Booking photos sit under the VENDOR's uid and custody photos under the
+// AGENT's, because that is who actually took them — reads all go through
+// server-minted signed URLs, so the split costs nothing and stays honest.
+
+const PHOTO_BUCKET = "pickup-photos"
+
+/**
+ * Uploads one generated placeholder and returns its object path.
+ *
+ * `upsert: true` here ONLY because this is the seed and must be re-runnable —
+ * the app never upserts, since overwriting would destroy an audit photo.
+ */
+async function uploadPhoto(
+  ownerId: string,
+  segments: string[],
+  filename: string,
+  colour: keyof typeof PHOTO_COLOURS,
+): Promise<string | null> {
+  const supabase = adminClient()
+  const objectPath = [ownerId, ...segments, filename].join("/")
+
+  const { error } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .upload(objectPath, solidPng(320, 240, PHOTO_COLOURS[colour]), {
+      contentType: "image/png",
+      upsert: true,
+    })
+
+  if (error) {
+    // Non-fatal: a demo without photos is still a usable demo, and failing the
+    // whole reseed over a storage hiccup would be a poor trade.
+    console.warn(`  ! photo upload failed (${objectPath}): ${error.message}`)
+    return null
+  }
+  return objectPath
+}
+
+/**
+ * Every object under a prefix, at any depth.
+ *
+ * Supabase Storage has no real directories — `list` returns one row per
+ * immediate child, and a "folder" is a synthetic row with `id: null`. So the
+ * only way to enumerate a subtree is to walk it.
+ */
+async function listObjectsRecursive(prefix: string): Promise<string[]> {
+  const supabase = adminClient()
+  const { data, error } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .list(prefix, { limit: 1000 })
+
+  if (error || !data) return []
+
+  const paths: string[] = []
+  for (const entry of data) {
+    const child = `${prefix}/${entry.name}`
+    // id === null marks a synthetic folder row; anything else is a real object.
+    if (entry.id === null) paths.push(...(await listObjectsRecursive(child)))
+    else paths.push(child)
+  }
+  return paths
+}
+
+/**
+ * Clears every object owned by the demo users so re-running doesn't accumulate
+ * orphans. The database wipe doesn't touch Storage.
+ *
+ * Walks the whole subtree rather than the fixed depth the seed itself writes:
+ * `<uid>/bookings/<pickup>/…` is the seed's shape, but the booking wizard also
+ * writes real uploads here, and abandoned drafts leave them behind (a known gap
+ * since Batch 5). Those sit at a different depth and a fixed-depth sweep walked
+ * straight past them.
+ */
+async function wipePhotos(ownerIds: string[]) {
+  const supabase = adminClient()
+  for (const ownerId of ownerIds) {
+    const paths = await listObjectsRecursive(ownerId)
+    // remove() takes up to 1000 keys per call.
+    for (let i = 0; i < paths.length; i += 1000) {
+      const { error } = await supabase.storage.from(PHOTO_BUCKET).remove(paths.slice(i, i + 1000))
+      if (error) console.warn(`  ! photo wipe failed: ${error.message}`)
+    }
+    if (paths.length) console.log(`Cleared ${paths.length} stored photo(s) for ${ownerId}.`)
+  }
+}
+
 // ─── Pickup fixtures ──────────────────────────────────────────────────────────
 
 type ItemSpec = {
@@ -196,7 +297,7 @@ const PICKUPS: PickupSpec[] = [
     category: "automotive",
     location: "Okhla Phase II, New Delhi",
     notes: "Gate B entry — call on arrival.",
-    daysAgo: 3,
+    daysAgo: 2,
     items: [
       { category: "automotive", quantity: 14, weightKg: 196, condition: "healthy", chemistry: "lead_acid" },
       // Deliberately hazardous so the condition path is visible in the demo.
@@ -204,7 +305,36 @@ const PICKUPS: PickupSpec[] = [
     ],
   },
   {
+    // Batch 7A — the agent is on site, assessing. No offer yet: the company
+    // flow document puts assessment and quoting on site, in that order.
     id: "PKP-2026-000103",
+    status: "arrived",
+    category: "portable",
+    location: "Lajpat Nagar II, New Delhi",
+    notes: "Agent on site — assessing the load.",
+    daysAgo: 3,
+    items: [
+      { category: "portable", quantity: 18, weightKg: 9.4, condition: "healthy", chemistry: "li_ion_nmc" },
+      { category: "portable", quantity: 4, weightKg: 2.1, condition: "swollen", chemistry: "li_ion_nmc" },
+    ],
+  },
+  {
+    // Batch 7A — THE OFFER DEMO PICKUP. `offered` is the only status the
+    // /offer and /offer-breakdown guards admit, so this is the one pickup
+    // those two screens render for. scripts/smoke.mjs asserts on this id.
+    id: "PKP-2026-000104",
+    status: "offered",
+    category: "automotive",
+    location: "Mayapuri Industrial Area, New Delhi",
+    notes: "Assessed on site — offer sent to the vendor.",
+    daysAgo: 4,
+    items: [
+      { category: "automotive", quantity: 9, weightKg: 126, condition: "healthy", chemistry: "lead_acid" },
+      { category: "automotive", quantity: 3, weightKg: 42, condition: "dead", chemistry: "lead_acid" },
+    ],
+  },
+  {
+    id: "PKP-2026-000105",
     status: "collected",
     category: "industrial",
     location: "Noida Sector 62, UP",
@@ -215,7 +345,7 @@ const PICKUPS: PickupSpec[] = [
     ],
   },
   {
-    id: "PKP-2026-000104",
+    id: "PKP-2026-000106",
     status: "tested",
     category: "portable",
     location: "Gurugram Cyber City, Haryana",
@@ -226,7 +356,7 @@ const PICKUPS: PickupSpec[] = [
     ],
   },
   {
-    id: "PKP-2026-000105",
+    id: "PKP-2026-000107",
     status: "processed",
     category: "ev",
     location: "Faridabad Sector 24, Haryana",
@@ -237,7 +367,7 @@ const PICKUPS: PickupSpec[] = [
     ],
   },
   {
-    id: "PKP-2026-000106",
+    id: "PKP-2026-000108",
     status: "recovered",
     category: "ev",
     location: "Dwarka Sector 21, New Delhi",
@@ -248,7 +378,7 @@ const PICKUPS: PickupSpec[] = [
     ],
   },
   {
-    id: "PKP-2026-000107",
+    id: "PKP-2026-000109",
     status: "certified",
     category: "portable",
     location: "Saket District Centre, New Delhi",
@@ -260,7 +390,7 @@ const PICKUPS: PickupSpec[] = [
     ],
   },
   {
-    id: "PKP-2026-000108",
+    id: "PKP-2026-000110",
     status: "cancelled",
     category: "portable",
     location: "Rohini Sector 3, New Delhi",
@@ -332,6 +462,11 @@ async function seed() {
 
   await seedReferenceData()
 
+  // Storage isn't covered by the database wipe — objects would otherwise pile
+  // up across reseeds and the pickup ids they're filed under were renumbered in
+  // Batch 7A, so the old ones are unreferenced by anything.
+  await wipePhotos([vendorId, agentId])
+
   const warehouse = await prisma.address.create({
     data: {
       profileId: vendorId,
@@ -370,6 +505,15 @@ async function seed() {
     const reachedIndex =
       spec.status === "cancelled" ? 0 : LIFECYCLE.indexOf(spec.status as (typeof LIFECYCLE)[number])
 
+    // Booking photos — one per line item, uploaded as the vendor (they took
+    // them at booking time). Nullable results are filtered so a failed upload
+    // degrades to "no photo" rather than a broken path in the database.
+    const itemPhotos = await Promise.all(
+      spec.items.map((_, idx) =>
+        uploadPhoto(vendorId, ["bookings", spec.id], `item-${idx + 1}.png`, "booking"),
+      ),
+    )
+
     await prisma.pickup.create({
       data: {
         id: spec.id,
@@ -386,13 +530,16 @@ async function seed() {
         etaMinutes: spec.status === "scheduled" ? 45 : null,
         preferredDate: day(spec.daysAgo - 1),
         createdAt: day(spec.daysAgo),
+        // Header field kept as the deduped union of the item photos, so older
+        // reads against Pickup.photoUrls still see something.
+        photoUrls: [...new Set(itemPhotos.filter((p): p is string => p !== null))],
         items: {
-          create: spec.items.map((item) => ({
+          create: spec.items.map((item, idx) => ({
             category: item.category,
             quantity: item.quantity,
             weightKg: item.weightKg,
             condition: item.condition,
-            photoUrls: [],
+            photoUrls: itemPhotos[idx] ? [itemPhotos[idx]] : [],
             // Agent-confirmed half is only filled once collection has happened.
             ...(reachedIndex >= LIFECYCLE.indexOf("collected")
               ? {
@@ -417,6 +564,16 @@ async function seed() {
         : [...LIFECYCLE.slice(0, reachedIndex + 1)]
 
     for (const [i, status] of stages.entries()) {
+      // Only the on-site stages carry photo proof — that is what the company
+      // doc's chain-of-custody actually is (§5.3). A `processed` event in a
+      // facility has a timestamp and a location, not a photo from the agent.
+      const proofColour =
+        status === "arrived" ? "arrived" : status === "collected" ? "collected" : null
+
+      const eventPhoto = proofColour
+        ? await uploadPhoto(agentId, ["custody", spec.id], `${status}.png`, proofColour)
+        : null
+
       await prisma.statusEvent.create({
         data: {
           pickupId: spec.id,
@@ -425,7 +582,7 @@ async function seed() {
           actorRole: i === 0 ? "customer" : "agent",
           lat: GEO.lat + i * 0.004,
           lng: GEO.lng - i * 0.003,
-          photoUrls: [],
+          photoUrls: eventPhoto ? [eventPhoto] : [],
           occurredAt: day(spec.daysAgo - i),
         },
       })
@@ -483,14 +640,13 @@ async function seed() {
       ])
     }
 
-    // An Offer exists from `scheduled` onward. The locked model treats the offer
-    // as a sub-state of `scheduled` ("an Offer row exists"), and offer/page.tsx
-    // only admits `requested` or `scheduled` — so seeding offers from
-    // `recovered`, as this did, meant every pickup carrying an offer was already
-    // past the stage that renders it. The offer screens were unreachable in the
-    // demo: the offer-bearing pickups redirected to /track, and the one
-    // `scheduled` pickup had no offer and redirected to /scheduled.
-    if (reachedIndex >= LIFECYCLE.indexOf("scheduled")) {
+    // An Offer exists from `offered` onward — the stage now says so, which is
+    // the whole point of Batch 7A. Before it, "an offer exists" was an implicit
+    // sub-state of `scheduled`, and the mismatch between that and the /offer
+    // guard is what made both offer screens unreachable until Batch 6.5 patched
+    // the seed. Exactly one seeded pickup sits AT `offered`, so exactly one is
+    // reachable through the guard.
+    if (reachedIndex >= LIFECYCLE.indexOf("offered")) {
       await prisma.offer.create({
         data: {
           pickupId: spec.id,
@@ -506,10 +662,12 @@ async function seed() {
             { material: "Copper", weight_kg: Math.round(weight * 0.09) },
           ],
           deductions: [],
-          // Clamped: the `scheduled` pickup is only 3 days old, so the old
-          // unclamped `daysAgo - 5` would have dated its offer 2 days into the
-          // future.
-          createdAt: day(Math.max(spec.daysAgo - 5, 0)),
+          // Dated to the `offered` status event itself rather than a fixed
+          // offset from creation. The old `daysAgo - 5` dated the youngest
+          // pickup's offer into the FUTURE and had to be clamped; deriving it
+          // from the stage index can't drift, because it is the same arithmetic
+          // the status-event loop below uses.
+          createdAt: day(Math.max(spec.daysAgo - LIFECYCLE.indexOf("offered"), 0)),
         },
       })
     }

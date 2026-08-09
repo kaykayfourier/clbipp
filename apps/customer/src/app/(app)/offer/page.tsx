@@ -38,9 +38,10 @@ export default async function OfferPage({ searchParams }: PageProps) {
 
   if (!pickup) redirect("/dashboard");
 
-  // Guard 3 — the offer is only reachable pre-collection. Anything collected or
-  // ahead (or cancelled) can't "go back" to the offer → send to tracking.
-  if (pickup.status !== "requested" && pickup.status !== "scheduled") {
+  // Guard 3 — `offered` IS the offer stage as of Batch 7A, so this is now an
+  // exact match rather than a "pre-collection" range. Earlier stages have no
+  // offer to show; later ones can't go back to it. Both go to tracking.
+  if (pickup.status !== "offered") {
     redirect(`/track/${id}`);
   }
 

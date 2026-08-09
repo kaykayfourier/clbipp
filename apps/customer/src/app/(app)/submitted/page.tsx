@@ -88,9 +88,11 @@ export default async function SubmittedPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-semibold text-text-primary">
             Request Submitted
           </h1>
+          {/* B7 — no notification pipeline exists (Plan v2 §1.3 A3), so this
+              describes in-app tracking rather than promising a message. */}
           <p className="text-sm text-text-secondary max-w-xs leading-relaxed">
-            We&apos;ll notify you the moment a field agent is assigned to your
-            pickup.
+            Track this pickup here — the status updates as soon as a collection
+            partner is assigned.
           </p>
         </div>
 

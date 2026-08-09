@@ -5,13 +5,17 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 executed** —
-repo is now a Turborepo monorepo, schema v2 is live, the booking quote engine +
-`createPickupWithItems` shipped in `packages/core`, the address book + Storage
-upload helper landed, **the 4-step booking wizard at `/book` is done** — the
-centrepiece of the revamp — **email OTP + `/verify` + the role gate are live**,
-and **Batch 6.5 cleared the first manual test pass**. Next: **Batch 7, tracking
-upgrade (partner card, chain-of-custody)**. Prior: 2026-08-07 Plan v2 written)
+**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
+executed** — repo is now a Turborepo monorepo, schema v2 is live, the booking
+quote engine + `createPickupWithItems` shipped in `packages/core`, the address
+book + Storage upload helper landed, **the 4-step booking wizard at `/book` is
+done** — the centrepiece of the revamp — **email OTP + `/verify` + the role gate
+are live**, **Batch 6.5 cleared the first manual test pass**, **Batch 7A added
+the `arrived` + `offered` lifecycle stages** (the locked contract is now nine
+stages) and **Batch 7B shipped the tracking upgrade** — assigned-partner card,
+ETA, and a chain-of-custody log rendering real per-event GPS and real photos out
+of the private bucket. Next: **Batch 8, PDF generation + payment + receipt
+screens**. Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
@@ -38,8 +42,9 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    `20260809072925_schema_v2_battery_items`). `Pickup` is a header row and
    battery detail lives in the new `BatteryItem`. `Address`, `PricingRate`,
    `Payment`, `WalletTxn`, `PickupReceipt`, `Invoice` exist, plus agent/admin
-   scaffolding tables. The seed is fully rewritten — 8 pickups, one per
-   lifecycle stage, all owned by real auth users.
+   scaffolding tables. The seed is fully rewritten — **10 pickups since Batch 7A**
+   (was 8), one per lifecycle stage, all owned by real auth users, and each
+   carrying real photo objects in the private `pickup-photos` bucket since 7B.
 3. **The booking write path now lives in `packages/core`** (Batch 3):
    `booking.ts` (`estimateQuote` / `getQuote`) and `booking-actions.ts`
    (`createPickupWithItems`). Anything below describing a pickup being inserted
@@ -676,7 +681,13 @@ To test recovery summary, B needs to seed an offer with `materialBreakdown` for 
 
 **Locked (do not revisit):**
 
-- Status lifecycle: `requested → scheduled → collected → tested → processed → recovered → certified` (+ `cancelled`)
+- Status lifecycle: `requested → scheduled → arrived → offered → collected →
+  tested → processed → recovered → certified` (+ `cancelled`)
+  **Changed 2026-08-09 in Batch 7A** — `arrived` and `offered` added, agreed and
+  migrated (`20260809124400_lifecycle_arrived_offered`). Locked again at nine
+  stages. Rationale and the reuse rule (never re-declare the stage array in a
+  screen — use `isLifecycleStage` / `isStageBefore` from `@clbipp/ui`) are in
+  `CONTEXT.md`.
 - `src/middleware.ts` must stay under `src/` — not project root.
 - **No recovery rate % shown to vendor anywhere.** The company flow document does
   not ask for it, so this one stands.

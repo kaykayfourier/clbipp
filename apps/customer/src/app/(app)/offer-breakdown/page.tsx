@@ -34,7 +34,8 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
 
   if (!pickup) redirect("/dashboard");
 
-  if (pickup.status !== "requested" && pickup.status !== "scheduled") {
+  // Same guard as /offer — `offered` is the offer stage as of Batch 7A.
+  if (pickup.status !== "offered") {
     redirect(`/track/${id}`);
   }
 

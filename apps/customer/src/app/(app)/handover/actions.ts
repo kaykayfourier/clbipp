@@ -13,8 +13,16 @@ import { createAdminClient } from '@clbipp/auth/admin'
 // The caller identity comes from the vendor's authenticated session (server
 // client); the actual write uses the admin client.
 
-// Statuses a pickup can still be accepted/cancelled from (pre-collection).
-const PRE_COLLECTION = new Set(['requested', 'scheduled'])
+import { isStageBefore } from '@clbipp/ui'
+
+// A pickup can still be accepted/cancelled from anything before `collected`.
+// Derived from LIFECYCLE_STAGES rather than a hard-coded set so that adding a
+// stage (Batch 7A added `arrived` and `offered`) doesn't silently lock these
+// two actions out of it. `cancelled` is not on the linear lifecycle, so
+// isStageBefore returns false for it — handled explicitly by both callers.
+function isPreCollection(status: string): boolean {
+  return isStageBefore(status, 'collected')
+}
 
 // ─── acceptOffer ─────────────────────────────────────────────────────────────
 // Vendor accepted the offer on /offer or /offer-breakdown. Advances the pickup
@@ -45,7 +53,7 @@ export async function acceptOffer(
 
   // Already past the offer stage → treat as success so the confirmation page
   // still renders on refresh. Only cancelled is a genuine error.
-  if (!PRE_COLLECTION.has(pickup.status)) {
+  if (!isPreCollection(pickup.status)) {
     if (pickup.status === 'cancelled') return { error: 'This pickup was cancelled.' }
     return { error: null }
   }
@@ -111,7 +119,7 @@ export async function cancelPickup(
   if (pickup.vendor_id !== user.id) return { error: 'Not authorised for this pickup.' }
 
   if (pickup.status === 'cancelled') return { error: null } // already cancelled
-  if (!PRE_COLLECTION.has(pickup.status)) {
+  if (!isPreCollection(pickup.status)) {
     return { error: 'This pickup can no longer be cancelled.' }
   }
 

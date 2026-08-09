@@ -5,7 +5,10 @@ import { Timeline, Connector } from '@clbipp/ui'
 import { Banner } from '@clbipp/ui'
 import { Card } from '@clbipp/ui'
 import { StatusBadge } from '@clbipp/ui'
+import { CustodyLog } from '@clbipp/ui'
+import { isLifecycleStage } from '@clbipp/ui'
 import type { LifecycleStage } from '@clbipp/ui'
+import { buildCustodyEntries } from '@/lib/custody'
 
 // Public tracking view for `/t/<publicToken>`. Anyone holding the token can see
 // a pickup's lifecycle — no login required (see middleware: `/t` is a public
@@ -24,9 +27,8 @@ type MaterialItem = {
   value_paise: number
 }
 
-const LIFECYCLE: LifecycleStage[] = [
-  'requested', 'scheduled', 'collected', 'tested', 'processed', 'recovered', 'certified',
-]
+// Stage order comes from LIFECYCLE_STAGES in @clbipp/ui via `isLifecycleStage`
+// — the local duplicate that used to live here was removed in Batch 7A.
 
 // publicToken is a Postgres uuid column — passing a non-UUID string makes the
 // query throw on cast rather than return null. Guard the format so a garbage
@@ -41,8 +43,8 @@ function buildStages(
 ): Partial<Record<LifecycleStage, { timestamp: string }>> {
   const map: Partial<Record<LifecycleStage, { timestamp: string }>> = {}
   for (const e of events) {
-    if (LIFECYCLE.includes(e.status as LifecycleStage)) {
-      map[e.status as LifecycleStage] = {
+    if (isLifecycleStage(e.status)) {
+      map[e.status] = {
         timestamp: new Date(e.occurredAt).toLocaleDateString('en-IN', {
           day: '2-digit',
           month: 'short',
@@ -129,6 +131,16 @@ export default async function PublicTrackPage({
   const status = pickup.status
   const breakdown = safeBreakdown(pickup.offer?.materialBreakdown)
 
+  // Timestamps and GPS, but NOT photos — and `includePhotos: false` skips
+  // minting the signed URLs entirely rather than just hiding the images.
+  //
+  // Deliberate default, flag it if the company wants otherwise: this token is a
+  // bearer capability that can be forwarded to anyone, and photos of a
+  // customer's premises and stock are more sensitive than the stage timestamps
+  // and recovered weights this page already shows. No partner card here either
+  // — an anonymous link should not hand out an agent's personal phone number.
+  const custody = await buildCustodyEntries(pickup.statusEvents, { includePhotos: false })
+
   // hideNav drops the bottom tab bar and its padding — anonymous visitors have
   // no dashboard/tabs. No showBack for the same reason.
 
@@ -136,7 +148,7 @@ export default async function PublicTrackPage({
   if (status === 'cancelled') {
     const lastLifecycleEvent = [...pickup.statusEvents]
       .reverse()
-      .find(e => LIFECYCLE.includes(e.status as LifecycleStage))
+      .find(e => isLifecycleStage(e.status))
     const lastStage = (lastLifecycleEvent?.status ?? 'requested') as LifecycleStage
     return (
       <AppShell title={pickup.id} hideNav>
@@ -156,23 +168,37 @@ export default async function PublicTrackPage({
             </div>
           </Card>
           <Banner variant="error">This pickup was cancelled.</Banner>
+          <CustodyLog entries={custody} showPhotos={false} />
         </PagePadding>
       </AppShell>
     )
   }
 
-  // ── Early (requested / scheduled) ─────────────────────────────────────────
-  if (status === 'requested' || status === 'scheduled') {
+  // ── Pre-collection (requested / scheduled / arrived / offered) ────────────
+  // Mirrors the authenticated screen's bucket, minus the offer call to action:
+  // /offer is auth-only and would bounce an anonymous viewer to /login.
+  if (
+    status === 'requested' ||
+    status === 'scheduled' ||
+    status === 'arrived' ||
+    status === 'offered'
+  ) {
+    const banner: Record<typeof status, string> = {
+      requested: 'This pickup is confirmed. Collection will be arranged shortly.',
+      scheduled: 'Collection is scheduled.',
+      arrived: 'The collection agent is on site.',
+      offered: 'An offer has been made and is awaiting the vendor.',
+    }
+
     return (
       <AppShell title={pickup.id} hideNav>
         <PagePadding className="flex flex-col gap-4">
-          <LifecycleHeader status={status as LifecycleStage} />
+          <LifecycleHeader status={status} />
           <Card className="overflow-visible">
             <Timeline currentStage={status} stages={stages} pulse />
           </Card>
-          <Banner variant="info">
-            This pickup is confirmed. Collection will be arranged shortly.
-          </Banner>
+          <Banner variant="info">{banner[status]}</Banner>
+          <CustodyLog entries={custody} showPhotos={false} />
         </PagePadding>
       </AppShell>
     )
@@ -190,6 +216,7 @@ export default async function PublicTrackPage({
           <Banner variant="tinted">
             Recovery breakdown and certificate unlock once recovered.
           </Banner>
+          <CustodyLog entries={custody} showPhotos={false} />
         </PagePadding>
       </AppShell>
     )
@@ -208,6 +235,7 @@ export default async function PublicTrackPage({
           <Banner variant="tinted">
             The EPR certificate becomes available once certified.
           </Banner>
+          <CustodyLog entries={custody} showPhotos={false} />
         </PagePadding>
       </AppShell>
     )
@@ -225,6 +253,7 @@ export default async function PublicTrackPage({
         </Card>
         <RecoverySummary breakdown={breakdown} />
         <Banner variant="success">This pickup has been certified.</Banner>
+        <CustodyLog entries={custody} showPhotos={false} />
       </PagePadding>
     </AppShell>
   )

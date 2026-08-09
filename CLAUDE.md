@@ -68,8 +68,21 @@ indicative quote, an invoice and a wallet, all of which are value-facing. Pendin
 their confirmation; see `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
 
 **Status lifecycle (locked contract):**
-`requested → scheduled → collected → tested → processed → recovered → certified`
-(plus `cancelled`).
+`requested → scheduled → arrived → offered → collected → tested → processed →
+recovered → certified` (plus `cancelled`).
+
+> `arrived` and `offered` were **added 2026-08-09 (Batch 7A)** — agreed, applied,
+> and the contract is locked again at nine stages. Rationale: the company flow
+> document puts assessment and quoting *on site*, and before this "an offer
+> exists" was an implicit sub-state of `scheduled` rather than a status, which is
+> what made the offer screens unreachable in Batch 6.5. `/offer` and
+> `/offer-breakdown` now admit `status === 'offered'` exactly.
+
+**Stage order has one source of truth per layer, and they must agree:**
+`enum PickupStatus` (`schema.prisma`) · `LIFECYCLE_STAGES` + `STAGE_LABELS`
+(`packages/ui/src/tokens.ts`) · `pickupstatusSchema` (`packages/core`) ·
+`LIFECYCLE` (`reset-demo.ts`). Screens must **not** re-declare the list — use
+`isLifecycleStage` / `isStageBefore` from `@clbipp/ui`.
 
 ## How to treat the plan in PROJECT_STATE.md
 

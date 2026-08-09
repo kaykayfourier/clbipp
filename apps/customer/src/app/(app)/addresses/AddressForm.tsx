@@ -48,6 +48,20 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
       return
     }
 
+    // Browsers block geolocation outside a secure context, and the error they
+    // hand back is indistinguishable from a denied prompt — so say the real
+    // reason here. This never fires on localhost (which counts as secure); it
+    // fires when the app is opened on a phone over plain http on the LAN, which
+    // is exactly how it gets tested on a real handset.
+    if (!window.isSecureContext) {
+      setGeo({
+        kind: 'failed',
+        message:
+          'Location needs a secure (https) connection — this page is on plain http. Type the address instead.',
+      })
+      return
+    }
+
     setGeo({ kind: 'locating' })
 
     navigator.geolocation.getCurrentPosition(
@@ -110,9 +124,7 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
           Location (optional)
         </span>
         <p className="text-[11px] text-text-secondary">
-          Saved <em>alongside</em> the address above — it doesn&apos;t fill the form in.
-          Warehouse gates and loading bays are often hard to find from a street
-          address alone, so the collection partner gets a map pin too. You can skip this.
+          Helps the collection partner find you. Optional.
         </p>
 
         <Button
@@ -127,13 +139,15 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
 
         {captured && (
           <div className="flex flex-col gap-1">
+            {/* Accuracy rather than raw lat/lng: it's the one number that tells a
+                non-technical user whether the pin is worth keeping, and the link
+                is how they check it landed in the right place. A plain maps URL,
+                deliberately not an embedded picker — an embed needs a billed
+                Maps key. */}
             <p className="text-[11px] text-text-primary">
-              Pin saved: {geo.lat.toFixed(5)}, {geo.lng.toFixed(5)} — accurate to
-              about {geo.accuracy} m.
+              Pin saved — accurate to about {geo.accuracy} m. Saved alongside the
+              typed address, not instead of it.
             </p>
-            {/* Plain maps URL, deliberately not an embedded picker: an embed
-                needs a billed Maps key, and all this has to do is let someone
-                sanity-check the pin landed in the right place. */}
             <a
               href={`https://www.google.com/maps?q=${geo.lat},${geo.lng}`}
               target="_blank"

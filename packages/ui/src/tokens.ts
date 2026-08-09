@@ -164,9 +164,19 @@ export const zIndex = {
 // side-state that is NOT part of this array (it would render a phantom timeline
 // row and break the Record<LifecycleStage,…> maps). For a value that may also be
 // cancelled, use `PickupStatus` from components/ui/badge.
+//
+// This array is the single source of truth for stage ORDER. It must stay in
+// step with `enum PickupStatus` in packages/database/prisma/schema.prisma.
+// Screens derive their status buckets from it — don't re-declare the list
+// locally (track/[id] and t/[token] used to, and that is why adding a stage
+// used to be a multi-file edit).
 export const LIFECYCLE_STAGES = [
   "requested",
   "scheduled",
+  // Added Batch 7A. The agent assesses and quotes ON SITE (company flow doc
+  // §5), so arrival precedes the offer.
+  "arrived",
+  "offered",
   "collected",
   "tested",
   "processed",
@@ -177,3 +187,39 @@ export const LIFECYCLE_STAGES = [
 export type LifecycleStage = (typeof LIFECYCLE_STAGES)[number];
 
 export type StatusVariant = LifecycleStage;
+
+/**
+ * Customer-facing name for each stage. Lives here rather than inside Timeline
+ * because the chain-of-custody log labels the same stages and the two must not
+ * drift — a timeline row reading "Agent arrived" above a custody entry reading
+ * "arrived" is the kind of mismatch nobody notices until a demo.
+ */
+export const STAGE_LABELS: Record<LifecycleStage, string> = {
+  requested: "Requested",
+  scheduled: "Scheduled",
+  arrived: "Agent arrived",
+  offered: "Offer made",
+  collected: "Collected",
+  tested: "Tested",
+  processed: "Processed",
+  recovered: "Recovered",
+  certified: "Certified",
+};
+
+/** Narrow an arbitrary status string to a stage on the linear lifecycle. */
+export function isLifecycleStage(value: string): value is LifecycleStage {
+  return (LIFECYCLE_STAGES as readonly string[]).includes(value);
+}
+
+/**
+ * True when `stage` sits strictly before `other` in the lifecycle.
+ *
+ * Anything off the linear lifecycle (`cancelled`, or an unknown string) is
+ * never "before" anything — a cancelled pickup has left the progression, it has
+ * not paused partway along it. Callers get a safe `false` rather than the -1
+ * that a bare `indexOf` comparison would silently treat as earliest.
+ */
+export function isStageBefore(stage: string, other: LifecycleStage): boolean {
+  if (!isLifecycleStage(stage)) return false;
+  return LIFECYCLE_STAGES.indexOf(stage) < LIFECYCLE_STAGES.indexOf(other);
+}

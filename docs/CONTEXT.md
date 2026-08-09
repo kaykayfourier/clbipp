@@ -145,8 +145,29 @@ conflict, always resolve by keeping `main`'s version:
 
 ## Status lifecycle (locked contract)
 
-`requested → scheduled → collected → tested → processed → recovered → certified`
-(plus `cancelled`). This is the shared state machine the whole app codes against.
+`requested → scheduled → arrived → offered → collected → tested → processed →
+recovered → certified` (plus `cancelled`). This is the shared state machine the
+whole app codes against.
+
+**Changed 2026-08-09 (Batch 7A) — `arrived` and `offered` added.** Agreed,
+migrated (`20260809124400_lifecycle_arrived_offered`), and locked again at nine
+stages.
+
+- **Why:** the company flow document has the agent assess and quote *on site*,
+  which is two events, not one. And before this, "an offer exists" was an
+  implicit sub-state of `scheduled` (an `Offer` row existing) rather than a
+  status — the mismatch between that and the `/offer` status guard is exactly
+  what made both offer screens unreachable in the demo until Batch 6.5 patched
+  the seed. `offered` makes an offer addressable instead of inferred.
+- **Why `arrived` before `offered`:** assessment precedes quoting. The indicative
+  quote the customer sees at booking is a different thing — it lives on
+  `Pickup.indicativeQuotePaise`, not on an `Offer` row — so the two coexist.
+- **Enum order is explicit in the migration** (`ADD VALUE … AFTER …`, not a plain
+  append), so the Postgres sort order matches the logical order.
+- **Adding a stage later touches four lists, not fourteen screens.** Screens ask
+  `isLifecycleStage` / `isStageBefore` from `@clbipp/ui` instead of re-declaring
+  the array — `track/[id]` and `t/[token]` each carried a private duplicate
+  before 7A, and those were the drift risk.
 
 ---
 

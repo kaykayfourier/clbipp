@@ -23,12 +23,18 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 4 | A2/A3 — address book + storage upload helper | A | ✅ done, committed `73bc512` |
 | 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | ✅ done, committed `a8684fa` |
 | 6 | **A1 — email OTP + `/verify` + roles** | A | ✅ done, staged |
-| 6.5 | **Demo-blocking fixes from the first manual pass** | A | ✅ done, staged |
-| 7 | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | ⏭ **next — start here** |
-| 8 | B3/B6 — PDF generation + payment + receipt screens | B | pending |
+| 6.5 | **Demo-blocking fixes from the first manual pass** | A | ✅ done, committed `0b58956` |
+| 7A | **Lifecycle: add `arrived` + `offered` stages** | A/B | ✅ done, staged |
+| 7B | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | ✅ done, staged |
+| 8 | B3/B6 — PDF generation + payment + receipt screens | B | ⏭ **next — start here** |
 | 9 | B4/B5 — dashboard impact (CO₂) + compliance CSV | B | pending |
 | 10 | P2 screens (wallet, invoices, history, profile, `/t` parity) + **deploy** | A | pending |
 | 11 | **Google / Apple sign-in** (new — see below, has a real blocker) | A | pending |
+
+> **No demo is being shown right now** (changed 2026-08-09). Aamir is finishing
+> the revamp and the remaining batches first, then deploying a proper link. So
+> "is it demoable today" is no longer a reason to cut or rush a batch — correctness
+> and not having to redo work matter more than a screen being showable this week.
 
 **Cut order if time runs short** (Plan v2 §8): P2 screens → wallet → invoices →
 receipt PDF (keep the screen) → address GPS.
@@ -36,43 +42,466 @@ receipt PDF (keep the screen) → address GPS.
 
 ---
 
-## ▶ Next: Batch 7 — A5/B7, tracking upgrade + copy fix
+## ✅ Open items raised 2026-08-09 — both RESOLVED at the start of Batch 7
+
+Kept here because the reasoning matters, not because there's anything left to
+do. Skip to "▶ Next: Batch 8" if you just want the resume point.
+
+### 1. GPS panel — resolved: it was a copy problem after all
+
+**What was actually happening.** Aamir confirmed he was testing on
+`localhost:3000` (a secure context, so geolocation is permitted) and *did* see
+the one-line `Pin saved as added reference for the collection partner.` So the
+permission prompt fired, the success callback ran, and the `captured &&` branch
+rendered. Nothing was broken — the copy simply confirmed nothing checkable, which
+is what "nothing specific" meant.
+
+The two hypotheses this file listed (stale bundle, non-secure context) were both
+wrong for *this* report, and reproducing before rewriting is what established
+that.
+
+**The fix landed in the middle of the two extremes.** The committed Batch 6.5
+version showed raw lat/lng to 5 dp, which read as too technical for a vendor app;
+the working-tree simplification then stripped the coordinates *and* the map link,
+leaving nothing to verify. Now: **accuracy in metres** (the one number that tells
+a non-technical person whether the pin is worth keeping) plus the plain
+`google.com/maps?q=` link restored so the pin can be sanity-checked. Still no
+API key, still no billing. `geo.accuracy` was already being captured and had been
+unused.
+
+**Also added: a `window.isSecureContext` guard.** It changes nothing on
+localhost. It matters because the end-of-revamp manual pass is on a real handset
+over LAN **http**, where browsers block geolocation and hand back an error
+indistinguishable from a denied prompt — so the old code would have said
+"permission was denied" for something that is not a permission problem. Now it
+names the real cause.
+
+### 2. Reverse-geocode autofill — dropped, not deferred
+
+Checked against `COMPANY_FLOW_REVIEW_2026-08-07.md` before sizing anything. GPS
+appears in the company's flow document in exactly one place: **chain-of-custody
+(§5.3)** — *"timestamp, GPS, photos, weight, category"* per pickup event, which
+is what Batch 7B just built. The document **never asks for address autofill from
+coordinates.**
+
+So there is nothing to size. The Google-vs-Nominatim trade-off written up in
+Batch 6.5 is moot unless the company asks. Don't reopen it on a hunch.
+
+### 3. Lifecycle change — built as Batch 7A (see below)
+
+Aamir's call was **settle the lifecycle first, then build the tracking UI once**.
+Recorded honestly: A recommended the opposite (build 7B first, insert stages
+later) on the grounds that `Timeline` already maps over `LIFECYCLE_STAGES` and
+the custody log renders `StatusEvent` rows — both stage-list-agnostic, so the
+later rework would have been two label entries plus the track-page buckets rather
+than a rebuild. Aamir chose the settle-first path anyway and it was built that
+way in full. In hindsight it was the better call for one reason neither side
+raised up front: the guard change (`/offer` admitting `offered` exactly) also
+changed the *seed*, and doing that after 7B would have meant re-verifying the
+custody log against renumbered pickup ids.
+
+---
+
+## What Batch 7A delivered — `arrived` + `offered`
+
+**New locked contract, nine stages:**
+
+```
+requested → scheduled → arrived → offered → collected → tested → processed
+  → recovered → certified          (+ cancelled)
+```
+
+`arrived` before `offered` because the company flow document puts assessment and
+quoting **on site**, in that order. The indicative quote shown at booking is a
+different object — `Pickup.indicativeQuotePaise`, not an `Offer` row — so the two
+models coexist without further reconciliation.
+
+### The migration
+
+`20260809124400_lifecycle_arrived_offered`, hand-written rather than taking
+Prisma's generated append:
+
+```sql
+alter type "PickupStatus" add value if not exists 'arrived' after 'scheduled';
+alter type "PickupStatus" add value if not exists 'offered' after 'arrived';
+```
+
+- **Non-destructive.** Adds labels only. No column altered, no row rewritten, no
+  backfill possible or needed (neither label existed, so no row could hold one).
+- **`AFTER`, not a plain append**, so the Postgres enum sort order matches the
+  logical order. Nothing in the app orders by status today (every `orderBy` is
+  `createdAt` or `occurredAt` — checked, not assumed), so this is correctness for
+  whoever reads the type next rather than a bug fix. **Verified in the live
+  database**: `pg_enum` now reads
+  `requested → scheduled → arrived → offered → collected → … → cancelled`.
+- Safe inside Prisma's transactional migration runner: PG 12+ allows `ADD VALUE`
+  in a transaction as long as the new label isn't *used* in the same one.
+- Applied with `prisma migrate deploy`, not `migrate dev` — `deploy` applies
+  pending migrations without a drift check, which is what you want for a
+  hand-written file.
+
+> **Doc discrepancy worth knowing:** `docs/ai-prompts/database-create-migration.md`
+> describes **Supabase CLI** migrations in `supabase/migrations/`. This repo has
+> no such directory — it uses **Prisma** migrations in
+> `packages/database/prisma/migrations/<timestamp>_<name>/migration.sql`. The
+> runbook's SQL *guidelines* (header comment, lowercase, comment anything
+> destructive) were followed; its file-location convention does not apply here.
+
+### Stage order now has one source of truth per layer
+
+| Layer | Where |
+|---|---|
+| Database | `enum PickupStatus` — `packages/database/prisma/schema.prisma` |
+| UI order + labels | `LIFECYCLE_STAGES`, **`STAGE_LABELS`** — `packages/ui/src/tokens.ts` |
+| Validation | `pickupstatusSchema` — `packages/core/src/validation.ts` |
+| Seed | `LIFECYCLE` — `packages/database/prisma/reset-demo.ts` |
+
+**`track/[id]/page.tsx` and `t/[token]/page.tsx` each carried a private duplicate
+of the stage array. Both are deleted.** They were the real drift risk — a stage
+added to `tokens.ts` but not to those two would have rendered a timeline the
+screens then failed to switch on. Screens now call two new helpers exported from
+`@clbipp/ui`:
+
+- **`isLifecycleStage(status)`** — narrows a status string to the linear lifecycle.
+- **`isStageBefore(stage, other)`** — ordered comparison. Returns **false** for
+  `cancelled` and for anything unknown, rather than the `-1` a bare `indexOf`
+  comparison would silently treat as "earliest". A cancelled pickup has left the
+  progression; it has not paused partway along it.
+
+`STAGE_LABELS` also moved out of `timeline.tsx` into `tokens.ts`, because the
+custody log labels the same stages and a timeline row reading "Agent arrived"
+above a custody entry reading "arrived" is the kind of mismatch nobody notices
+until a demo.
+
+### The guard change — the point of the whole batch
+
+`/offer` and `/offer-breakdown` guarded on `status !== "requested" && status !==
+"scheduled"`. They now guard on **`status !== "offered"`** — an exact match.
+
+That is what makes an offer *addressable* rather than *inferred*. Consequences:
+
+- `handover/actions.ts` replaced its hard-coded `PRE_COLLECTION` set with
+  `isStageBefore(status, 'collected')`, so adding a stage can't silently lock
+  accept/cancel out of it.
+- `scheduled/page.tsx` clamps to `collected` via the same helper instead of a
+  two-value ternary, and its `collected` sublabel changed from "Awaiting agent"
+  (now `arrived`'s job) to "Awaiting handover" — two consecutive rows saying the
+  same thing reads as a bug.
+- **Dashboard rows at `offered` now link to `/offer`**, not `/track`. It is the
+  one stage waiting on the customer, so the row should land on the decision.
+- `StatusBadge` gets `AGENT ON SITE` (info) and `OFFER READY` (**warning**-
+  coloured on purpose — `offered` is waiting on the customer and should not read
+  as passive progress).
+
+### Seed: 8 pickups → 10, renumbered
+
+One pickup per stage, so ids still track stage order:
+`101 requested · 102 scheduled · **103 arrived** · **104 offered** · 105 collected ·
+106 tested · 107 processed · 108 recovered · 109 certified · 110 cancelled`.
+
+- **`PKP-2026-000104` is the new offer demo pickup.** `scripts/smoke.mjs` was the
+  only other file referencing the old ids.
+- **Offers now seed from `offered` onward**, not `scheduled`. Exactly one seeded
+  pickup sits *at* `offered`, so exactly one is reachable through the guard.
+- The Batch 6.5 `Math.max(spec.daysAgo - 5, 0)` clamp is gone. Offer `createdAt`
+  is derived from the `offered` stage index — the same arithmetic the status-event
+  loop uses — so it cannot drift into the future the way the fixed offset did.
+- `etaMinutes` is set at `scheduled` and **null from `arrived` onward**: once
+  they're at the gate, an ETA is wrong.
+
+### Verified
+
+- `npm run build` green, `npm run lint` clean (forced past the turbo cache),
+  **78 tests** (unchanged — this batch adds no new pure logic).
+- `npm run smoke` — all routes, including `/offer?id=PKP-2026-000104` at 200 with
+  content assertions.
+- **Against the real database** (throwaway script, deleted after) — 16 checks:
+  both enum labels exist *in the right position*; seed is 10 pickups; exactly one
+  at `arrived` and one at `offered`; exactly one pickup passes the `/offer`
+  guard and it has an Offer row; no offer is future-dated; `PKP-2026-000104`'s
+  custody chain is exactly `requested,scheduled,arrived,offered`; every event
+  carries GPS; ETA present at `scheduled` and null at `arrived`.
+
+### 🔎 A smoke-test blind spot this batch exposed — worth knowing for Batch 8
+
+The first attempt asserted the tightened guard by expecting a **3xx + `Location`
+header**. It failed against a correct app.
+
+**Why:** `/offer` has a `loading.tsx`. Next flushes the shell before the guard's
+`await`s finish, so `redirect()` travels **inside the RSC stream** — the response
+is a **200 with no `Location` header** even though the redirect works. Confirmed
+by fetching with a real session: the body contained none of the offer markers.
+
+**So a redirect on any route with a `loading.tsx` cannot be asserted by status.**
+`smoke.mjs` now has an `APP_REJECTS` map asserting on **absent content**, which
+survives streaming, and `probe()` gained `mustNotContain`. `/request-pickup`
+still shows a clean 307 because it redirects before any `await`.
+
+---
+
+## What Batch 7B delivered — partner card, chain-of-custody, copy fix
+
+### Real photos in the private bucket (the thing deferred three times)
+
+The seed wrote `photoUrls: []` everywhere, so `createSignedUrl` had been written
+in Batch 4 and left unexercised through Batches 5, 6 and 6.5 — three batches of
+"the next one will use it".
+
+- **`packages/database/prisma/placeholder-image.ts`** — a ~90-line PNG encoder
+  (chunk framing + CRC-32 + `node:zlib`). Hand-rolled rather than adding an image
+  dependency, and **generated rather than committed**, so no binary fixtures land
+  in git. Solid colour with a darker border so a thumbnail grid reads as several
+  distinct photos.
+- **Path ownership is honest**: booking photos under the **vendor's** uid,
+  custody photos under the **agent's** — because that is who took them. Both
+  match the `<uid>/…` layout every storage RLS policy checks via
+  `storage.foldername(name)[1]`. All reads go through server-minted signed URLs,
+  so the split costs nothing.
+- **Custody photos only on `arrived` and `collected`.** A `processed` event in a
+  facility has a timestamp and a location, not a photo from the agent.
+- `Pickup.photoUrls` is kept as the deduped union of its items', so older
+  header-field reads still work.
+
+**`wipePhotos` walks the subtree recursively.** The first version only removed
+objects at the exact depth the seed writes (`<uid>/bookings/<pickup>/<file>`) —
+and verification caught a **real leftover it walked straight past**: an
+`istockphoto-….jpg` sitting at `<uid>/bookings/`, uploaded by the booking wizard
+during earlier manual testing and orphaned when that draft was abandoned (the
+known Batch 5 gap). The recursive version sweeps it. Note this only cleans up
+**on reseed** — it is not a fix for the orphaned-draft gap itself, which still
+needs a real sweep before launch.
+
+### Assigned-partner card
+
+`packages/ui/src/components/ui/partner-card.tsx` — presentational, rendered only
+when `pickup.agentId` is set. No schema change; every field already existed.
+
+- `Profile.fullName`, `phone` as a **`tel:` link** (a phone number you can't tap
+  is half a phone number), `agentVehicle`, `agentRating`.
+- The track query selects **only those four columns**, not the whole agent
+  Profile — pulling `agentZone`, `kycStatus` and `walletBalancePaise` into a
+  customer page's payload would be careless.
+- **ETA wording is status-dependent, not minutes-dependent**: "Arriving in about
+  45 min" at `scheduled`, **"On site now."** at `arrived` (where `etaMinutes` is
+  deliberately null), nothing later.
+
+### Chain-of-custody log
+
+`packages/ui/src/components/ui/custody-log.tsx`, fed by
+`apps/customer/src/lib/custody.ts` (`server-only`).
+
+**Rendered below `Timeline`, not instead of it** — they answer different
+questions. `Timeline` = "how far along, and what's left", including stages that
+haven't happened. `CustodyLog` = "what was actually recorded, by whom, where",
+from real `StatusEvent` rows only, inventing nothing.
+
+- Per entry: stage label (shared `STAGE_LABELS`), timestamp, actor attribution,
+  GPS as a plain `google.com/maps?q=` link, photo thumbnails.
+- **One `createSignedUrls` batch call for the whole log**, not one per photo. It
+  already drops individual failures, so a missing object costs one thumbnail
+  rather than the card.
+- Plain `<img>`, not `next/image`: these are 1-hour signed URLs, which the image
+  optimiser would try to cache past their lifetime.
+- `buildCustodyEntries` lives in the **app**, not `packages/core` — it produces a
+  `@clbipp/ui` view model, and core must not depend on the UI package.
+
+**`/t/[token]` gets GPS and the custody timeline but NOT photos, and no partner
+card.** `includePhotos: false` **skips minting the URLs entirely** rather than
+hiding rendered images — an unrendered signed URL is still a live capability if
+it reaches the client. Reasoning: the token is a bearer capability that can be
+forwarded to anyone; premises/stock photos are more sensitive than the stage
+timestamps and recovered weights already shown there, and an anonymous link
+should not hand out an agent's personal phone number. **Deliberate default —
+flag it if the company wants otherwise.**
+
+### B7 — notification copy
+
+There is no SMS/WhatsApp/push pipeline (Plan v2 §1.3 A3, not built), so the app
+no longer promises one. Three files: `track/[id]` ("This screen updates itself as
+your batteries move through each stage"), `submitted` ("Track this pickup here —
+the status updates as soon as a collection partner is assigned"), and the
+`design-system` sample.
+
+### Verified
+
+- `npm run build` green, `npm run lint` clean, **78 tests**. (The two build
+  warnings — the `middleware`→`proxy` deprecation and Prisma's CJS `export *` —
+  both pre-date this batch.)
+- `npm run smoke` — **all 17 routes**, including two new tracking screens with
+  content assertions. `/track/PKP-2026-000103` asserts `Collection partner`,
+  `Ravi Kumar`, `On site now`, `Chain of custody`, `Agent arrived`,
+  `View location` **and `token=`**. That last one is the load-bearing assertion:
+  `token=` only appears in the HTML if `createSignedUrls` actually minted a URL
+  for a stored object, so it proves the private-bucket read path **end to end**
+  rather than proving an empty photo row rendered.
+- `npm run smoke -- agent@test demo1234 --blocked` — all 17 still bounce.
+- **Against the real database + Storage** (throwaway script, deleted after) — 14
+  checks: every battery item has a photo; booking paths carry the vendor uid and
+  custody paths the agent uid; custody photos exist on `arrived,collected` and
+  nowhere else; `Pickup.photoUrls` equals the union of its items'; a signed URL
+  **fetches 200 and the bytes are a real PNG**; an **unsigned** read of the same
+  path returns **400** (private is private); zero orphaned objects and zero
+  dangling paths after a reseed.
+- **Public route checked directly** for `arrived`, `certified` and `cancelled`
+  tokens: 200, custody log and GPS present, **no signed photo URL and no partner
+  card in the body** — the isolation is asserted, not assumed.
+
+---
+
+## ▶ Next: Batch 8 — B3/B6, PDF generation + payment + receipt screens
+
+Per Plan v2 §5: `@react-pdf/renderer`, three templates (EPR certificate, pickup
+receipt, invoice) rendered server-side to a buffer → Supabase Storage → URL on
+the row. Certificate number format `CERT-{YEAR}-{pickupId}-{category}`. Plus
+`Payment` / `WalletTxn` server actions behind `PAYMENTS_MODE=simulated|razorpay`,
+and the payment + wallet screens.
+
+**What Batch 7 leaves teed up for it:**
+
+- **`createSignedUrl` is now proven end to end**, including that an unsigned read
+  of the same path is refused. Batch 8's PDFs go into `certificates`, `receipts`
+  and `invoices` — three buckets with **no SELECT policy for `authenticated` at
+  all**, so a server-minted signed URL is the *only* read path. Use
+  `createSignedUrl` / `createSignedUrls` from `@clbipp/auth/storage-server` and
+  check ownership before signing, exactly as `@/lib/custody` does.
+- **The seed now uploads real objects to Storage** (`uploadPhoto` in
+  `reset-demo.ts`). `Certificate.pdfUrl` is still `""` — same pattern applies
+  when Batch 8 seeds real PDFs, and `wipePhotos` shows how to keep a reseed clean.
+- **`PKP-2026-000109` is the certified demo pickup** (was `…107` before the 7A
+  renumber). `PKP-2026-000105` is the first with a receipt/payment/wallet ledger.
+- **The certificate layout must stay swappable** — the company will supply the
+  authoritative format. Keep the template separate from the data query; don't
+  spend design time on our own look.
+
+### ⚠ Still true, still not a code task
+
+Email OTP delivers a **6-digit code only if the Supabase email template contains
+`{{ .Token }}`**. The default uses `{{ .ConfirmationURL }}` (a clickable link).
+Batch 6 supports both — `/auth/callback` handles the link — so nothing is broken
+either way. To make `/verify` the real demo path, edit *Authentication → Email
+Templates → Magic Link* in the Supabase dashboard. Dashboard config, not repo
+state.
+
+---
+
+## Superseded — the original Batch 7 brief and its open items
+
+Kept for the reasoning trail. Everything below in this section is **done**; the
+sections above describe what actually shipped.
+
+### 1. GPS panel still shows nothing specific (reproduce first, don't rewrite)
+
+Aamir pressed "Use my current location" and got nothing specific back.
+
+**The code for this is present and verified**, added in Batch 6.5 at
+`apps/customer/src/app/(app)/addresses/AddressForm.tsx` (the `captured &&`
+branch). It type-checks and `npm run build` is green, so the branch compiles and
+`geo.lat/lng/accuracy` are real. Copy was simplified once already (dropped the
+raw coordinates + a "check this pin on a map" link — read as too technical for a
+vendor-facing app) to a one-line `Pin saved as added reference for the
+collection partner.` If it's still showing nothing, that confirms this isn't a
+copy problem — see the repro steps below.
+
+So **start by reproducing, not rewriting**. Most likely causes, in order:
+
+1. **A stale bundle.** This is a `"use client"` component and the change landed
+   mid-session — a dev server restart + hard reload may be all it needs.
+2. **Not a secure context.** `navigator.geolocation` is blocked on plain HTTP
+   from anything that isn't `localhost`. If Aamir was testing from a phone on the
+   LAN (`http://192.168.x.x:3000`), the browser refuses silently-ish and the
+   `failed` branch renders instead. Confirm the origin first.
+3. Only if both are ruled out: check whether `captured` is narrowing as expected
+   and whether the success callback actually fires (a `console.log` in
+   `getCurrentPosition`'s success handler settles it in one try).
+
+Worth adding whatever the fix turns out to be to the end-of-revamp manual list —
+this is device-permission behaviour, which is exactly the class of thing
+`npm run smoke` cannot cover.
+
+**Separately flagged, not scoped yet:** Aamir suspects that if GPS capture is
+mentioned in the company's flow document at all, they likely expect it to
+**autofill** city/state/PIN from the coordinates, not just attach a pin as a
+reference. That's reverse geocoding, not a copy fix — it needs an external API
+(Google Geocoding = billed key; OSM/Nominatim = free but rate-limited with
+weaker Indian coverage, per the Batch 6.5 note this doc already carries) and is
+real scope, not a quick add. **Don't build it opportunistically inside the GPS
+repro above** — check what the flow document actually asks for first, then size
+it as its own task if the document confirms it.
+
+### 2. 🔴 Proposed lifecycle change — `offered` and `arrived` stages
+
+**Aamir's ask:** add a stage for the offer being made, and probably one for the
+agent arriving on site. Rationale: offered pickups are currently awkward to
+handle because "an offer exists" is an *implicit* sub-state of `scheduled`
+rather than a status of its own — which is exactly what made the offer screens
+unreachable in Batch 6.5.
+
+**This is a change to a contract recorded as LOCKED** in `CLAUDE.md`,
+`CONTEXT.md` and `PROJECT_STATE.md`. It is not a Batch 7 sub-task — treat it as
+its own batch and get agreement before touching the enum.
+
+Likely shape (**needs a decision, not an assumption**):
+
+```
+requested → scheduled → arrived → offered → collected → tested → processed → recovered → certified
+```
+
+The company flow document puts assessment and quoting *on site* — the agent
+arrives, assesses, then quotes — which argues for `arrived` before `offered`.
+But today's app shows an indicative quote at **booking** and treats the offer as
+a pre-collection sub-state of `scheduled`. Those two models need reconciling
+before the enum is written; that reconciliation is the actual work here.
+
+**Blast radius — this is a Batch 0B-sized change, not a small one:**
+
+| Where | What changes |
+|---|---|
+| `packages/database/prisma/schema.prisma` | `PickupStatus` enum + a migration. Postgres enums are ordered — inserting mid-enum needs `ALTER TYPE … ADD VALUE … BEFORE/AFTER`, not a plain append |
+| `packages/ui` `tokens.ts` | `LIFECYCLE_STAGES` order + `STATUS_CONFIG` badge variants for the 2 new stages |
+| `Timeline` component | two more rows, and their sublabels |
+| `track/[id]/page.tsx` · `t/[token]/page.tsx` | the five status buckets both switch on |
+| `offer/page.tsx` guard | currently admits `requested`/`scheduled`; would become `offered` — this is the change that makes offers cleanly addressable |
+| `dashboard` | status-routed row links |
+| `reset-demo.ts` | `LIFECYCLE` array; the seed is "one pickup per stage", so **8 pickups becomes 10** |
+| `scripts/smoke.mjs` | the hard-coded `PKP-2026-000102` offer ids |
+| docs | the locked-contract text in `CLAUDE.md`, `CONTEXT.md`, `PROJECT_STATE.md` |
+| later | the parked decision engine and the Field Agent app both key off these stages |
+
+**⚠ Sequencing — this is the part that matters.** Batch 7 builds the
+chain-of-custody timeline, which *renders the lifecycle stages*. Building that
+timeline against 8 stages and then inserting two more means reworking it. So
+either:
+
+- **(a)** settle the lifecycle first and build Batch 7 once against the final
+  stage list — more upfront, no rework; or
+- **(b)** build Batch 7 now and accept a second pass over the timeline later.
+
+**(a) is the cheaper path** given the timeline is the whole of Batch 7's UI.
+Aamir's call — `CLAUDE.md` fixes phase *order*, and this is an insertion rather
+than a reorder, so it needs an explicit decision rather than a default.
+
+---
+
+### The original Batch 7 brief (delivered — see the 7A/7B sections above)
 
 Per Plan v2 §5: assigned-partner card (name, phone, vehicle), ETA, and a
 chain-of-custody timeline rendering per-event GPS + photos. Realtime is unchanged
 and already works.
 
-Two things Batch 6 leaves teed up for it:
+Two things Batch 6 left teed up, **both now consumed**:
 
-- **`createSignedUrl` in `@clbipp/auth/storage-server` is still unconsumed.** All
-  five buckets are private, so it is the only way a stored photo path becomes
-  viewable. Batch 7's custody timeline is where the booking photos finally get
-  displayed — this has now been the "next batch will use it" item twice.
-- **`Profile.phone` is now populated at signup** (Batch 6), so the partner card
-  has a real number to show for agent profiles rather than a placeholder. The
-  seeded `agent@test` profile has one.
+- ~~`createSignedUrl` is still unconsumed~~ — consumed in 7B, and proven end to
+  end (a signed URL fetches a real PNG; an unsigned read of the same path 400s).
+- ~~`Profile.phone` populated at signup~~ — the partner card shows the seeded
+  `agent@test` number ("Ravi Kumar").
 
-### ⚠ Read the Batch 6.5 section below first
+Two Batch 6.5 conventions this batch had to respect, still binding:
 
-Batch 6.5 (the first manual test pass) landed between 6 and 7 and changed two
-things Batch 7 touches directly:
-
-- **Bottom-nav clearance is now owned by `(app)/layout.tsx`.** Do not add
-  `contentClassName={NAV_PADDING}` to a new screen — it will double-pad. Any new
-  `(app)` screen using `AppShell` must pass `hideNav`.
-- **Offers now exist from `scheduled` onward in the seed**, so the offer screens
-  are reachable and smoke-covered. `PKP-2026-000102` is the offer demo pickup.
-
-### ⚠ One thing to action before the demo (not a code task)
-
-Email OTP delivers a **6-digit code only if the Supabase email template contains
-`{{ .Token }}`**. The default template uses `{{ .ConfirmationURL }}`, which sends
-a clickable link instead. Batch 6 supports both (`/auth/callback` handles the
-link), so nothing is broken either way — but if you want the `/verify` code
-screen to be the actual demo path, edit
-*Authentication → Email Templates → Magic Link* in the Supabase dashboard to
-include `{{ .Token }}`. That is dashboard config, not repo state, so it cannot be
-committed here.
+- **Bottom-nav clearance is owned by `(app)/layout.tsx`.** Never add
+  `contentClassName={NAV_PADDING}` to a screen — it double-pads. Any `(app)`
+  screen using `AppShell` must pass `hideNav`.
+- ~~`PKP-2026-000102` is the offer demo pickup~~ — **now `PKP-2026-000104`**
+  after the 7A renumber, and offers seed from `offered` onward, not `scheduled`.
 
 ---
 
@@ -690,14 +1119,32 @@ just needs to know so he doesn't re-introduce it from an older copy.
 npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
 npm run test           # 78 tests (20 decision-engine + 24 auth + 34 core)
-npm run smoke          # 13 routes since Batch 6.5 (incl. the two offer screens)
 npm run lint           # add -- --force when turbo replays a stale cache hit
-npm run smoke          # logged-in smoke test — needs `npm run dev` running
+npm run smoke          # 17 routes since Batch 7B — needs `npm run dev` running
 npm run smoke -- agent@test demo1234 --blocked   # role gate MUST block these
-npm run reset-demo     # wipe + reseed the whole demo dataset
+npm run reset-demo     # wipe + reseed: 10 pickups + Storage photos
 npm run create-buckets --workspace=@clbipp/database
-npm run db:migrate --workspace=@clbipp/database
+npm run db:migrate --workspace=@clbipp/database   # = prisma migrate dev
 ```
+
+> **Applying a hand-written migration:** `npm run db:migrate` runs
+> `prisma migrate dev`, which also diffs for drift. For a migration folder you
+> wrote yourself (as Batch 7A did), use `npx prisma migrate deploy` from
+> `packages/database` — it applies pending migrations and records them without
+> the drift check.
+
+**Demo pickup ids (renumbered in Batch 7A — 10, one per stage):**
+
+| id | stage | what it demos |
+|---|---|---|
+| `PKP-2026-000101` | requested | `/scheduled` request screen |
+| `PKP-2026-000102` | scheduled | partner card with an ETA |
+| `PKP-2026-000103` | arrived | partner card "On site now", custody photos |
+| **`PKP-2026-000104`** | **offered** | **the only pickup `/offer` + `/offer-breakdown` admit** |
+| `PKP-2026-000105` | collected | first with receipt + payment + wallet ledger |
+| `PKP-2026-000106` … `108` | tested → recovered | in-progress tracking states |
+| `PKP-2026-000109` | certified | certificate + full 9-stage custody chain |
+| `PKP-2026-000110` | cancelled | the terminal side-state |
 
 **Applying SQL without the Supabase dashboard** — this is how policies were
 applied and it works, so no dashboard trip is needed:
@@ -755,6 +1202,24 @@ end-of-revamp manual pass: device permission prompts (camera, geolocation),
 visual/layout polish on a handset, PWA install + offline, and the
 feel of the multi-step flows.
 
+### The end-of-revamp manual list, as it stands
+
+Items batches have explicitly deferred to one real-device pass:
+
+1. **Geolocation on a real handset** — the permission prompt itself, and the
+   **LAN-http path**: open the app over `http://192.168.x.x:3000` and confirm the
+   Batch 7 `isSecureContext` guard says *"Location needs a secure (https)
+   connection"* rather than the misleading "permission was denied". This is the
+   one thing about GPS that localhost can never test.
+2. **Camera / file-picker sheet** in the booking wizard — multi-photo selection,
+   and how the 4-step flow feels on a small screen (Batch 5).
+3. **Custody photo thumbnails** on `/track/[id]` — the grid is asserted to render
+   signed URLs, but not how it looks at phone width (Batch 7B).
+4. **Type a real OTP code from a real inbox.** No email has been delivered
+   end-to-end; `business@test` has no deliverable domain and real sends burn the
+   ~2–4/hr SMTP budget (Batch 6).
+5. **PWA install + offline**, and visual/layout polish generally.
+
 ---
 
 ## Known gaps / deliberate deferrals
@@ -767,6 +1232,25 @@ feel of the multi-step flows.
   spend design time on the current certificate look.
 - **`/handover` accepts the offer during a GET render** — see the Batch 6.5
   section. Excluded from the smoke test for that reason; should become a POST.
+  **Still the highest-value small fix outstanding**, and Batch 7A made it
+  slightly more urgent: a prefetch that fires `acceptOffer` now advances the one
+  pickup at `offered`, which is the only pickup the offer screens admit — so an
+  accidental accept doesn't just mutate demo data, it empties the offer demo.
+- **The custody log renders photos on `/track/[id]` but not on `/t/[token]`.**
+  Deliberate (the token is a forwardable bearer capability), and
+  `includePhotos: false` skips minting the signed URLs rather than hiding them.
+  Flag it if the company wants photos on the public link.
+- **`wipePhotos` in `reset-demo.ts` is not a fix for orphaned draft uploads.** It
+  sweeps the demo users' whole `pickup-photos` subtree on **reseed** — which is
+  how the leftover `istockphoto-….jpg` from an abandoned booking was found — but
+  the Batch 5 gap stands: closing the tab mid-booking still orphans objects in
+  normal use. That needs a real sweep of `<uid>/bookings/…` objects with no
+  referencing `BatteryItem` before launch.
+- **A redirect on any route with a `loading.tsx` returns 200, not 3xx.** Next
+  flushes the shell before the guard's `await`s finish, so `redirect()` travels
+  inside the RSC stream. Assert those with **absent content** (`mustNotContain`
+  in `smoke.mjs`), never with a status code. Bit us once in 7A; it will bite
+  again in Batch 8 if a PDF route gets a loading boundary.
 - Bottom-nav clearance is owned by `(app)/layout.tsx` since Batch 6.5. New `(app)`
   screens must pass `hideNav` to `AppShell` and must **not** add their own bottom
   padding.

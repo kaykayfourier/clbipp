@@ -244,7 +244,7 @@ export default function DesignSystemPage() {
         >
           <div className="space-y-3">
             <Banner variant="info">
-              We&apos;ll notify you as your battery moves through each stage.
+              This screen updates itself as your batteries move through each stage.
             </Banner>
             <Banner variant="success">
               PKP-2042 has been collected. Your receipt and a secure tracking link are on the way.

@@ -34,25 +34,62 @@ const ROUTES = [
   '/book',
   '/request-pickup',
   '/track',
+  // Two tracking screens with different shapes, because Batch 7B's partner card
+  // and custody log are status-dependent: 103 is `arrived` (agent on site, no
+  // ETA) and 109 is `certified` (terminal, full custody chain).
+  '/track/PKP-2026-000103',
+  '/track/PKP-2026-000109',
   '/profile',
   '/compliance',
-  // The offer flow. These take an ?id= and are status-guarded, so before the
-  // Batch 6.5 seed fix they redirected for every seeded pickup and could not be
-  // demoed at all. They are content-asserted below precisely so a silent
+  // The offer flow. These take an ?id= and are status-guarded — since Batch 7A
+  // the guard is `status === 'offered'` exactly, and PKP-2026-000104 is the one
+  // seeded pickup at that stage. Content-asserted below precisely so a silent
   // regression to redirecting shows up as a failure rather than a green 307.
-  '/offer?id=PKP-2026-000102',
-  '/offer-breakdown?id=PKP-2026-000102',
+  '/offer?id=PKP-2026-000104',
+  '/offer-breakdown?id=PKP-2026-000104',
   // ⚠ Do NOT add '/handover?id=…' here. That page calls acceptOffer() during
   // render, so a plain GET advances the pickup to `collected` — it would mutate
   // the demo data on every run and break the two offer routes above, which need
-  // a pickup still at `scheduled`. See the Batch 6.5 notes.
+  // a pickup still at `offered`. See the Batch 6.5 notes.
 ]
+
+// Routes whose STATUS GUARD must reject. Asserting a guard rejects is as much
+// a part of proving it works as asserting it admits: since Batch 7A the offer
+// screens are reachable at `offered` and nowhere else, so these two bouncing is
+// the other half of that guarantee.
+//
+// ⚠ Asserted on ABSENT CONTENT, not on a 3xx + Location. Both offer routes have
+// a `loading.tsx`, so Next flushes the shell before the guard runs and the
+// redirect travels inside the RSC stream — the response is a 200 with no
+// Location header even though the redirect is working. A status check here
+// would fail on a correct app. Absent content is the signal that survives
+// streaming.
+const APP_REJECTS = {
+  // scheduled — before the offer stage
+  '/offer?id=PKP-2026-000102': ['Estimated Offer', 'Why this price?'],
+  // collected — past it
+  '/offer?id=PKP-2026-000105': ['Estimated Offer', 'Why this price?'],
+}
 
 // Content that must appear on a logged-in route. A redirect returns no body, so
 // asserting on text is also what proves the route RENDERED rather than bounced.
 const APP_CONTENT = {
-  '/offer?id=PKP-2026-000102': ['Estimated Offer', 'Why this price?'],
-  '/offer-breakdown?id=PKP-2026-000102': ['Estimated Value', 'Why this valuation?'],
+  '/offer?id=PKP-2026-000104': ['Estimated Offer', 'Why this price?'],
+  '/offer-breakdown?id=PKP-2026-000104': ['Estimated Value', 'Why this valuation?'],
+  // Batch 7B. `token=` on the img src is the part worth asserting: it only
+  // appears if createSignedUrl actually minted a URL for a stored object, so it
+  // proves the private-bucket read path end to end rather than just proving the
+  // component rendered an empty photo row.
+  '/track/PKP-2026-000103': [
+    'Collection partner',
+    'Ravi Kumar',
+    'On site now',
+    'Chain of custody',
+    'Agent arrived',
+    'View location',
+    'token=',
+  ],
+  '/track/PKP-2026-000109': ['Chain of custody', 'Certified', 'Collected', 'token='],
 }
 
 // Public auth screens. Checked separately because the role gate must NOT touch
@@ -133,8 +170,15 @@ async function main() {
 
   let failures = 0
 
-  /** Fetches one route and prints a verdict. `expectBounce` inverts the check. */
-  async function probe(route, { expectBounce = false, mustContain = [], anon = false } = {}) {
+  /**
+   * Fetches one route and prints a verdict. `expectBounce` inverts the check to
+   * "must redirect to /login"; `mustNotContain` proves a status guard REJECTED,
+   * which a 3xx check cannot do on a streamed route (see APP_REJECTS).
+   */
+  async function probe(
+    route,
+    { expectBounce = false, mustContain = [], mustNotContain = [], anon = false } = {},
+  ) {
     let status, body = '', note = ''
     try {
       const r = await fetch(`${BASE}${route}`, {
@@ -155,6 +199,7 @@ async function main() {
     const errored = /__next_error__|Application error|Internal Server Error/.test(body)
     const redirectedToLogin = note.includes('/login')
     const missing = mustContain.filter((s) => !body.includes(s))
+    const leaked = mustNotContain.filter((s) => body.includes(s))
 
     // Exactly one bottom tab bar. AppShell renders its own unless `hideNav` is
     // passed, and (app)/layout.tsx renders one for every authenticated screen —
@@ -167,11 +212,13 @@ async function main() {
     if (errored || status >= 500) verdict = 'ERROR PAGE'
     else if (expectBounce) verdict = redirectedToLogin ? 'blocked (correct)' : 'LEAKED THROUGH'
     else if (redirectedToLogin) verdict = 'BOUNCED TO LOGIN'
+    else if (leaked.length) verdict = `GUARD LEAKED: ${leaked.join(' | ')}`
+    else if (mustNotContain.length) verdict = 'guarded (correct)'
     else if (missing.length) verdict = `MISSING: ${missing.join(' | ')}`
     else if (badNav) verdict = `${navCount} TAB BARS (expected 1)`
     else verdict = 'ok'
 
-    if (verdict !== 'ok' && verdict !== 'blocked (correct)') failures++
+    if (!['ok', 'blocked (correct)', 'guarded (correct)'].includes(verdict)) failures++
     console.log(`  ${String(status).padEnd(3)} ${route.padEnd(34)} ${verdict} ${note}`)
   }
 
@@ -185,6 +232,17 @@ async function main() {
     })
   }
 
+  // The other half of the status guard: these ids are NOT at `offered`, so the
+  // offer screen must turn them away. In --blocked mode the role gate gets there
+  // first and the expectation is a /login bounce instead.
+  console.log('\n  — status guards (must reject) —')
+  for (const [route, forbidden] of Object.entries(APP_REJECTS)) {
+    await probe(route, {
+      expectBounce: blocked,
+      mustNotContain: blocked ? [] : forbidden,
+    })
+  }
+
   // Fetched WITHOUT the session cookie — that is the state they're built for,
   // and a logged-in hit on /login legitimately redirects to /dashboard, which
   // would make a content check meaningless. A rejected session that also
@@ -194,7 +252,7 @@ async function main() {
     await probe(route, { anon: true, mustContain: CONTENT[route] ?? [] })
   }
 
-  const total = ROUTES.length + PUBLIC_ROUTES.length
+  const total = ROUTES.length + Object.keys(APP_REJECTS).length + PUBLIC_ROUTES.length
   console.log(
     failures === 0
       ? `\nAll ${total} routes behaved as expected.\n`

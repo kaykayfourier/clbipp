@@ -31,6 +31,27 @@ reality doesn't match the original split — not free-for-all editing.
 
 ## Change log
 
+### 2026-08-09 — Lifecycle enum change (Batch 7A) executed by A under the revamp cover
+
+- **Whose lane it is normally:** B's. `packages/database/prisma/schema.prisma`
+  and its migrations are the schema owner's, and `CLAUDE.md` says not to edit
+  that file directly.
+- **What A did:** added `arrived` and `offered` to `enum PickupStatus`, wrote the
+  migration `20260809124400_lifecycle_arrived_offered` by hand, and reshaped the
+  seed from 8 pickups to 10.
+- **Why it's covered:** the 2026-08-09 entry below already assigns B's whole lane
+  to A for the duration of this revamp, with B's explicit permission. No new
+  agreement needed — logged separately because it changes a **contract recorded
+  as LOCKED** in three docs, which is worth its own line in the record.
+- **Khalid needs to know two things when he's back:**
+  1. The status lifecycle is now **nine stages**, and `/offer` guards on
+     `status === 'offered'` exactly. Anything he writes against the old
+     seven-stage list is stale.
+  2. Demo pickup ids were **renumbered** — the certified pickup is now
+     `PKP-2026-000109` (was `…107`) and the offer pickup is `PKP-2026-000104`
+     (was `…102`).
+- **Reverts with the rest of the temporary override.**
+
 ### 2026-08-09 — Customer-app revamp: B's entire lane → A (temporary, for this revamp)
 - **Moved to A (Aamir):** all of B's (Khalid's) lane for the customer-app
   revamp — the Batch 0B schema migration + Storage buckets + seed rewrite, the

@@ -30,6 +30,20 @@ const STATUS_CONFIG: Record<
     text: colors.infoText,
     label: "SCHEDULED",
   },
+  arrived: {
+    dot: colors.info,
+    bg: colors.infoBg,
+    text: colors.infoText,
+    label: "AGENT ON SITE",
+  },
+  // Warning-coloured on purpose: `offered` is the one stage that is waiting on
+  // the CUSTOMER to do something, so it should not read as passive progress.
+  offered: {
+    dot: colors.warning,
+    bg: colors.warningBg,
+    text: colors.warningText,
+    label: "OFFER READY",
+  },
   collected: {
     dot: colors.warning,
     bg: colors.warningBg,
