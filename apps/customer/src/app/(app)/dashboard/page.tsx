@@ -7,6 +7,7 @@ import { ListRow } from "@clbipp/ui"
 import { Button } from "@clbipp/ui"
 import { Card, CardContent } from "@clbipp/ui"
 import type { Pickup } from "@clbipp/database"
+import { AddressChip } from "../addresses/AddressChip"
 
 type DashboardStats = {
   pickupCount: number
@@ -18,18 +19,23 @@ function PopulatedDashboardPage({
   pickups,
   stats,
   displayName,
+  profileId,
 }: {
   pickups: Pickup[]
   stats: DashboardStats
   displayName: string
+  profileId: string
 }) {
   return (
     <div className="flex flex-col gap-4 p-4">
-      <div>
-        <h1 className="font-serif text-2xl font-medium text-[#0E120E]">
-          Hello, {displayName}
-        </h1>
-        <p className="text-sm text-[#666666]">Your recovery at a glance</p>
+      <div className="flex flex-col items-start gap-2">
+        <div>
+          <h1 className="font-serif text-2xl font-medium text-[#0E120E]">
+            Hello, {displayName}
+          </h1>
+          <p className="text-sm text-[#666666]">Your recovery at a glance</p>
+        </div>
+        <AddressChip profileId={profileId} />
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -85,7 +91,7 @@ function PopulatedDashboardPage({
   )
 }
 
-function EmptyDashboardPage() {
+function EmptyDashboardPage({ profileId }: { profileId: string }) {
   return (
     <div className="flex flex-col items-center justify-center flex-1 text-center gap-4 p-8 min-h-[70vh]">
       <div className="w-20 h-20 rounded-2xl bg-[#E8E1D2] flex items-center justify-center text-[#6B6F6B]" />
@@ -98,6 +104,7 @@ function EmptyDashboardPage() {
           Request a pickup
         </Button>
       </Link>
+      <AddressChip profileId={profileId} />
     </div>
   )
 }
@@ -138,6 +145,13 @@ export default async function DashboardPage() {
 
   const displayName = profile.company_name ?? profile.full_name
 
-  if (pickups.length === 0) return <EmptyDashboardPage />
-  return <PopulatedDashboardPage pickups={pickups} stats={stats} displayName={displayName} />
+  if (pickups.length === 0) return <EmptyDashboardPage profileId={vendorId} />
+  return (
+    <PopulatedDashboardPage
+      pickups={pickups}
+      stats={stats}
+      displayName={displayName}
+      profileId={vendorId}
+    />
+  )
 }

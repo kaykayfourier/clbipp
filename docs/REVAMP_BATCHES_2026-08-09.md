@@ -20,8 +20,8 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 1 | **0A — Turborepo migration** | A | ✅ done, committed `a5c15e2` |
 | 2 | **0B — schema v2 + buckets + seed + RLS** | B | ✅ done, staged |
 | 3 | **B2 — pricing engine + `createPickupWithItems`** | B | ✅ done, committed `ac07895` |
-| 4 | A2/A3 — address book + storage upload helper | A | ⏭ **next — start here** |
-| 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | pending |
+| 4 | A2/A3 — address book + storage upload helper | A | ✅ done, staged |
+| 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | ⏭ **next — start here** |
 | 6 | A1 — email OTP + `/verify` + roles | A | pending |
 | 7 | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | pending |
 | 8 | B3/B6 — PDF generation + payment + receipt screens | B | pending |
@@ -34,45 +34,98 @@ receipt PDF (keep the screen) → address GPS.
 
 ---
 
-## ▶ Next: Batch 4 — A2 (address book) + A3 (storage helper)
+## ▶ Next: Batch 5 — A4, the 4-step booking wizard
 
-Everything Batch 4 depends on is already in place — schema, buckets, Storage
-policies, and the Batch 3 quote/write functions. Nothing is blocked.
-
-**A2 — address book** (Plan v2 §5, A2):
-
-- `/addresses` list + `/addresses/new`, writing to the `Address` model
-  (`label, line1, line2, city, state, pincode, lat, lng, status, isDefault`).
-- Default-address handling (exactly one `isDefault` per profile — do it in a
-  transaction that clears the old default) and `operational` /
-  `not_operational` status via the `AddressStatus` enum.
-- GPS capture through `navigator.geolocation` — free, no API key. **No embedded
-  map picker**: it needs a billed Google Maps key, and lat/lng + text fields
-  carry the same data.
-- Address chip in the app header.
-- **Writes need a service-role server action.** The Batch 2 RLS is SELECT-only
-  by design for the new tables, `Address` included — a browser-session insert
-  will be rejected. Use `createAdminClient()` from `@clbipp/auth` (or Prisma in
-  a server action), never the browser client.
-
-**A3 — storage upload helper** (the RLS half of A3 is already done):
-
-- Build `packages/auth/src/storage.ts` — an upload helper wrapping the Supabase
-  Storage calls, with the 5 MB/file client-side check. Per the repo convention,
-  Storage calls live in `packages/auth`, not scattered across pages.
-- The five private buckets exist (Batch 2) and the four Storage policies in
-  `supabase/storage-policies.sql` are **verified applied in the database**
-  (`pickup-photos`: upload/read/delete own; `kyc-docs`: upload own).
-- ⚠ Known gap: `kyc-docs` has an upload policy but **no read or delete policy**,
-  and `certificates` / `receipts` / `invoices` have none at all — those are
-  read via signed URLs generated server-side, so it's fine for now, but if a
-  screen tries to read a KYC doc with the browser client it will 403.
-  Path convention already assumed by the policies: `<user-id>/<filename>`.
-
-**Then Batch 5 (A4, the booking wizard) consumes Batch 3 directly** — no stubs
-needed. Import `getQuote` and `createPickupWithItems` from `@clbipp/core`, and
-remember `createPickupWithItems` does **not** read the session: the wizard's
+**Batch 5 consumes Batch 3 directly** — no stubs needed. Import `getQuote` and
+`createPickupWithItems` from `@clbipp/core`, and remember
+`createPickupWithItems` does **not** read the session: the wizard's
 `"use server"` action resolves the logged-in user and passes `vendorId` in.
+
+Batch 4 has now supplied the other two things the wizard needs:
+
+- **The address step** reads `Address` rows via Prisma scoped by `profileId`.
+  Show only `status: "operational"` ones in the picker (`not_operational` means
+  "on file but can't be collected from today"), preselect `isDefault: true`, and
+  link out to `/addresses/new` when the customer has none.
+- **The photo step** calls `uploadFiles({ bucket: "pickup-photos", userId, files,
+  segments })` from `@clbipp/auth/storage` — client-side, because a `File`
+  doesn't survive a trip through a server action. It returns
+  `{ paths, errors }`: partial success is a real outcome, so keep the paths that
+  landed and only re-prompt for the ones that failed. Store the returned paths
+  (not URLs — the buckets are private) on `BatteryItem.photoUrls`, and render
+  them later through `createSignedUrl` from `@clbipp/auth/storage-server`.
+
+---
+
+## What Batch 4 delivered — address book + storage helper
+
+### A3 — storage helper
+
+Two files, deliberately split so `server-only` can't leak into the client bundle:
+
+- **`packages/auth/src/storage.ts`** (browser) — `BUCKETS`, `MAX_FILE_BYTES`,
+  `buildObjectPath`, `uploadFile`, `uploadFiles`, `removeFile`. Exported as
+  `@clbipp/auth/storage`. `buildObjectPath` is the single place that guarantees
+  the `<user-id>/…/<filename>` layout **every** storage RLS policy checks via
+  `storage.foldername(name)[1]` — it sanitises the filename, strips traversal,
+  and adds a timestamp+random prefix so two `img_0001.jpg` files don't collide
+  (we never pass `upsert: true`; an overwrite would destroy an audit photo).
+- **`packages/auth/src/storage-server.ts`** (`server-only`) — `createSignedUrl` /
+  `createSignedUrls`, exported as `@clbipp/auth/storage-server`. All five buckets
+  are private, so this is the only way a stored path ever becomes viewable.
+  Not consumed yet; Batch 5/7/8 need it.
+- 13 new tests in `storage.test.ts` (path building, traversal, size limits).
+  **Workspace total is now 48** (3 auth + 13 storage + 20 decision-engine + 12 booking).
+
+⚠ Unchanged known gap: `kyc-docs` has an upload policy but **no read or delete
+policy**, and `certificates` / `receipts` / `invoices` have none at all. All are
+read via server-generated signed URLs, so this is fine as designed — but a
+browser-client read of a KYC doc will 403.
+
+### A2 — address book
+
+- `/addresses` (list) and `/addresses/new` under `apps/customer/src/app/(app)/addresses/`.
+  `page.tsx` is a server component; `AddressList.tsx` is the `"use client"` island
+  holding the row buttons (a server component can't pass `onClick` — that's the
+  crash that took out `/scheduled`); `AddressForm.tsx` is client for
+  `navigator.geolocation`; `AddressChip.tsx` renders on the dashboard.
+- `addressSchema` added to `packages/core/src/validation.ts` — 6-digit PIN,
+  blank-to-undefined preprocessing for optional FormData fields, and a refine
+  that forces lat/lng to be set together.
+- GPS via `navigator.geolocation` only. **No embedded map picker** (needs a
+  billed Maps key). Coordinates stay optional — a denied permission prompt still
+  saves the address.
+
+**Correction to the Batch 2 note below:** "the new tables are SELECT-only,
+`Address` included" is **wrong for `addresses`**. `supabase/policies.sql:132-164`
+grants the owner all four verbs scoped `auth.uid() = profile_id`, and a
+`pg_policies` query confirms all four are applied in the live database — it is
+"the one new table the customer writes directly". `battery_items` is the
+SELECT-only one. A browser-session address insert *would* succeed.
+
+**We still write from a server action with Prisma, for atomicity, not RLS.**
+"Exactly one default per profile" is a two-statement invariant and a session
+client has no transaction. The trade is that **Prisma bypasses RLS**, so
+ownership is enforced in code: every query in `addresses/actions.ts` is scoped by
+`profileId`, and every mutation uses `updateMany`/`deleteMany` with
+`{ id, profileId }` so a guessed id from another user matches zero rows.
+
+`deleteAddress` also **refuses to delete an address a pickup points at** —
+`Pickup.addressId` is a nullable FK with no cascade, and the seeded default
+address is referenced by all 8 demo pickups, so deleting it would have orphaned
+the entire demo history. It tells the customer to mark it not-operational instead.
+
+**Verified against the real database** (script run inside a rolled-back
+transaction, then deleted; seed left untouched): the default swap leaves exactly
+one default, `Decimal(10,7)` lat/lng round-trip exactly when passed as strings,
+a foreign address id matches 0 rows on both update and delete, the list query
+never crosses users, the in-use guard fires on the 8-pickup address, and
+deleting the default promotes a replacement. `npm run build` green (23 routes),
+`npm run lint` clean, 48 tests passing.
+
+**Still to check in a browser** (needs a real device/permission prompt): the
+"Use my current location" button end-to-end, and how the chip looks on a real
+handset.
 
 ---
 
@@ -133,9 +186,10 @@ supabase/                policies.sql etc — stayed at repo root
   profiles were deleted and the superseded `prisma/seed.ts` removed.
 - RLS for all 8 new tables in `supabase/policies.sql`, plus new
   `supabase/storage-policies.sql`. New tables are **SELECT-only by design** —
-  writes go through service-role server actions. The 4 agent/admin scaffolding
-  tables get RLS **enabled with no policy** (deny-all) so they aren't left
-  readable by any logged-in user.
+  writes go through service-role server actions — **with one exception:
+  `addresses`, which grants the owner all four verbs** (see the Batch 4
+  correction above). The 4 agent/admin scaffolding tables get RLS **enabled with
+  no policy** (deny-all) so they aren't left readable by any logged-in user.
 
 **Verified end-to-end while logged in as `business@test`:** dashboard lists all
 8 pickups; `/track/[id]` renders correctly for certified / scheduled / cancelled;
@@ -218,7 +272,7 @@ just needs to know so he doesn't re-introduce it from an older copy.
 ```bash
 npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
-npm run test           # 35 tests (3 auth + 20 decision-engine + 12 booking)
+npm run test           # 48 tests (3 auth + 13 storage + 20 decision-engine + 12 booking)
 npm run lint
 npm run reset-demo     # wipe + reseed the whole demo dataset
 npm run create-buckets --workspace=@clbipp/database
