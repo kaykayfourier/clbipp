@@ -1,185 +1,539 @@
+/**
+ * Demo reset + seed (BATCH_0B_SCHEMA.md §5).
+ *
+ * Rule this seed exists to fix: EVERY seeded row belongs to a REAL Supabase
+ * auth user. The old seed used invented vendor UUIDs, so screens rendered empty
+ * for the account you actually logged in as — that burned time repeatedly.
+ *
+ * Seeds one pickup at every lifecycle stage so every screen state is reachable
+ * without hand-editing the database.
+ *
+ * Run: npm run reset-demo
+ */
+import { createClient } from "@supabase/supabase-js"
 import { prisma } from "../src/client"
+import type { BatteryCategory, BatteryCondition, BatteryType, PickupStatus } from "../src/generated/client"
+import { loadAppEnv } from "./env"
 
-async function seedForExistingUser(email: string) {
-  const profile = await prisma.profile.findFirst({ where: { email } })
-  if (!profile) throw new Error(`No profile found for ${email}`)
+const CUSTOMER_EMAIL = "business@test"
+const AGENT_EMAIL = "agent@test"
+const ADMIN_EMAIL = "admin@test"
+// Demo-only password for the seeded agent/admin logins. Not a secret; these
+// accounts exist so the Agent and Admin apps have something to log into.
+const DEMO_PASSWORD = "demo1234"
 
-  const vendorId = profile.id
-  console.log(`Seeding for ${profile.fullName} (${vendorId})`)
+const LIFECYCLE = [
+  "requested",
+  "scheduled",
+  "collected",
+  "tested",
+  "processed",
+  "recovered",
+  "certified",
+] as const
 
-  await prisma.$transaction([
+// Delhi NCR, roughly — the demo pickups all sit in this area.
+const GEO = { lat: 28.5355, lng: 77.391 }
 
-    // ── PKP-3099 · certified ──────────────────────────────────────────
-    prisma.pickup.create({
-      data: {
-        id: "PKP-3099",
-        vendorId,
-        batteryType: "li_ion_nmc",
-        approxQuantity: "30 units",
-        approxWeightKg: 480,
-        location: "Delhi NCR, Kalkaji Mandir",
-        status: "certified",
-        notes: "Demo seeded pickup — certified",
-      },
-    }),
-    ...["requested","scheduled","collected","tested","processed","recovered","certified"].map(
-      (status, i) => prisma.statusEvent.create({
-        data: {
-          pickupId: "PKP-3099",
-          status: status as any,
-          actorRole: "system",
-          occurredAt: new Date(Date.now() - (7 - i) * 24 * 60 * 60 * 1000),
-        },
-      })
-    ),
-    prisma.offer.create({
-      data: {
-        pickupId: "PKP-3099",
-        vendorId,
-        pathway: "recycle",
-        estimatedPrice: 18450000,
-        rationale: "High nickel content — metal recovery is the best route for this NMC pack.",
-        materialBreakdown: [
-          { material: "Nickel",  weight_kg: 31, value_paise: 12800000 },
-          { material: "Cobalt",  weight_kg: 12, value_paise: 7400000  },
-          { material: "Lithium", weight_kg: 18, value_paise: 3200000  },
-          { material: "Copper",  weight_kg: 9,  value_paise: 1200000  },
-        ],
-        deductions: [
-          { label: "Intake & sorting",         amount_paise: 1920000 },
-          { label: "Refining & recovery",       amount_paise: 2830000 },
-          { label: "Logistics · 100 km",        amount_paise: 800000  },
-          { label: "QA, compliance & handling", amount_paise: 600000  },
-        ],
-      },
-    }),
-    prisma.certificate.create({
-      data: {
-        pickupId: "PKP-3099",
-        vendorId,
-        pdfUrl: "certificates/PKP-3099.pdf",
-        totalWeightKg: 248,
-        materialSummary: [
-          { material: "Nickel",  recovered_kg: 31 },
-          { material: "Cobalt",  recovered_kg: 12 },
-          { material: "Lithium", recovered_kg: 18 },
-          { material: "Copper",  recovered_kg: 9  },
-        ],
-      },
-    }),
+const day = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000)
 
-    // ── PKP-3100 · scheduled ──────────────────────────────────────────
-    prisma.pickup.create({
-      data: {
-        id: "PKP-3100",
-        vendorId,
-        batteryType: "li_ion_lfp",
-        approxQuantity: "60 units",
-        approxWeightKg: 900,
-        location: "Okhla Phase II, Delhi",
-        status: "scheduled",
-        notes: "Gate B entry, call on arrival",
-      },
-    }),
-    ...["requested","scheduled"].map(
-      (status, i) => prisma.statusEvent.create({
-        data: {
-          pickupId: "PKP-3100",
-          status: status as any,
-          actorRole: "system",
-          occurredAt: new Date(Date.now() - (2 - i) * 24 * 60 * 60 * 1000),
-        },
-      })
-    ),
-    prisma.offer.create({
-      data: {
-        pickupId: "PKP-3100",
-        vendorId,
-        pathway: "refurbish",
-        estimatedPrice: 31000000,
-        rationale: "LFP pack health above 80% SoH — refurbishment preferred over recycling.",
-        materialBreakdown: [
-          { material: "Lithium",   weight_kg: 40, value_paise: 18000000 },
-          { material: "Iron",      weight_kg: 90, value_paise: 9000000  },
-          { material: "Phosphate", weight_kg: 30, value_paise: 6000000  },
-        ],
-        deductions: [
-          { label: "Logistics",          amount_paise: 1200000 },
-          { label: "Refurbishment cost", amount_paise: 1800000 },
-        ],
-      },
-    }),
+// ─── Auth users ───────────────────────────────────────────────────────────────
 
-    // ── PKP-3101 · recovered ──────────────────────────────────────────
-    prisma.pickup.create({
-      data: {
-        id: "PKP-3101",
-        vendorId,
-        batteryType: "li_ion_nca",
-        approxQuantity: "12 units",
-        approxWeightKg: 210,
-        location: "Noida Sector 62",
-        status: "recovered",
-      },
-    }),
-    ...["requested","scheduled","collected","tested","processed","recovered"].map(
-      (status, i) => prisma.statusEvent.create({
-        data: {
-          pickupId: "PKP-3101",
-          status: status as any,
-          actorRole: "system",
-          occurredAt: new Date(Date.now() - (5 - i) * 24 * 60 * 60 * 1000),
-        },
-      })
-    ),
-    prisma.offer.create({
-      data: {
-        pickupId: "PKP-3101",
-        vendorId,
-        pathway: "recycle",
-        estimatedPrice: 9500000,
-        rationale: "NCA chemistry — cobalt and nickel recovery viable at current metal rates.",
-        materialBreakdown: [
-          { material: "Nickel",  weight_kg: 18, value_paise: 6000000 },
-          { material: "Cobalt",  weight_kg: 7,  value_paise: 4100000 },
-          { material: "Aluminium", weight_kg: 12, value_paise: 800000 },
-        ],
-        deductions: [
-          { label: "Logistics", amount_paise: 500000 },
-          { label: "Refining",  amount_paise: 900000 },
-        ],
-      },
-    }),
-
-  ])
-
-  console.log("Seed complete for", email)
+function adminClient() {
+  loadAppEnv()
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  )
 }
 
-async function resetDemo() {
-  const email = "business@test"
-  const profile = await prisma.profile.findFirst({ where: { email } })
-  if (!profile) throw new Error("Profile not found")
+/** Creates (or finds) a confirmed auth user and returns its uuid. */
+async function ensureAuthUser(email: string, fullName: string): Promise<string> {
+  const supabase = adminClient()
 
-  const vendorId = profile.id
-
-  // wipe in FK-safe order
-  await prisma.certificate.deleteMany({ where: { vendorId } })
-  await prisma.offer.deleteMany({ where: { vendorId } })
-  await prisma.statusEvent.deleteMany({
-    where: { pickup: { vendorId } }
+  const { data: created, error } = await supabase.auth.admin.createUser({
+    email,
+    password: DEMO_PASSWORD,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
   })
-  await prisma.pickup.deleteMany({ where: { vendorId } })
+  if (!error && created.user) return created.user.id
 
-  console.log("Wiped. Re-seeding...")
-
+  // Already registered — look it up instead.
+  const { data: list, error: listError } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+  if (listError) throw listError
+  const existing = list.users.find((u) => u.email === email)
+  if (!existing) throw new Error(`Could not create or find auth user ${email}: ${error?.message}`)
+  return existing.id
 }
 
-async function main(){
+// ─── Wipe ─────────────────────────────────────────────────────────────────────
 
-    await resetDemo()
-    await seedForExistingUser("business@test")
+/**
+ * Clears all app data. Order matters: children before parents, because the
+ * schema only cascades from Pickup to BatteryItem.
+ */
+async function wipe() {
+  await prisma.safetyChecklist.deleteMany()
+  await prisma.dispatchManifest.deleteMany()
+  await prisma.invoice.deleteMany()
+  await prisma.certificate.deleteMany()
+  await prisma.pickupReceipt.deleteMany()
+  await prisma.payment.deleteMany()
+  await prisma.walletTxn.deleteMany()
+  await prisma.offer.deleteMany()
+  await prisma.statusEvent.deleteMany()
+  await prisma.batteryItem.deleteMany()
+  await prisma.pickup.deleteMany()
+  await prisma.address.deleteMany()
+  await prisma.pricingRate.deleteMany()
+  await prisma.facility.deleteMany()
+  await prisma.recycler.deleteMany()
+  // Drop the old seed's invented vendor profiles (no matching auth user).
+  await prisma.profile.deleteMany({
+    where: { id: { in: ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"] } },
+  })
+  console.log("Wiped app data.")
+}
 
+// ─── Reference data ───────────────────────────────────────────────────────────
+
+// Demo placeholders, right order of magnitude for Indian battery scrap — NOT
+// researched market rates (BATCH_0B_SCHEMA.md §6). Do not present as such.
+const RATES: Array<[BatteryCategory, BatteryType | null, number]> = [
+  ["automotive", "lead_acid", 8500],
+  ["industrial", "lead_acid", 8000],
+  ["portable", "li_ion_nmc", 21000],
+  ["portable", "li_ion_lfp", 15000],
+  ["portable", null, 12000],
+  ["ev", "li_ion_nmc", 25000],
+  ["ev", "li_ion_lfp", 18000],
+  ["ev", null, 20000],
+  ["automotive", null, 7000],
+  ["industrial", null, 7500],
+]
+
+// Condition multipliers in basis points (10000 = 1.00x). A dead battery keeps
+// nearly full material value — it is end-of-life, not damaged; only swollen and
+// leaking carry real handling cost.
+const CONDITION_BP: Record<BatteryCondition, number> = {
+  healthy: 10000,
+  dead: 8500,
+  swollen: 7000,
+  leaking: 5000,
+}
+
+async function seedReferenceData() {
+  await prisma.pricingRate.createMany({
+    data: RATES.flatMap(([category, chemistry, ratePerKgPaise]) =>
+      (Object.keys(CONDITION_BP) as BatteryCondition[]).map((condition) => ({
+        category,
+        chemistry,
+        condition,
+        ratePerKgPaise,
+        conditionMultiplierBp: CONDITION_BP[condition],
+      })),
+    ),
+  })
+
+  await prisma.facility.create({
+    data: {
+      name: "CLBIPP Hub — Okhla",
+      location: "Okhla Industrial Area Phase II, New Delhi",
+      lat: 28.5355,
+      lng: 77.2733,
+      capacityKg: 50000,
+    },
+  })
+
+  await prisma.recycler.create({
+    data: {
+      name: "Attero Recycling Pvt Ltd",
+      cpcbRegNo: "CPCB/EPR/BW/2023/000418",
+      acceptedChemistries: ["li_ion_nmc", "li_ion_lfp", "li_ion_nca", "lead_acid"],
+      capacityKg: 250000,
+    },
+  })
+}
+
+// ─── Pickup fixtures ──────────────────────────────────────────────────────────
+
+type ItemSpec = {
+  category: BatteryCategory
+  quantity: number
+  weightKg: number
+  condition: BatteryCondition
+  chemistry: BatteryType
+}
+
+type PickupSpec = {
+  id: string
+  status: PickupStatus
+  category: BatteryCategory
+  location: string
+  notes?: string
+  daysAgo: number
+  items: ItemSpec[]
+}
+
+const PICKUPS: PickupSpec[] = [
+  {
+    id: "PKP-2026-000101",
+    status: "requested",
+    category: "portable",
+    location: "Kalkaji Mandir, New Delhi",
+    notes: "Office laptop and power-bank cells cleared from storage.",
+    daysAgo: 1,
+    items: [
+      { category: "portable", quantity: 24, weightKg: 12.5, condition: "healthy", chemistry: "li_ion_nmc" },
+      { category: "portable", quantity: 8, weightKg: 4.2, condition: "dead", chemistry: "li_ion_lfp" },
+    ],
+  },
+  {
+    id: "PKP-2026-000102",
+    status: "scheduled",
+    category: "automotive",
+    location: "Okhla Phase II, New Delhi",
+    notes: "Gate B entry — call on arrival.",
+    daysAgo: 3,
+    items: [
+      { category: "automotive", quantity: 14, weightKg: 196, condition: "healthy", chemistry: "lead_acid" },
+      // Deliberately hazardous so the condition path is visible in the demo.
+      { category: "automotive", quantity: 2, weightKg: 28, condition: "leaking", chemistry: "lead_acid" },
+    ],
+  },
+  {
+    id: "PKP-2026-000103",
+    status: "collected",
+    category: "industrial",
+    location: "Noida Sector 62, UP",
+    daysAgo: 6,
+    items: [
+      { category: "industrial", quantity: 6, weightKg: 240, condition: "healthy", chemistry: "lead_acid" },
+      { category: "industrial", quantity: 3, weightKg: 120, condition: "swollen", chemistry: "lead_acid" },
+    ],
+  },
+  {
+    id: "PKP-2026-000104",
+    status: "tested",
+    category: "portable",
+    location: "Gurugram Cyber City, Haryana",
+    daysAgo: 9,
+    items: [
+      { category: "portable", quantity: 40, weightKg: 21, condition: "healthy", chemistry: "li_ion_nmc" },
+      { category: "portable", quantity: 15, weightKg: 7.8, condition: "healthy", chemistry: "li_ion_lfp" },
+    ],
+  },
+  {
+    id: "PKP-2026-000105",
+    status: "processed",
+    category: "ev",
+    location: "Faridabad Sector 24, Haryana",
+    daysAgo: 14,
+    items: [
+      { category: "ev", quantity: 2, weightKg: 310, condition: "healthy", chemistry: "li_ion_nmc" },
+      { category: "ev", quantity: 1, weightKg: 148, condition: "dead", chemistry: "li_ion_lfp" },
+    ],
+  },
+  {
+    id: "PKP-2026-000106",
+    status: "recovered",
+    category: "ev",
+    location: "Dwarka Sector 21, New Delhi",
+    daysAgo: 21,
+    items: [
+      { category: "ev", quantity: 3, weightKg: 465, condition: "healthy", chemistry: "li_ion_nmc" },
+      { category: "ev", quantity: 1, weightKg: 152, condition: "swollen", chemistry: "li_ion_nmc" },
+    ],
+  },
+  {
+    id: "PKP-2026-000107",
+    status: "certified",
+    category: "portable",
+    location: "Saket District Centre, New Delhi",
+    daysAgo: 30,
+    items: [
+      { category: "portable", quantity: 60, weightKg: 31.5, condition: "healthy", chemistry: "li_ion_nmc" },
+      { category: "portable", quantity: 22, weightKg: 11.4, condition: "healthy", chemistry: "li_ion_lfp" },
+      { category: "portable", quantity: 5, weightKg: 2.6, condition: "dead", chemistry: "li_ion_nca" },
+    ],
+  },
+  {
+    id: "PKP-2026-000108",
+    status: "cancelled",
+    category: "portable",
+    location: "Rohini Sector 3, New Delhi",
+    notes: "Customer rescheduled to next quarter.",
+    daysAgo: 11,
+    items: [
+      { category: "portable", quantity: 10, weightKg: 5.1, condition: "healthy", chemistry: "li_ion_nmc" },
+    ],
+  },
+]
+
+const totalWeight = (items: ItemSpec[]) => items.reduce((sum, i) => sum + i.weightKg, 0)
+
+/** Rough line price: rate × weight × condition multiplier, in integer paise. */
+function linePrice(item: ItemSpec): number {
+  const rate =
+    RATES.find(([c, chem]) => c === item.category && chem === item.chemistry)?.[2] ??
+    RATES.find(([c, chem]) => c === item.category && chem === null)?.[2] ??
+    10000
+  return Math.round((rate * item.weightKg * CONDITION_BP[item.condition]) / 10000)
+}
+
+// ─── Seed ─────────────────────────────────────────────────────────────────────
+
+async function seed() {
+  const customer = await prisma.profile.findFirst({ where: { email: CUSTOMER_EMAIL } })
+  if (!customer) throw new Error(`No profile for ${CUSTOMER_EMAIL} — log in once to create it.`)
+  const vendorId = customer.id
+
+  // Agent + admin as REAL auth users, so the Agent and Admin apps have
+  // something to log into on day 3 (BATCH_0B_SCHEMA.md §5).
+  const agentId = await ensureAuthUser(AGENT_EMAIL, "Ravi Kumar")
+  const adminId = await ensureAuthUser(ADMIN_EMAIL, "Priya Nair")
+
+  await prisma.profile.update({
+    where: { id: vendorId },
+    data: { role: "customer", phone: "+91 98110 22334", walletBalancePaise: 0 },
+  })
+
+  await prisma.profile.upsert({
+    where: { id: agentId },
+    update: { role: "agent" },
+    create: {
+      id: agentId,
+      email: AGENT_EMAIL,
+      fullName: "Ravi Kumar",
+      vendorType: "individual",
+      role: "agent",
+      phone: "+91 98730 41288",
+      agentZone: "Delhi NCR — South",
+      agentVehicle: "Tata Ace · DL 1LR 4471",
+      safetyTrainedAt: day(60),
+      agentRating: 4.7,
+    },
+  })
+
+  await prisma.profile.upsert({
+    where: { id: adminId },
+    update: { role: "admin" },
+    create: {
+      id: adminId,
+      email: ADMIN_EMAIL,
+      fullName: "Priya Nair",
+      vendorType: "individual",
+      role: "admin",
+      phone: "+91 99100 77321",
+    },
+  })
+
+  await seedReferenceData()
+
+  const warehouse = await prisma.address.create({
+    data: {
+      profileId: vendorId,
+      label: "Warehouse",
+      line1: "Plot 14, Okhla Industrial Area Phase II",
+      line2: "Near Govindpuri Metro",
+      city: "New Delhi",
+      state: "Delhi",
+      pincode: "110020",
+      lat: 28.5355,
+      lng: 77.2733,
+      isDefault: true,
+    },
+  })
+
+  await prisma.address.create({
+    data: {
+      profileId: vendorId,
+      label: "Depot 2",
+      line1: "B-42, Sector 62",
+      city: "Noida",
+      state: "Uttar Pradesh",
+      pincode: "201309",
+      lat: 28.6272,
+      lng: 77.3719,
+      status: "not_operational",
+    },
+  })
+
+  for (const spec of PICKUPS) {
+    const weight = totalWeight(spec.items)
+    const quote = spec.items.reduce((sum, i) => sum + linePrice(i), 0)
+    const hasAgent = spec.status !== "requested" && spec.status !== "cancelled"
+    // How far along the lifecycle this pickup got. `cancelled` isn't part of
+    // the ordered lifecycle — it stops after `requested`.
+    const reachedIndex =
+      spec.status === "cancelled" ? 0 : LIFECYCLE.indexOf(spec.status as (typeof LIFECYCLE)[number])
+
+    await prisma.pickup.create({
+      data: {
+        id: spec.id,
+        vendorId,
+        agentId: hasAgent ? agentId : null,
+        category: spec.category,
+        addressId: warehouse.id,
+        location: spec.location,
+        notes: spec.notes,
+        status: spec.status,
+        indicativeQuotePaise: quote,
+        conditionFlags: [...new Set(spec.items.map((i) => i.condition))],
+        scheduledSlot: hasAgent ? day(spec.daysAgo - 1) : null,
+        etaMinutes: spec.status === "scheduled" ? 45 : null,
+        preferredDate: day(spec.daysAgo - 1),
+        createdAt: day(spec.daysAgo),
+        items: {
+          create: spec.items.map((item) => ({
+            category: item.category,
+            quantity: item.quantity,
+            weightKg: item.weightKg,
+            condition: item.condition,
+            photoUrls: [],
+            // Agent-confirmed half is only filled once collection has happened.
+            ...(reachedIndex >= LIFECYCLE.indexOf("collected")
+              ? {
+                  chemistry: item.chemistry,
+                  confirmedWeightKg: item.weightKg,
+                  confirmedCondition: item.condition,
+                  recordedBy: agentId,
+                  recordedAt: day(spec.daysAgo - 2),
+                  unitPricePaise: Math.round(linePrice(item) / item.quantity),
+                  linePricePaise: linePrice(item),
+                }
+              : {}),
+          })),
+        },
+      },
+    })
+
+    // Chain-of-custody log: one event per stage reached, each with GPS.
+    const stages: PickupStatus[] =
+      spec.status === "cancelled"
+        ? ["requested", "cancelled"]
+        : [...LIFECYCLE.slice(0, reachedIndex + 1)]
+
+    for (const [i, status] of stages.entries()) {
+      await prisma.statusEvent.create({
+        data: {
+          pickupId: spec.id,
+          status,
+          actorId: i === 0 ? vendorId : agentId,
+          actorRole: i === 0 ? "customer" : "agent",
+          lat: GEO.lat + i * 0.004,
+          lng: GEO.lng - i * 0.003,
+          photoUrls: [],
+          occurredAt: day(spec.daysAgo - i),
+        },
+      })
+    }
+
+    // Collection produces a receipt, a payment and a wallet credit — the
+    // company doc's step 4, distinct from the EPR certificate at step 8.
+    if (reachedIndex >= LIFECYCLE.indexOf("collected")) {
+      await prisma.pickupReceipt.create({
+        data: {
+          pickupId: spec.id,
+          receiptNo: `RCP-${spec.id.slice(4)}`,
+          totalWeightKg: weight,
+          itemCount: spec.items.reduce((sum, i) => sum + i.quantity, 0),
+          amountPaise: quote,
+          agentId,
+          capturedLat: GEO.lat,
+          capturedLng: GEO.lng,
+          collectedAt: day(spec.daysAgo - 2),
+        },
+      })
+
+      await prisma.payment.create({
+        data: {
+          pickupId: spec.id,
+          vendorId,
+          amountPaise: quote,
+          method: "upi",
+          status: "paid",
+          paidAt: day(spec.daysAgo - 2),
+        },
+      })
+
+      const balance = await prisma.profile
+        .findUniqueOrThrow({ where: { id: vendorId }, select: { walletBalancePaise: true } })
+        .then((p) => p.walletBalancePaise + quote)
+
+      // WalletTxn is the source of truth; profiles.wallet_balance_paise is a
+      // cache. Always write both together.
+      await prisma.$transaction([
+        prisma.walletTxn.create({
+          data: {
+            profileId: vendorId,
+            deltaPaise: quote,
+            kind: "payout",
+            balanceAfterPaise: balance,
+            pickupId: spec.id,
+            note: `Payout for ${spec.id}`,
+          },
+        }),
+        prisma.profile.update({
+          where: { id: vendorId },
+          data: { walletBalancePaise: balance },
+        }),
+      ])
+    }
+
+    if (reachedIndex >= LIFECYCLE.indexOf("recovered")) {
+      await prisma.offer.create({
+        data: {
+          pickupId: spec.id,
+          vendorId,
+          pathway: "recycle",
+          estimatedPrice: quote,
+          rationale:
+            "Material recovery is the best route for this load — chemistry and condition both support full recycling.",
+          materialBreakdown: [
+            { material: "Nickel", weight_kg: Math.round(weight * 0.18) },
+            { material: "Cobalt", weight_kg: Math.round(weight * 0.07) },
+            { material: "Lithium", weight_kg: Math.round(weight * 0.05) },
+            { material: "Copper", weight_kg: Math.round(weight * 0.09) },
+          ],
+          deductions: [],
+          createdAt: day(spec.daysAgo - 5),
+        },
+      })
+    }
+
+    if (spec.status === "certified") {
+      await prisma.certificate.create({
+        data: {
+          pickupId: spec.id,
+          vendorId,
+          pdfUrl: "",
+          totalWeightKg: weight,
+          materialSummary: [
+            { material: "Nickel", recovered_kg: Math.round(weight * 0.18) },
+            { material: "Cobalt", recovered_kg: Math.round(weight * 0.07) },
+            { material: "Lithium", recovered_kg: Math.round(weight * 0.05) },
+            { material: "Copper", recovered_kg: Math.round(weight * 0.09) },
+          ],
+          // ~8 kg CO2e avoided per kg of Li-ion recycled vs virgin material.
+          // Canonical constants + citation live in packages/core/src/impact.ts.
+          co2AvoidedKg: Math.round(weight * 8),
+          certifiedAt: day(spec.daysAgo - 6),
+        },
+      })
+    }
+  }
+
+  console.log(`Seeded ${PICKUPS.length} pickups (one per lifecycle stage) for ${CUSTOMER_EMAIL}.`)
+  console.log(`Agent login: ${AGENT_EMAIL} / ${DEMO_PASSWORD}`)
+  console.log(`Admin login: ${ADMIN_EMAIL} / ${DEMO_PASSWORD}`)
+}
+
+async function main() {
+  await wipe()
+  await seed()
 }
 
 main()
