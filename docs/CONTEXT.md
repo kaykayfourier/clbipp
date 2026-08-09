@@ -46,10 +46,16 @@ One repo, three apps separated by route folders. Shared code at root.
 - **No recovered value shown to the vendor — a default, not a hard rule**
   (corrected 2026-08-07; it had been recorded here as "ever"). Offer carries price
   + qualitative rationale only; material weights appear on the EPR certificate (a
-  compliance doc), not on offer/tracking. **Build to this today**, but it follows
-  the company's ask and can change: the company flow document asks for an
-  indicative quote, an invoice and a wallet, all value-facing. Pending their
-  answer — see `COMPANY_FLOW_REVIEW_2026-08-07.md`.
+  compliance doc), not on offer/tracking.
+  **Scoped, not lifted, in Batch 8 (2026-08-09):** Plan v2 **D6** relaxes the rule
+  for the money surfaces the company explicitly asks for, and those now exist —
+  `/payment/[id]`, `/wallet`, `/receipt/[id]` and the invoice PDF all show ₹,
+  because a payout you cannot see the amount of is not a payout. **`/offer`,
+  `/offer-breakdown` and `/track` are untouched and stay weight-only**, and the
+  separate **no recovery-rate %** rule is unaffected everywhere. What is still
+  withheld is the *material-by-material valuation* (`Offer.materialBreakdown`'s
+  `value_paise` / `Offer.deductions`) — that is the internal pricing mechanics,
+  and it is a different question from "what were you paid".
 - **Battery *category* is the customer's question; *chemistry* is the field
   agent's** (from the company flow document, 2026-08-07 — proposed, not yet
   built). The doc's §3.A gives the customer a category (portable / automotive /

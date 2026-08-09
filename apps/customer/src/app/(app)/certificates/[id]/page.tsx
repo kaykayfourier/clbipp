@@ -2,6 +2,7 @@ import { prisma } from "@clbipp/database"
 import { Button } from "@clbipp/ui"
 import { Card } from "@clbipp/ui"
 import { getCurrentProfile } from "@clbipp/auth"
+import { certificateNumber } from "@clbipp/core"
 import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 
@@ -20,9 +21,19 @@ export default async function CertificatePage({
 
   const cert = await prisma.certificate.findFirst({
     where: { pickupId: id, vendorId },
+    // Batch 8: the category feeds the certificate number, which is derived
+    // rather than stored (see @clbipp/core documents.ts) — so the screen and
+    // the PDF show the same number without a schema column for it.
+    include: { pickup: { select: { category: true } } },
   })
 
   if (!cert) notFound()
+
+  const certNumber = certificateNumber({
+    pickupId: cert.pickupId,
+    category: cert.pickup.category,
+    certifiedAt: cert.certifiedAt,
+  })
 
   const summary = cert.materialSummary as Array<{ material: string; recovered_kg: number }>
 
@@ -43,6 +54,10 @@ export default async function CertificatePage({
 
         <div className="p-3.5 flex flex-col">
           <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
+            <span className="text-[#6B6F6B]">Certificate no.</span>
+            <span className="font-bold font-mono text-right">{certNumber}</span>
+          </div>
+          <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
             <span className="text-[#6B6F6B]">Battery ID</span>
             <span className="font-bold font-mono">{cert.pickupId}</span>
           </div>
@@ -57,6 +72,15 @@ export default async function CertificatePage({
               <span className="font-bold font-mono">{m.recovered_kg} kg</span>
             </div>
           ))}
+
+          {cert.co2AvoidedKg !== null && (
+            <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
+              <span className="text-[#6B6F6B]">CO₂e avoided</span>
+              <span className="font-bold font-mono">
+                {Number(cert.co2AvoidedKg).toLocaleString("en-IN")} kg
+              </span>
+            </div>
+          )}
 
           <div className="flex justify-between py-1.5 text-[11.5px]">
             <span className="text-[#6B6F6B]">Date certified</span>
@@ -86,7 +110,12 @@ export default async function CertificatePage({
         </div>
       </Card>
 
-      <Button variant="primary" fullWidth>Download PDF</Button>
+      {/* Batch 8: this was a dead button. It now hits the ownership-checked
+          document route, which renders the PDF on first request, caches it in
+          the private `certificates` bucket and streams the bytes back. */}
+      <a href={`/api/documents/certificate/${cert.pickupId}`} target="_blank" rel="noreferrer">
+        <Button variant="primary" fullWidth>Download PDF</Button>
+      </a>
       {/* fixed: plural /certificates */}
       <Link href="/compliance">
         <Button variant="secondary" fullWidth>View compliance log</Button>

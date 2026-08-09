@@ -6,16 +6,18 @@
 > `HANDOFF_PROTOCOL.md`.
 
 **Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
-executed** — repo is now a Turborepo monorepo, schema v2 is live, the booking
++ 8 executed** — repo is now a Turborepo monorepo, schema v2 is live, the booking
 quote engine + `createPickupWithItems` shipped in `packages/core`, the address
 book + Storage upload helper landed, **the 4-step booking wizard at `/book` is
 done** — the centrepiece of the revamp — **email OTP + `/verify` + the role gate
 are live**, **Batch 6.5 cleared the first manual test pass**, **Batch 7A added
 the `arrived` + `offered` lifecycle stages** (the locked contract is now nine
-stages) and **Batch 7B shipped the tracking upgrade** — assigned-partner card,
-ETA, and a chain-of-custody log rendering real per-event GPS and real photos out
-of the private bucket. Next: **Batch 8, PDF generation + payment + receipt
-screens**. Prior: 2026-08-07 Plan v2 written)
+stages), **Batch 7B shipped the tracking upgrade** — assigned-partner card, ETA,
+and a chain-of-custody log rendering real per-event GPS and real photos out of
+the private bucket — and **Batch 8 shipped the three PDF documents, payouts and
+the wallet**, which makes the P0 demo path run end to end for the first time.
+Next: **Batch 9, dashboard impact (CO₂) + compliance CSV**.
+Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
@@ -88,6 +90,24 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    form is historical. The schema-v1 columns (`batteryType`, `approxQuantity`,
    `approxWeightKg`) are **null on every new pickup** — read `category` and the
    `BatteryItem` rows instead.
+8. **Documents and money exist as of Batch 8.** Three PDF templates live in a new
+   `packages/pdf` (`@clbipp/pdf`), rendered server-side and handed out by
+   `GET /api/documents/{certificate|receipt|invoice}/{pickupId}`, which
+   **streams the bytes** after an ownership-scoped read — it does not mint a
+   signed URL (that stays the mechanism for photos, which need a URL for `<img>`).
+   PDFs are generated lazily on first download and cached; **`pdf_url` holds a
+   storage PATH, not a URL.** Certificate and invoice numbers are **derived**
+   (`certificateNumber` / `invoiceNumber` in `packages/core/src/documents.ts`),
+   so neither needed a column or a migration.
+   Payouts settle through `settlePayment` in `packages/core/src/payment-actions.ts`
+   — idempotent, atomic, ownership-scoped, behind `PAYMENTS_MODE` (defaults to
+   `simulated`; an unrecognised value falls back to simulated, never to live).
+   New screens: `/payment/[id]`, `/receipt/[id]`, `/wallet`.
+   ⚠ **All money is formatted by `formatPaise` from `@clbipp/core`** — don't
+   write a local `/100` anywhere. And ⚠ the "no recovered value to the vendor"
+   default is now **scoped, not lifted**: those money surfaces show ₹ per Plan v2
+   D6, while `/offer`, `/offer-breakdown` and `/track` stay weight-only. Anything
+   below describing the vendor app as showing no ₹ at all is stale.
 
 **Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
 cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts
@@ -697,10 +717,20 @@ To test recovery summary, B needs to seed an offer with `materialBreakdown` for 
 - **Don't render `Offer.materialBreakdown` / `Offer.deductions` as ₹ values on
   vendor-facing screens** — weight (kg) only. Applies to A, B, and C.
   **This is a light rule, not a hard one** (it was previously mis-recorded here as
-  locked). The company flow document asks for an indicative quote, an invoice and a
-  wallet, all value-facing — so it may be relaxed. **Nothing changes until the
-  company answers open question 2** in `COMPANY_FLOW_REVIEW_2026-08-07.md`; until
-  then, keep building to the rule as written above.
+  locked).
+
+  **Scoped in Batch 8 (2026-08-09), not lifted.** Plan v2 D6 relaxes it for the
+  money surfaces the company's flow document explicitly asks for, and those are
+  now built: **`/payment/[id]`, `/wallet`, `/receipt/[id]` and the invoice PDF
+  show ₹** — a payout screen that hides the amount isn't a payout screen.
+  **`/offer`, `/offer-breakdown` and `/track` are untouched and stay
+  weight-only**, and the material-by-material valuation (`value_paise`,
+  `deductions`) is still not rendered anywhere on a vendor screen.
+
+  The line is: **what the customer was paid is visible; how we valued it
+  material-by-material is not.** Open question 2 in
+  `COMPANY_FLOW_REVIEW_2026-08-07.md` is still unanswered — this is our reading
+  of the flow document, not their confirmation.
 
 ---
 

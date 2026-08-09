@@ -25,7 +25,11 @@ apps/agent · apps/admin  scaffolds only
 packages/ui              components, design tokens, cn()   → @clbipp/ui
 packages/auth            supabase server/browser/admin clients, auth.ts,
                          realtime, createAuthMiddleware()  → @clbipp/auth
-packages/core            validation, offer, booking/pricing → @clbipp/core
+packages/core            validation, offer, booking/pricing,
+                         document numbering + ₹ formatting,
+                         payments/wallet ledger            → @clbipp/core
+packages/pdf             EPR certificate · pickup receipt ·
+                         invoice templates + renderers     → @clbipp/pdf
 packages/database        prisma schema + migrations + client + seed
                                                            → @clbipp/database
 packages/decision-engine PARKED engine (Field Agent app, later)
@@ -58,14 +62,21 @@ decisions made and why. This section is the quick version.
 **No recovery rate % shown to the vendor, anywhere.** This one is hard — the
 company's flow document doesn't ask for it either.
 
-**No recovered value shown to the vendor — default, not a hard rule.** Offer
+**No recovered value shown to the vendor — default, now scoped (Batch 8).** Offer
 screens show price + qualitative rationale only; `Offer.materialBreakdown` /
-`Offer.deductions` may exist in the DB but don't render them on `offer`,
-`offer-breakdown`, or tracking screens (they're fine on the certificate, a
-compliance doc). **Build to this today**, but treat it as a default that follows
-the company's ask, not a locked rule — the company flow document asks for an
-indicative quote, an invoice and a wallet, all of which are value-facing. Pending
-their confirmation; see `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
+`Offer.deductions` may exist in the DB but **don't render them on `offer`,
+`offer-breakdown`, or tracking screens** (they're fine on the certificate, a
+compliance doc). That part still holds.
+
+What changed 2026-08-09: Plan v2 **D6** relaxes the rule for the money surfaces
+the company's flow document explicitly asks for, and Batch 8 built them — so
+**`/payment/[id]`, `/wallet`, `/receipt/[id]` and the invoice PDF do show ₹.**
+A payout screen that hides the amount is not a payout screen. Use `formatPaise`
+from `@clbipp/core` so every ₹ in the app is formatted identically.
+
+So the line is: **what the customer was paid is visible; how we valued it
+material-by-material is not.** The separate **no recovery-rate %** rule is
+untouched. See `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
 
 **Status lifecycle (locked contract):**
 `requested → scheduled → arrived → offered → collected → tested → processed →

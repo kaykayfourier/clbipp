@@ -136,6 +136,11 @@ export default async function TrackPage({
       agent: {
         select: { fullName: true, phone: true, agentVehicle: true, agentRating: true },
       },
+      // Batch 8. Existence only — the receipt and payout screens re-read and
+      // re-scope their own rows, so there is nothing to gain by pulling the
+      // detail into this page's payload.
+      receipt: { select: { receiptNo: true } },
+      payment: { select: { status: true } },
     },
   })
   if (!pickup) notFound()
@@ -147,6 +152,33 @@ export default async function TrackPage({
   // The query above is already scoped by vendorId, which is what makes signing
   // these photo paths safe — see the ownership note in @/lib/custody.
   const custody = await buildCustodyEntries(pickup.statusEvents)
+
+  // Batch 8: the two things a collected pickup gives the customer to act on.
+  // Both render from `collected` onward, so they appear once and stay — a
+  // receipt doesn't stop existing because the batteries moved on to testing.
+  const documents = (
+    <>
+      {pickup.payment?.status === 'pending' && (
+        <Link href={`/payment/${pickup.id}`} className="block">
+          <Button fullWidth>Choose how you get paid</Button>
+        </Link>
+      )}
+      {pickup.receipt && (
+        <Link href={`/receipt/${pickup.id}`} className="block">
+          <Button variant="secondary" fullWidth>
+            View collection receipt
+          </Button>
+        </Link>
+      )}
+      {pickup.payment?.status === 'paid' && (
+        <Link href={`/payment/${pickup.id}`} className="block">
+          <Button variant="secondary" fullWidth>
+            View payout
+          </Button>
+        </Link>
+      )}
+    </>
+  )
 
   const partner = pickup.agent ? (
     <PartnerCard
@@ -254,6 +286,7 @@ export default async function TrackPage({
           <Banner variant="tinted">
             Recovery breakdown and certificate unlock once recovered.
           </Banner>
+          {documents}
           {partner}
           <CustodyLog entries={custody} />
         </PagePadding>
@@ -277,6 +310,7 @@ export default async function TrackPage({
           <Banner variant="tinted">
             Your EPR certificate becomes available once certified.
           </Banner>
+          {documents}
           <CustodyLog entries={custody} />
         </PagePadding>
       </AppShell>
@@ -296,6 +330,7 @@ export default async function TrackPage({
         <Link href={`/certificates/${pickup.id}`}>
           <Button fullWidth>View certificate</Button>
         </Link>
+        {documents}
         <CustodyLog entries={custody} />
       </PagePadding>
     </AppShell>

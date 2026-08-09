@@ -1,5 +1,8 @@
+import Link from 'next/link'
+
 import { getCurrentProfile } from '@clbipp/auth'
 import { prisma } from '@clbipp/database'
+import { formatPaise } from '@clbipp/core'
 import { AppShell, PagePadding, SectionLabel } from '@clbipp/ui'
 import { Card, CardContent } from '@clbipp/ui'
 import { logout } from './actions'
@@ -97,6 +100,18 @@ export default async function ProfilePage() {
     : [0, 0, { _sum: { totalWeightKg: null } }]
   const recycledKg = Number(weightAgg._sum.totalWeightKg ?? 0)
 
+  // Batch 8. The wallet has no tab of its own — the bottom bar is fixed at four
+  // — so the profile screen is where it hangs off, which is also where a
+  // customer looks for anything account-shaped.
+  const walletBalancePaise = vendorId
+    ? (
+        await prisma.profile.findUnique({
+          where: { id: vendorId },
+          select: { walletBalancePaise: true },
+        })
+      )?.walletBalancePaise ?? 0
+    : 0
+
   return (
     <AppShell title="Profile" hideNav>
       <PagePadding className="flex flex-col gap-4">
@@ -119,6 +134,21 @@ export default async function ProfilePage() {
           <Stat value={formatWeight(recycledKg)} label="Recycled" />
           <Stat value={String(certCount)} label="Certificates" />
         </div>
+
+        {/* Wallet — balance plus the ledger behind it */}
+        <Link href="/wallet" className="block">
+          <Card className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[15px] font-bold text-text-primary">Wallet</p>
+              <p className="text-xs text-text-secondary">
+                Payouts from your pickups
+              </p>
+            </div>
+            <span className="font-serif text-lg font-semibold text-text-primary">
+              {formatPaise(walletBalancePaise)}
+            </span>
+          </Card>
+        </Link>
 
         {/* Account */}
         <Card>

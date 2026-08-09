@@ -217,11 +217,9 @@ async function uploadPhoto(
  * immediate child, and a "folder" is a synthetic row with `id: null`. So the
  * only way to enumerate a subtree is to walk it.
  */
-async function listObjectsRecursive(prefix: string): Promise<string[]> {
+async function listObjectsRecursive(bucket: string, prefix: string): Promise<string[]> {
   const supabase = adminClient()
-  const { data, error } = await supabase.storage
-    .from(PHOTO_BUCKET)
-    .list(prefix, { limit: 1000 })
+  const { data, error } = await supabase.storage.from(bucket).list(prefix, { limit: 1000 })
 
   if (error || !data) return []
 
@@ -229,11 +227,19 @@ async function listObjectsRecursive(prefix: string): Promise<string[]> {
   for (const entry of data) {
     const child = `${prefix}/${entry.name}`
     // id === null marks a synthetic folder row; anything else is a real object.
-    if (entry.id === null) paths.push(...(await listObjectsRecursive(child)))
+    if (entry.id === null) paths.push(...(await listObjectsRecursive(bucket, child)))
     else paths.push(child)
   }
   return paths
 }
+
+/**
+ * Buckets a reseed must clear. Photos are the demo's own uploads; the three
+ * document buckets hold PDFs generated lazily on first download (Batch 8) and
+ * cached against a `pdf_url` the wipe is about to delete — leaving them would
+ * orphan a file per document per reseed.
+ */
+const WIPE_BUCKETS = [PHOTO_BUCKET, "certificates", "receipts", "invoices"] as const
 
 /**
  * Clears every object owned by the demo users so re-running doesn't accumulate
@@ -245,16 +251,18 @@ async function listObjectsRecursive(prefix: string): Promise<string[]> {
  * since Batch 5). Those sit at a different depth and a fixed-depth sweep walked
  * straight past them.
  */
-async function wipePhotos(ownerIds: string[]) {
+async function wipeStorage(ownerIds: string[]) {
   const supabase = adminClient()
-  for (const ownerId of ownerIds) {
-    const paths = await listObjectsRecursive(ownerId)
-    // remove() takes up to 1000 keys per call.
-    for (let i = 0; i < paths.length; i += 1000) {
-      const { error } = await supabase.storage.from(PHOTO_BUCKET).remove(paths.slice(i, i + 1000))
-      if (error) console.warn(`  ! photo wipe failed: ${error.message}`)
+  for (const bucket of WIPE_BUCKETS) {
+    for (const ownerId of ownerIds) {
+      const paths = await listObjectsRecursive(bucket, ownerId)
+      // remove() takes up to 1000 keys per call.
+      for (let i = 0; i < paths.length; i += 1000) {
+        const { error } = await supabase.storage.from(bucket).remove(paths.slice(i, i + 1000))
+        if (error) console.warn(`  ! ${bucket} wipe failed: ${error.message}`)
+      }
+      if (paths.length) console.log(`Cleared ${paths.length} object(s) from ${bucket} for ${ownerId}.`)
     }
-    if (paths.length) console.log(`Cleared ${paths.length} stored photo(s) for ${ownerId}.`)
   }
 }
 
@@ -465,7 +473,7 @@ async function seed() {
   // Storage isn't covered by the database wipe — objects would otherwise pile
   // up across reseeds and the pickup ids they're filed under were renumbered in
   // Batch 7A, so the old ones are unreferenced by anything.
-  await wipePhotos([vendorId, agentId])
+  await wipeStorage([vendorId, agentId])
 
   const warehouse = await prisma.address.create({
     data: {
@@ -605,39 +613,68 @@ async function seed() {
         },
       })
 
+      // The ONE pickup still at `collected` keeps its payout unsettled, so the
+      // payment screen has a live `pending` state to demo (Batch 8) — choosing
+      // a method and confirming is the flow, and every payment being seeded as
+      // already-paid left nothing to actually do. Everything further along the
+      // lifecycle is paid, which is also just true: the money settles long
+      // before a load is recycled and certified.
+      const settled = spec.status !== "collected"
+
       await prisma.payment.create({
         data: {
           pickupId: spec.id,
           vendorId,
           amountPaise: quote,
           method: "upi",
-          status: "paid",
-          paidAt: day(spec.daysAgo - 2),
+          status: settled ? "paid" : "pending",
+          paidAt: settled ? day(spec.daysAgo - 2) : null,
+          gatewayRef: settled ? `SIM-SEED-${spec.id.slice(-6)}` : null,
         },
       })
 
-      const balance = await prisma.profile
-        .findUniqueOrThrow({ where: { id: vendorId }, select: { walletBalancePaise: true } })
-        .then((p) => p.walletBalancePaise + quote)
+      if (settled) {
+        const balance = await prisma.profile
+          .findUniqueOrThrow({ where: { id: vendorId }, select: { walletBalancePaise: true } })
+          .then((p) => p.walletBalancePaise + quote)
 
-      // WalletTxn is the source of truth; profiles.wallet_balance_paise is a
-      // cache. Always write both together.
-      await prisma.$transaction([
-        prisma.walletTxn.create({
+        // WalletTxn is the source of truth; profiles.wallet_balance_paise is a
+        // cache. Always write both together.
+        await prisma.$transaction([
+          prisma.walletTxn.create({
+            data: {
+              profileId: vendorId,
+              deltaPaise: quote,
+              kind: "payout",
+              balanceAfterPaise: balance,
+              pickupId: spec.id,
+              note: `Payout for ${spec.id}`,
+            },
+          }),
+          prisma.profile.update({
+            where: { id: vendorId },
+            data: { walletBalancePaise: balance },
+          }),
+        ])
+
+        // An invoice accompanies a settled payout, exactly as settlePayment
+        // creates one. Number format matches invoiceNumber() in @clbipp/core —
+        // restated rather than imported because packages/database must not
+        // depend on packages/core (core depends on database, and the cycle
+        // would break the generated client's build).
+        const issuedAt = day(spec.daysAgo - 2)
+        await prisma.invoice.create({
           data: {
-            profileId: vendorId,
-            deltaPaise: quote,
-            kind: "payout",
-            balanceAfterPaise: balance,
+            vendorId,
             pickupId: spec.id,
-            note: `Payout for ${spec.id}`,
+            number: `INV-${issuedAt.getFullYear()}-${spec.id.split("-").pop()}`,
+            subtotalPaise: quote,
+            taxPaise: 0,
+            totalPaise: quote,
+            issuedAt,
           },
-        }),
-        prisma.profile.update({
-          where: { id: vendorId },
-          data: { walletBalancePaise: balance },
-        }),
-      ])
+        })
+      }
     }
 
     // An Offer exists from `offered` onward — the stage now says so, which is

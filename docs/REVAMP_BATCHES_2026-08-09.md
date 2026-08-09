@@ -26,8 +26,8 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 6.5 | **Demo-blocking fixes from the first manual pass** | A | ✅ done, committed `0b58956` |
 | 7A | **Lifecycle: add `arrived` + `offered` stages** | A/B | ✅ done, staged |
 | 7B | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | ✅ done, staged |
-| 8 | B3/B6 — PDF generation + payment + receipt screens | B | ⏭ **next — start here** |
-| 9 | B4/B5 — dashboard impact (CO₂) + compliance CSV | B | pending |
+| 8 | B3/B6 — PDF generation + payment + receipt screens | B | ✅ done, staged |
+| 9 | B4/B5 — dashboard impact (CO₂) + compliance CSV | B | ⏭ **next — start here** |
 | 10 | P2 screens (wallet, invoices, history, profile, `/t` parity) + **deploy** | A | pending |
 | 11 | **Google / Apple sign-in** (new — see below, has a real blocker) | A | pending |
 
@@ -348,30 +348,239 @@ the status updates as soon as a collection partner is assigned"), and the
 
 ---
 
-## ▶ Next: Batch 8 — B3/B6, PDF generation + payment + receipt screens
+## What Batch 8 delivered — three PDFs, payouts, and a wallet
 
-Per Plan v2 §5: `@react-pdf/renderer`, three templates (EPR certificate, pickup
-receipt, invoice) rendered server-side to a buffer → Supabase Storage → URL on
-the row. Certificate number format `CERT-{YEAR}-{pickupId}-{category}`. Plus
-`Payment` / `WalletTxn` server actions behind `PAYMENTS_MODE=simulated|razorpay`,
-and the payment + wallet screens.
+The P0 demo path runs end to end for the first time: **book → track → collected
++ receipt → payment → certified → EPR certificate PDF.**
 
-**What Batch 7 leaves teed up for it:**
+### `packages/pdf` — a new workspace package
 
-- **`createSignedUrl` is now proven end to end**, including that an unsigned read
-  of the same path is refused. Batch 8's PDFs go into `certificates`, `receipts`
-  and `invoices` — three buckets with **no SELECT policy for `authenticated` at
-  all**, so a server-minted signed URL is the *only* read path. Use
-  `createSignedUrl` / `createSignedUrls` from `@clbipp/auth/storage-server` and
-  check ownership before signing, exactly as `@/lib/custody` does.
-- **The seed now uploads real objects to Storage** (`uploadPhoto` in
-  `reset-demo.ts`). `Certificate.pdfUrl` is still `""` — same pattern applies
-  when Batch 8 seeds real PDFs, and `wipePhotos` shows how to keep a reseed clean.
-- **`PKP-2026-000109` is the certified demo pickup** (was `…107` before the 7A
-  renumber). `PKP-2026-000105` is the first with a receipt/payment/wallet ledger.
-- **The certificate layout must stay swappable** — the company will supply the
-  authoritative format. Keep the template separate from the data query; don't
-  spend design time on our own look.
+`@react-pdf/renderer` v4 (React 19 is in its peer range — checked, not assumed).
+Its own package rather than a folder in the app, because the admin app will need
+the same three documents, and dragging a 3 MB PDF renderer into `packages/core`
+(which client components import) or `packages/ui` would be a mistake that's hard
+to undo later.
+
+| File | What |
+|---|---|
+| `src/types.ts` | `CertificateDoc` / `ReceiptDoc` / `InvoiceDoc` — **plain data, no Prisma types and no `Decimal`**. A Decimal reaching a template renders as `[object Object]`; the caller maps |
+| `src/theme.ts` | react-pdf `StyleSheet` + `formatDocDate` |
+| `src/templates/*.tsx` | certificate · receipt · invoice · shared `brand.tsx` |
+| `src/render.tsx` | `renderCertificatePdf` / `renderReceiptPdf` / `renderInvoicePdf` → `Buffer` |
+
+- **`server-only` lives in `render.tsx`, not in the templates or the types** —
+  the same split as `@clbipp/auth`'s `storage.ts` / `storage-server.ts`. A
+  `server-only` import anywhere in a module's graph turns any client component
+  touching it into a build error, so only the *act of rendering* is server-bound.
+- `next.config.ts` gains `@clbipp/pdf` in `transpilePackages` **and
+  `serverExternalPackages: ["@react-pdf/renderer"]`** — it reaches for `fs`/fonts
+  to resolve fonts, and it only ever runs in the Node route handler.
+- Helvetica, one of the 14 PDF base fonts, so **no font binary ships with the
+  repo**.
+
+### Numbering is derived, so no migration was needed
+
+`packages/core/src/documents.ts` — pure, 9 tests:
+
+- `certificateNumber()` → `CERT-{YEAR}-{pickupId}-{CATEGORY}`, the format in
+  Plan v2 §5. `Certificate` has **no number column** and doesn't need one. The
+  year comes from the *certification* date, not the pickup id: a load collected
+  in December and certified in January belongs to the later compliance year.
+- `invoiceNumber()` → `INV-{YEAR}-{serial}`, reusing the pickup's own serial
+  rather than a sequence column (which would need a migration *and* a lock;
+  `Invoice.pickupId` is already `@unique`).
+- **`formatPaise()` is now the single ₹ formatter in the app.**
+  `formatOfferPrice` delegates to it, so an offer and a payout can't disagree
+  about how ₹1,84,500 is written.
+
+### The download route streams bytes — a deliberate change of plan
+
+`GET /api/documents/{certificate|receipt|invoice}/{pickupId}` (`runtime =
+'nodejs'`), backed by `apps/customer/src/lib/documents.ts`.
+
+Batch 7 left a note saying these should use a **signed URL**, the way custody
+photos do. That was reconsidered and rejected. A signed URL is a bearer
+capability that keeps working for an hour after it leaves our control — pasted
+into a chat, sitting in browser history — for a document that names a customer
+and states what they were paid. An `<img>` needs a URL; a download does not.
+**Streaming keeps the session as the only key**, and it let the smoke test
+assert real `%PDF-` bytes. Signed URLs remain correct for photos.
+
+Three more decisions worth knowing:
+
+1. **Generation is lazy.** First request renders → uploads → caches; every
+   request after serves the stored object. The seed and the agent flow stay free
+   of any PDF dependency, and a template change reaches old documents by deleting
+   the cached object rather than by a backfill. A missing object is non-fatal —
+   it re-renders.
+2. **`pdf_url` holds a storage PATH, not a URL**, despite the column name (kept
+   as-is; renaming it is a migration for a cosmetic gain). Storing a signed URL
+   would have been the obvious thing and is wrong — it expires, so the stored
+   value silently rots.
+3. **The ownership-scoped read happens first, unconditionally**, before any
+   cached path is trusted. Reversing that would let a known pickup id fetch a
+   cached object without ever proving ownership. A foreign id and a missing
+   document return the **same 404** — a 403 would confirm that a guessed id
+   exists.
+
+### Payments — `packages/core/src/payments.ts` + `payment-actions.ts`
+
+14 more tests. `PAYMENTS_MODE` was already in `turbo.json` `globalEnv`.
+
+- **Defaults to `simulated`, and an unrecognised value falls back to simulated
+  too.** The dangerous direction is a typo being read as production, so a typo
+  degrades to the simulation, never to real money. `razorpay` mode currently
+  fails loudly rather than pretending to settle against a gateway that isn't there.
+- **`cash` is excluded from the customer-selectable methods.** It stays in the
+  schema enum because an agent may settle in cash on site — but it is something
+  that *happened*, not something a customer picks. Accepting it from a form would
+  let anyone mark their own payout complete without money moving.
+- `settlePayment()` is **idempotent, atomic and ownership-scoped**, in that order
+  of importance. A double-tap or replayed post must not write a second
+  `WalletTxn`; that would credit the customer twice and put the ledger
+  permanently out of step. `creditWallet` guards on the existing row too, so the
+  idempotency doesn't depend on the caller.
+- Ledger and cache are written **together**: `WalletTxn` is the source of truth,
+  `profiles.wallet_balance_paise` is its sum. `nextBalance` throws rather than
+  clamping if a debit would go negative — clamping would destroy the evidence
+  that the two had already diverged.
+
+### 🐛 A real bug the verification script caught
+
+The first run of `settlePayment` against the **real** database failed:
+
+```
+Transaction already closed … timeout was 5000 ms, however 5325 ms passed
+```
+
+Prisma's default interactive-transaction timeout is 5s and this transaction does
+eight sequential round trips — fine locally, not fine against a remote Supabase
+Postgres. **Atomicity did its job** (the balance was unchanged; nothing was
+half-written), but a customer whose payout fails because their connection was
+slow is a real failure.
+
+Fixed by raising the timeout to 20s rather than splitting the work into separate
+transactions: the ledger row and the balance cache **must** land together, and
+splitting them to fit a timeout would trade a visible error for a silently wrong
+balance. **This is exactly the class of thing `npm run build` cannot see** — it
+type-checked green and would have shipped.
+
+### Screens
+
+| Route | What |
+|---|---|
+| `(app)/receipt/[id]` | receipt no, collection time + agent, units/weight/₹, GPS link, download. Says out loud that it is **not** the EPR certificate |
+| `(app)/payment/[id]` | `pending` → method picker; `paid` → confirmation + invoice/receipt/wallet |
+| `(app)/wallet` | balance + `WalletTxn` ledger, and a banner for any unsettled payout |
+| `(app)/certificates/[id]` | the **dead "Download PDF" button now works**; + derived cert number and CO₂ |
+| `(app)/track/[id]` | "Choose how you get paid" / "View collection receipt" / "View payout" from `collected` onward |
+| `(app)/profile` | wallet card with the balance (the tab bar is fixed at four, so the wallet hangs off profile) |
+
+- **Settling is a POST form action, never a page render.** `/handover` mutating
+  during a GET is the standing example of why — it had to be excluded from the
+  smoke test as a result. `/payment/[id]` is safe to fetch, and that is the
+  point.
+- **`PayoutForm` takes its method options as a PROP** rather than importing them
+  from `@clbipp/core`. Core's barrel re-exports `booking-actions` and
+  `payment-actions`, both of which import prisma — a *value* import from a client
+  component would pull the Prisma client into the browser bundle. The two
+  existing client components that touch core get away with it because theirs are
+  `import type`, which erases.
+- New shared `DetailRow` in `@clbipp/ui` — four screens render stacks of
+  label/value rows, and four private copies is how spacing drifts.
+
+### Seed
+
+- **`PKP-2026-000105` (the one pickup at `collected`) now has a `pending`
+  payout** — no wallet txn, no invoice. Every payment being seeded as
+  already-paid left the payment screen with nothing to actually do. Everything
+  further along the lifecycle is `paid` **and now also gets an `Invoice`**, which
+  is what `settlePayment` produces.
+- `wipePhotos` → **`wipeStorage`**, now sweeping `certificates`, `receipts` and
+  `invoices` as well as `pickup-photos`. Without it every reseed orphaned one
+  cached PDF per document.
+- The invoice number format is **restated** in the seed rather than imported:
+  `packages/database` must not depend on `packages/core` (core depends on
+  database, and the cycle breaks the generated client's build).
+
+### Verified
+
+- `npm run build` green (**30 routes**, `/api/documents/[kind]/[id]`,
+  `/payment/[id]`, `/receipt/[id]`, `/wallet` all present), `npm run lint` clean
+  (forced past the turbo cache), **101 tests** (20 decision-engine + 24 auth +
+  57 core — **23 new**).
+- `npm run smoke` — **all 29 routes**, including the four new screens with
+  content assertions and **three document routes asserting `%PDF-` in the body
+  and `content-type: application/pdf`**. That last one is the load-bearing
+  assertion, the equivalent of 7B's `token=`: those bytes only exist if the route
+  rendered a real document, wrote it to a private bucket and streamed it back.
+  Three more document routes assert the **opposite** — no invoice for a pending
+  payout, no receipt at `requested`, nothing for a non-existent pickup — because
+  proving a document route refuses is half of proving it works.
+- `npm run smoke -- agent@test demo1234 --blocked` — all 29 bounce, **including
+  the document API**.
+- **Against the real database + Storage** (throwaway script, deleted after) — 27
+  checks: exactly one pending payment and it has no invoice or ledger row; the
+  cached balance equals `sum(ledger)` **and** every `balanceAfterPaise` matches
+  the running total; a foreign `vendorId` settles nothing; a settle writes
+  exactly one txn, one invoice, a `SIM-`-prefixed ref; **a second call adds no
+  second txn, no second invoice, and doesn't overwrite the recorded method**;
+  `pdf_url` holds a path not a URL; the stored object's bytes are a real PDF; an
+  **unsigned** read of that same object is still refused; and the seed was
+  restored and re-asserted afterwards.
+
+### Known gaps in this batch
+
+- **No wallet redemption.** "Withdraw to bank" needs bank details the app never
+  collects, and a button that removes money from a balance and sends it nowhere
+  is worse than no button. `WalletTxnKind.redemption` already exists for when
+  that flow does.
+- **`taxPaise` is 0 on every invoice.** Whether GST applies to scrap bought from
+  an unregistered individual, and at what rate, is a **question for the company**
+  — inventing a rate on a tax document would be worse than showing zero. The
+  column and the line exist so the answer is a value change, not a schema change.
+- **The certificate layout is a placeholder by decision, not by neglect.** The
+  company is supplying the authoritative format; when it arrives, only
+  `packages/pdf/src/templates/certificate.tsx` changes, because the data query
+  and the `CertificateDoc` shape are separate from it.
+- **`/handover` still mutates on GET.** Untouched here, and still the highest-
+  value small fix outstanding.
+- **Needs a real handset:** how a PDF opens on a phone (the route sends
+  `Content-Disposition: inline`, so it should hand off to the system viewer
+  rather than dropping a file in Downloads), and the payment screen's radio
+  cards at phone width.
+
+---
+
+## ▶ Next: Batch 9 — B4/B5, dashboard impact (CO₂) + compliance CSV
+
+Per Plan v2 §5:
+
+- **B4 — Impact dashboard.** CO₂ avoided, materials recovered, aggregate weight,
+  wallet balance on `(app)/dashboard`. **CO₂ needs a per-chemistry kg-CO₂e/kg
+  constant table in `packages/core/src/impact.ts` with the source in a comment**
+  — it is a compliance-adjacent claim and the seed's inline ~8 kg/kg has no
+  citation. This is the one thing in Batch 9 that must not be hand-waved.
+- **B5 — Compliance CSV export.** `papaparse` is already a dependency of
+  `apps/customer`.
+
+**What Batch 8 leaves teed up for it:**
+
+- **`formatPaise` from `@clbipp/core` is the app's only ₹ formatter.** The
+  dashboard's wallet figure must use it, not a local `/100`.
+- **The wallet balance is already read on two screens** (`/wallet`, `/profile`)
+  as `profile.walletBalancePaise` — the cache, not a ledger aggregate. Keep that
+  consistent on the dashboard; the two are asserted equal by the verification
+  pattern above.
+- **`Certificate.co2AvoidedKg` is populated for the certified pickup** and now
+  renders on `/certificates/[id]` and in the certificate PDF. When B4 introduces
+  the constants table, **the seed, the screen and the PDF must all read the same
+  number** — three places, one source.
+- **The document route is the pattern for any new file the app hands out.**
+  A CSV export should follow it: ownership-scoped read, stream the bytes, no
+  signed URL. Do NOT give it a `loading.tsx`-adjacent page guard (see the 7A
+  streaming-redirect trap below).
+- `DetailRow` from `@clbipp/ui` exists now if the dashboard needs stat rows.
 
 ### ⚠ Still true, still not a code task
 
@@ -1118,11 +1327,12 @@ just needs to know so he doesn't re-introduce it from an older copy.
 ```bash
 npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
-npm run test           # 78 tests (20 decision-engine + 24 auth + 34 core)
+npm run test           # 101 tests (20 decision-engine + 24 auth + 57 core)
 npm run lint           # add -- --force when turbo replays a stale cache hit
-npm run smoke          # 17 routes since Batch 7B — needs `npm run dev` running
+npm run smoke          # 29 routes since Batch 8 — needs `npm run dev` running
 npm run smoke -- agent@test demo1234 --blocked   # role gate MUST block these
 npm run reset-demo     # wipe + reseed: 10 pickups + Storage photos
+                       # (slow — it uploads real objects; give it ~2 min)
 npm run create-buckets --workspace=@clbipp/database
 npm run db:migrate --workspace=@clbipp/database   # = prisma migrate dev
 ```
@@ -1141,9 +1351,9 @@ npm run db:migrate --workspace=@clbipp/database   # = prisma migrate dev
 | `PKP-2026-000102` | scheduled | partner card with an ETA |
 | `PKP-2026-000103` | arrived | partner card "On site now", custody photos |
 | **`PKP-2026-000104`** | **offered** | **the only pickup `/offer` + `/offer-breakdown` admit** |
-| `PKP-2026-000105` | collected | first with receipt + payment + wallet ledger |
-| `PKP-2026-000106` … `108` | tested → recovered | in-progress tracking states |
-| `PKP-2026-000109` | certified | certificate + full 9-stage custody chain |
+| **`PKP-2026-000105`** | **collected** | **receipt + the only `pending` payout** — `/receipt/…`, `/payment/…` method picker |
+| `PKP-2026-000106` … `108` | tested → recovered | in-progress tracking; **settled** payouts + invoices (`/payment/…` paid state) |
+| `PKP-2026-000109` | certified | certificate + full 9-stage custody chain + the EPR certificate PDF |
 | `PKP-2026-000110` | cancelled | the terminal side-state |
 
 **Applying SQL without the Supabase dashboard** — this is how policies were
@@ -1218,18 +1428,32 @@ Items batches have explicitly deferred to one real-device pass:
 4. **Type a real OTP code from a real inbox.** No email has been delivered
    end-to-end; `business@test` has no deliverable domain and real sends burn the
    ~2–4/hr SMTP budget (Batch 6).
-5. **PWA install + offline**, and visual/layout polish generally.
+5. **Open a PDF on a phone** (Batch 8). The document route sends
+   `Content-Disposition: inline`, so it should hand off to the system viewer
+   rather than dropping a file in Downloads — that behaviour is the browser's,
+   and it can only be checked on a handset. Also the payment screen's radio
+   cards at phone width.
+6. **PWA install + offline**, and visual/layout polish generally.
 
 ---
 
 ## Known gaps / deliberate deferrals
 
-- `Certificate.pdfUrl` is `""` in the seed — real PDFs land in Batch 8.
+- ~~`Certificate.pdfUrl` is `""` in the seed~~ — **Batch 8**: still `""` in the
+  seed *by design*. PDFs are generated lazily on first download and the path is
+  cached back into `pdf_url` then. The field holds a **storage path, not a URL**.
 - **The company will supply the authoritative certificate format** (flagged by
-  Aamir 2026-08-09). Whatever they send is the one that gets followed and
-  downloaded, so Batch 8 must keep the certificate **layout swappable** — template
-  separate from the data query — rather than hard-coding our own design. Don't
-  spend design time on the current certificate look.
+  Aamir 2026-08-09). Batch 8 built to this: the layout is swappable, template
+  separate from the data query, so replacing it is a rewrite of
+  `packages/pdf/src/templates/certificate.tsx` against an unchanged
+  `CertificateDoc`. Don't spend design time on the current look.
+- **Invoice `taxPaise` is 0 on every invoice** (Batch 8) — whether GST applies to
+  scrap bought from an unregistered individual is a **question for the company**.
+  The column and the PDF line exist, so their answer is a value change.
+- **No wallet redemption** (Batch 8). Needs bank details the app doesn't collect.
+- **The payments gateway is simulated.** `PAYMENTS_MODE=razorpay` deliberately
+  fails loudly rather than pretending to settle. The payment screen says so on
+  screen in simulated mode rather than hiding it.
 - **`/handover` accepts the offer during a GET render** — see the Batch 6.5
   section. Excluded from the smoke test for that reason; should become a POST.
   **Still the highest-value small fix outstanding**, and Batch 7A made it
@@ -1240,8 +1464,9 @@ Items batches have explicitly deferred to one real-device pass:
   Deliberate (the token is a forwardable bearer capability), and
   `includePhotos: false` skips minting the signed URLs rather than hiding them.
   Flag it if the company wants photos on the public link.
-- **`wipePhotos` in `reset-demo.ts` is not a fix for orphaned draft uploads.** It
-  sweeps the demo users' whole `pickup-photos` subtree on **reseed** — which is
+- **`wipeStorage` in `reset-demo.ts` is not a fix for orphaned draft uploads.** It
+  sweeps the demo users' whole subtree in `pickup-photos` (and, since Batch 8,
+  in `certificates` / `receipts` / `invoices`) on **reseed** — which is
   how the leftover `istockphoto-….jpg` from an abandoned booking was found — but
   the Batch 5 gap stands: closing the tab mid-booking still orphans objects in
   normal use. That needs a real sweep of `<uid>/bookings/…` objects with no

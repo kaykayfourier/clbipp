@@ -4,11 +4,17 @@
 
 import type { RecoveryPathway } from "@prisma/client";
 
+import { formatPaise } from "./documents";
+
 // `Offer.estimatedPrice` is stored as an integer number of PAISE (see seed:
-// 18450000 = ₹1,84,500). Divide by 100 for the rupee figure.
+// 18450000 = ₹1,84,500).
+//
+// Batch 8 moved the actual conversion to `formatPaise` in ./documents, because
+// the payment, wallet, receipt and invoice surfaces all need the same rupee
+// format and money formatting drifting between two implementations is exactly
+// the kind of bug nobody notices. This stays as the offer screens' name for it.
 export function formatOfferPrice(estimatedPricePaise: number): string {
-  const rupees = estimatedPricePaise / 100;
-  return `₹${rupees.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+  return formatPaise(estimatedPricePaise);
 }
 
 // Human-readable label for each recovery pathway enum value. Typed as a Record

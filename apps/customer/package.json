@@ -12,6 +12,7 @@
     "@clbipp/auth": "*",
     "@clbipp/core": "*",
     "@clbipp/database": "*",
+    "@clbipp/pdf": "*",
     "@clbipp/ui": "*",
     "@types/papaparse": "^5.5.2",
     "next": "16.2.6",

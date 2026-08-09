@@ -47,10 +47,46 @@ const ROUTES = [
   // regression to redirecting shows up as a failure rather than a green 307.
   '/offer?id=PKP-2026-000104',
   '/offer-breakdown?id=PKP-2026-000104',
+  // Batch 8. 105 is the one pickup at `collected`, so it carries the receipt
+  // and the only `pending` payout; 106 onward are settled, which is the other
+  // half of the payment screen.
+  '/receipt/PKP-2026-000105',
+  '/payment/PKP-2026-000105',
+  '/payment/PKP-2026-000106',
+  '/wallet',
+  '/certificates/PKP-2026-000109',
   // ⚠ Do NOT add '/handover?id=…' here. That page calls acceptOffer() during
   // render, so a plain GET advances the pickup to `collected` — it would mutate
   // the demo data on every run and break the two offer routes above, which need
   // a pickup still at `offered`. See the Batch 6.5 notes.
+  //
+  // The payment screen is safe to fetch by contrast, and deliberately so:
+  // settling is a POST form action, never something a render does. That is the
+  // difference this batch was careful about.
+]
+
+// Batch 8 — the three PDF documents, fetched as bytes rather than HTML.
+//
+// `%PDF-` in the body is the load-bearing assertion: it is only there if the
+// route rendered a real document with @react-pdf/renderer, wrote it to a
+// private bucket and streamed it back. The equivalent of 7B's `token=` check —
+// it proves the whole path, not that a component rendered.
+const DOCUMENT_ROUTES = [
+  '/api/documents/certificate/PKP-2026-000109',
+  '/api/documents/receipt/PKP-2026-000105',
+  // 106 is settled, so it has an invoice. 105 is still pending and has none —
+  // asserted below as a rejection.
+  '/api/documents/invoice/PKP-2026-000106',
+]
+
+// Document routes that must NOT return a PDF: no such document for this vendor.
+const DOCUMENT_REJECTS = [
+  // Pending payout → no invoice raised yet.
+  '/api/documents/invoice/PKP-2026-000105',
+  // `requested` → nothing collected, so no receipt.
+  '/api/documents/receipt/PKP-2026-000101',
+  // A pickup id that doesn't exist at all.
+  '/api/documents/certificate/PKP-2026-999999',
 ]
 
 // Routes whose STATUS GUARD must reject. Asserting a guard rejects is as much
@@ -69,6 +105,9 @@ const APP_REJECTS = {
   '/offer?id=PKP-2026-000102': ['Estimated Offer', 'Why this price?'],
   // collected — past it
   '/offer?id=PKP-2026-000105': ['Estimated Offer', 'Why this price?'],
+  // Batch 8: nothing is collected at `requested`, so there is no receipt to
+  // show. The screen must render its empty state, not receipt fields.
+  '/receipt/PKP-2026-000101': ['Receipt number', 'Agreed payout'],
 }
 
 // Content that must appear on a logged-in route. A redirect returns no body, so
@@ -90,6 +129,39 @@ const APP_CONTENT = {
     'token=',
   ],
   '/track/PKP-2026-000109': ['Chain of custody', 'Certified', 'Collected', 'token='],
+  // Batch 8. The ₹ figures here are the D6 relaxation made visible — if the
+  // "no value to the vendor" default ever gets re-applied wholesale, these fail
+  // rather than the screens quietly going blank.
+  '/receipt/PKP-2026-000105': [
+    'Pickup receipt',
+    'Receipt number',
+    'RCP-2026-000105',
+    'Agreed payout',
+    '₹',
+    'This is not your EPR certificate',
+    'Download receipt',
+  ],
+  // Pending payout: the method picker must be there, and so must the honest
+  // note that nothing real is moving.
+  '/payment/PKP-2026-000105': [
+    'Your payout',
+    'Payable to you',
+    'How should we pay you?',
+    'UPI',
+    'Bank transfer',
+    'simulation',
+  ],
+  // Settled payout: confirmation, not a form.
+  '/payment/PKP-2026-000106': ['You were paid', 'Paid to you', 'Payout sent', 'Download invoice'],
+  '/wallet': ['Balance', 'Activity', 'Pickup payout', '₹'],
+  // The certificate number is derived, not stored — asserting it proves the
+  // screen and the PDF are computing it the same way.
+  '/certificates/PKP-2026-000109': [
+    'EPR Certificate',
+    'Certificate no.',
+    'CERT-2026-PKP-2026-000109-',
+    'Download PDF',
+  ],
 }
 
 // Public auth screens. Checked separately because the role gate must NOT touch
@@ -243,6 +315,65 @@ async function main() {
     })
   }
 
+  /**
+   * Fetches a document route and checks it is a real PDF.
+   *
+   * Deliberately separate from probe(): these answer with bytes and a
+   * Content-Type, not HTML, so the tab-bar and error-page heuristics don't
+   * apply. `expectPdf: false` asserts the opposite — a 404/401, and above all
+   * NOT a PDF, which is how "not yours / doesn't exist" is proven.
+   */
+  async function probeDocument(route, { expectPdf = true, expectBounce = false } = {}) {
+    let status, type = '', head = '', note = ''
+    try {
+      const r = await fetch(`${BASE}${route}`, { headers: { Cookie }, redirect: 'manual' })
+      status = r.status
+      type = r.headers.get('content-type') ?? ''
+      note = r.headers.get('location') ? `→ ${r.headers.get('location')}` : ''
+      if (status === 200) {
+        head = Buffer.from(await r.arrayBuffer()).subarray(0, 5).toString('latin1')
+      }
+    } catch (e) {
+      console.error(`  ERR   ${route}`, e.message)
+      failures++
+      return
+    }
+
+    const isPdf = type.includes('application/pdf') && head === '%PDF-'
+
+    let verdict
+    if (expectBounce) {
+      verdict = note.includes('/login') ? 'blocked (correct)' : 'LEAKED THROUGH'
+    } else if (expectPdf) {
+      verdict = isPdf ? 'ok (real PDF)' : `NOT A PDF (${status}, ${type || 'no type'})`
+    } else if (isPdf) {
+      verdict = 'LEAKED A DOCUMENT'
+    } else if (status === 404 || status === 401) {
+      verdict = 'refused (correct)'
+    } else {
+      verdict = `UNEXPECTED ${status}`
+    }
+
+    if (!['ok (real PDF)', 'refused (correct)', 'blocked (correct)'].includes(verdict)) failures++
+    console.log(`  ${String(status).padEnd(3)} ${route.padEnd(46)} ${verdict} ${note}`)
+  }
+
+  // ⚠ Documented exception to this script's read-only rule. The FIRST fetch of
+  // a document renders the PDF, uploads it and writes the storage path to
+  // `pdf_url`. That is idempotent caching of a value derived from the row — not
+  // a lifecycle transition — so unlike /handover it cannot advance a pickup,
+  // break another route, or change what any screen shows. Worth the write: it
+  // is the only way to prove the render → upload → stream path end to end.
+  console.log('\n  — documents (must be real PDFs) —')
+  for (const route of DOCUMENT_ROUTES) {
+    await probeDocument(route, { expectBounce: blocked })
+  }
+
+  console.log('\n  — documents (must refuse) —')
+  for (const route of DOCUMENT_REJECTS) {
+    await probeDocument(route, { expectPdf: false, expectBounce: blocked })
+  }
+
   // Fetched WITHOUT the session cookie — that is the state they're built for,
   // and a logged-in hit on /login legitimately redirects to /dashboard, which
   // would make a content check meaningless. A rejected session that also
@@ -252,7 +383,12 @@ async function main() {
     await probe(route, { anon: true, mustContain: CONTENT[route] ?? [] })
   }
 
-  const total = ROUTES.length + Object.keys(APP_REJECTS).length + PUBLIC_ROUTES.length
+  const total =
+    ROUTES.length +
+    Object.keys(APP_REJECTS).length +
+    DOCUMENT_ROUTES.length +
+    DOCUMENT_REJECTS.length +
+    PUBLIC_ROUTES.length
   console.log(
     failures === 0
       ? `\nAll ${total} routes behaved as expected.\n`
