@@ -5,19 +5,49 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-07 (all source documents now read; **Plan v2 written —
-see `docs/PLAN_V2_CUSTOMER_APP.md`, which is the operative plan**. Prior same-day:
-company flow gap review. Prior: 2026-07-28 lane map sync)
+**Last updated:** 2026-08-09 (**Batches 0A + 0B executed** — repo is now a
+Turborepo monorepo and schema v2 is live. Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
 ---
 
-## READ FIRST — Plan v2 (2026-08-07)
+## READ FIRST — resume point (2026-08-09)
 
-**Start here:** A → `docs/PLAN_V2_CUSTOMER_APP.md` §3A (Turborepo migration).
-**B → `docs/BATCH_0B_SCHEMA.md`** — self-contained runbook, validated schema,
-nothing to design.
+**→ `docs/REVAMP_BATCHES_2026-08-09.md` is the live status file and the place to
+resume.** It has the batch tracker, what batches 1–2 delivered, the demo
+accounts + passwords, the commands, and the known gaps.
+
+`docs/PLAN_V2_CUSTOMER_APP.md` remains the operative *plan* (the why, and
+decisions D1–D7). This file (`PROJECT_STATE.md`) is now largely **historical
+below this section** — it describes the pre-monorepo, pre-schema-v2 app.
+
+### The two structural facts that invalidate most of the detail below
+
+1. **The repo is a Turborepo monorepo** (Batch 0A, commit `a5c15e2`). Every path
+   written below as `src/...` now lives at `apps/customer/src/...`, and shared
+   code moved into `packages/{ui,auth,core,database,decision-engine}`. Imports
+   are `@clbipp/*`, not `@/lib/*` or `@/components/*`. `prisma/` is now
+   `packages/database/prisma/`.
+2. **Schema v2 is applied** (Batch 0B, migration
+   `20260809072925_schema_v2_battery_items`). `Pickup` is a header row and
+   battery detail lives in the new `BatteryItem`. `Address`, `PricingRate`,
+   `Payment`, `WalletTxn`, `PickupReceipt`, `Invoice` exist, plus agent/admin
+   scaffolding tables. The seed is fully rewritten — 8 pickups, one per
+   lifecycle stage, all owned by real auth users.
+
+**Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
+cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts
+to the `CLAUDE.md` map when he is back.
+
+### Blockers list below is fully resolved
+
+Every item in "Blocked on B" and the P0/P1 lists further down is done: the
+dashboard is on real Prisma, the seed provides an Offer + Certificate for the
+real login, `updated_at` has its default, and the certificate page reads by id.
+Do not treat that table as live.
+
+### Plan v2 summary (2026-08-07 — still the operative plan)
 
 **`docs/PLAN_V2_CUSTOMER_APP.md` is the operative plan.** It supersedes the
 "Batch A" plan below for anything not already merged, and records seven decisions

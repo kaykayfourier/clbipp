@@ -31,6 +31,30 @@ reality doesn't match the original split — not free-for-all editing.
 
 ## Change log
 
+### 2026-08-09 — Customer-app revamp: B's entire lane → A (temporary, for this revamp)
+- **Moved to A (Aamir):** all of B's (Khalid's) lane for the customer-app
+  revamp — the Batch 0B schema migration + Storage buckets + seed rewrite, the
+  pricing engine and `createPickupWithItems`, PDF generation (certificate,
+  receipt, invoice), the impact dashboard, compliance CSV export, payments +
+  wallet, and the notification-copy fix. In practice: `packages/database/*`,
+  `packages/core/*`, and B's screens.
+- **Why:** B was unavailable on 2026-08-09 and the goal was to finish the
+  customer-app revamp in one day. B's work sits at the *front* of the dependency
+  chain — the schema blocks the booking flow, and the pricing engine blocks the
+  quote step — so waiting would have stalled A's lane entirely.
+- **Agreed by:** Khalid, verbally, in advance — explicit permission to do "his
+  side of the work if it blocks me, or his whole side if that's what it takes".
+- **Scope + duration:** this revamp only. Ownership reverts to the map in
+  `CLAUDE.md` once Khalid is back. Nothing here changes the permanent lane map.
+- **What Khalid should know on return** (nothing is blocked on him):
+  1. `BATCH_0B_SCHEMA.md` §2 had a real defect — `Pickup.batteryType` was
+     missing `@map("battery_type")`, which would have renamed a live column with
+     10 rows and broken the raw-PostgREST insert path. Fixed in the repo *and*
+     in the runbook. Don't re-paste an older copy of §2 over it.
+  2. The seed is a full rewrite (`prisma/reset-demo.ts`); the old
+     `prisma/seed.ts` is deleted. Every row now belongs to a real auth user.
+  3. Live status + resume point: `docs/REVAMP_BATCHES_2026-08-09.md`.
+
 ### 2026-07-10 — Netting-up: seam + flow/component crash-fixes + PWA/deploy → A
 - **Moved to A (Aamir):** the cross-lane navigation seam (dashboard↔flow↔track
   routing), the flow-screen + component-library crash-fixes (`badge.tsx`,
