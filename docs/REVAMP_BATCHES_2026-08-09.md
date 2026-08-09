@@ -123,9 +123,16 @@ never crosses users, the in-use guard fires on the 8-pickup address, and
 deleting the default promotes a replacement. `npm run build` green (23 routes),
 `npm run lint` clean, 48 tests passing.
 
-**Still to check in a browser** (needs a real device/permission prompt): the
-"Use my current location" button end-to-end, and how the chip looks on a real
-handset.
+**Verified rendered while logged in** (`npm run smoke`, see below): `/addresses`
+returns 200 as `business@test` and renders both seeded addresses with the
+Default and Not-operational badges and the GPS marker; `/addresses/new` and the
+dashboard chip ("Warehouse · New Delhi") render; and as `agent@test` the same
+routes render with **none** of `business@test`'s data — cross-user isolation
+confirmed at the HTTP layer, not just in the query.
+
+**Still needs a real browser** (can't be automated here, deferred to the
+end-of-revamp pass): the `navigator.geolocation` permission prompt on a real
+device, and visual/layout polish on a handset.
 
 ---
 
@@ -274,6 +281,8 @@ npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
 npm run test           # 48 tests (3 auth + 13 storage + 20 decision-engine + 12 booking)
 npm run lint
+npm run smoke          # logged-in smoke test — needs `npm run dev` running
+npm run smoke -- agent@test demo1234    # …as a different account
 npm run reset-demo     # wipe + reseed the whole demo dataset
 npm run create-buckets --workspace=@clbipp/database
 npm run db:migrate --workspace=@clbipp/database
@@ -311,6 +320,29 @@ timeline and Realtime both key off that row existing).
 
 Because A is covering both lanes, **no stubs are needed** — Batch 3 builds the
 real functions before Batch 5 consumes them.
+
+---
+
+## Testing posture for this revamp (agreed 2026-08-09)
+
+**Aamir is not manually testing batch by batch** — one manual pass at the end of
+the revamp instead. That is a fine trade *provided* each batch is verified
+programmatically before it's called done, because the cost of finding a broken
+screen grows the more batches are stacked on top of it.
+
+So the bar for "batch done" is:
+
+1. `npm run build` + `npm run lint` green, `npm run test` passing.
+2. **`npm run smoke` passing** — every screen renders 200 with a real session.
+   Type-checking does not catch a server component that throws at request time.
+3. Anything with a data invariant (a transaction, an ownership scope) gets a
+   throwaway script run **inside a rolled-back transaction** against the real
+   database, then deleted. See the Batch 4 entry for the pattern.
+
+What genuinely can't be automated here, and is the real content of the
+end-of-revamp manual pass: device permission prompts (camera, geolocation),
+visual/layout polish on a handset, PWA install + offline, and the
+feel of the multi-step flows.
 
 ---
 

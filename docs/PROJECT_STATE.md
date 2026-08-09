@@ -5,10 +5,11 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 executed** — repo is now a
-Turborepo monorepo, schema v2 is live, and the booking quote engine +
-`createPickupWithItems` have shipped in `packages/core`. Next: Batch 4, the
-address book + Storage upload helper. Prior: 2026-08-07 Plan v2 written)
+**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 executed** — repo is now
+a Turborepo monorepo, schema v2 is live, the booking quote engine +
+`createPickupWithItems` have shipped in `packages/core`, and the address book +
+Storage upload helper have landed. Next: **Batch 5, the 4-step booking wizard**
+— the centrepiece. Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
@@ -42,6 +43,12 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    (`createPickupWithItems`). Anything below describing a pickup being inserted
    from a page via raw PostgREST is the *old* request form — new booking code
    goes through these two.
+4. **There is now a logged-in smoke test** (Batch 4): `npm run smoke` logs in as
+   a real seeded user, forges the `@supabase/ssr` session cookie and fetches
+   every screen. `npm run build` type-checks but never renders a page with a
+   session, so this is the check that catches a server component throwing at
+   request time. Run it after every batch; add new routes to `ROUTES` in
+   `scripts/smoke.mjs` as they land.
 
 **Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
 cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts

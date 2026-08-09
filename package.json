@@ -14,7 +14,8 @@
     "test": "turbo run test",
     "db:generate": "turbo run db:generate",
     "db:migrate": "npm run db:migrate --workspace=@clbipp/database",
-    "reset-demo": "npm run reset-demo --workspace=@clbipp/database"
+    "reset-demo": "npm run reset-demo --workspace=@clbipp/database",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.8"
