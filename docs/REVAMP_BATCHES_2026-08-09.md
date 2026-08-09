@@ -19,8 +19,8 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 |---|---|---|---|
 | 1 | **0A — Turborepo migration** | A | ✅ done, committed `a5c15e2` |
 | 2 | **0B — schema v2 + buckets + seed + RLS** | B | ✅ done, staged |
-| 3 | **B2 — pricing engine + `createPickupWithItems`** | B | ✅ done, staged |
-| 4 | A2/A3 — address book + storage upload helper | A | ⏭ **next** |
+| 3 | **B2 — pricing engine + `createPickupWithItems`** | B | ✅ done, committed `ac07895` |
+| 4 | A2/A3 — address book + storage upload helper | A | ⏭ **next — start here** |
 | 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | pending |
 | 6 | A1 — email OTP + `/verify` + roles | A | pending |
 | 7 | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | pending |
@@ -31,6 +31,48 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 **Cut order if time runs short** (Plan v2 §8): P2 screens → wallet → invoices →
 receipt PDF (keep the screen) → address GPS.
 **Never cut:** booking flow, `BatteryItem`, tracking, EPR certificate.
+
+---
+
+## ▶ Next: Batch 4 — A2 (address book) + A3 (storage helper)
+
+Everything Batch 4 depends on is already in place — schema, buckets, Storage
+policies, and the Batch 3 quote/write functions. Nothing is blocked.
+
+**A2 — address book** (Plan v2 §5, A2):
+
+- `/addresses` list + `/addresses/new`, writing to the `Address` model
+  (`label, line1, line2, city, state, pincode, lat, lng, status, isDefault`).
+- Default-address handling (exactly one `isDefault` per profile — do it in a
+  transaction that clears the old default) and `operational` /
+  `not_operational` status via the `AddressStatus` enum.
+- GPS capture through `navigator.geolocation` — free, no API key. **No embedded
+  map picker**: it needs a billed Google Maps key, and lat/lng + text fields
+  carry the same data.
+- Address chip in the app header.
+- **Writes need a service-role server action.** The Batch 2 RLS is SELECT-only
+  by design for the new tables, `Address` included — a browser-session insert
+  will be rejected. Use `createAdminClient()` from `@clbipp/auth` (or Prisma in
+  a server action), never the browser client.
+
+**A3 — storage upload helper** (the RLS half of A3 is already done):
+
+- Build `packages/auth/src/storage.ts` — an upload helper wrapping the Supabase
+  Storage calls, with the 5 MB/file client-side check. Per the repo convention,
+  Storage calls live in `packages/auth`, not scattered across pages.
+- The five private buckets exist (Batch 2) and the four Storage policies in
+  `supabase/storage-policies.sql` are **verified applied in the database**
+  (`pickup-photos`: upload/read/delete own; `kyc-docs`: upload own).
+- ⚠ Known gap: `kyc-docs` has an upload policy but **no read or delete policy**,
+  and `certificates` / `receipts` / `invoices` have none at all — those are
+  read via signed URLs generated server-side, so it's fine for now, but if a
+  screen tries to read a KYC doc with the browser client it will 403.
+  Path convention already assumed by the policies: `<user-id>/<filename>`.
+
+**Then Batch 5 (A4, the booking wizard) consumes Batch 3 directly** — no stubs
+needed. Import `getQuote` and `createPickupWithItems` from `@clbipp/core`, and
+remember `createPickupWithItems` does **not** read the session: the wizard's
+`"use server"` action resolves the logged-in user and passes `vendorId` in.
 
 ---
 
@@ -176,7 +218,7 @@ just needs to know so he doesn't re-introduce it from an older copy.
 ```bash
 npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
-npm run test           # 23 tests (3 auth + 20 decision-engine)
+npm run test           # 35 tests (3 auth + 20 decision-engine + 12 booking)
 npm run lint
 npm run reset-demo     # wipe + reseed the whole demo dataset
 npm run create-buckets --workspace=@clbipp/database

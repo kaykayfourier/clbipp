@@ -115,7 +115,7 @@ All commands run from the **repo root** (turbo fans them out to the workspaces).
 npm run dev          # Customer app dev server
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 23
+npm run test         # All tests (Vitest) — currently 35
 
 # Run a single test file (from the owning package)
 cd packages/core && npx vitest run src/booking.test.ts

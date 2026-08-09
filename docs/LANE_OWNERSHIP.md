@@ -54,6 +54,11 @@ reality doesn't match the original split — not free-for-all editing.
   2. The seed is a full rewrite (`prisma/reset-demo.ts`); the old
      `prisma/seed.ts` is deleted. Every row now belongs to a real auth user.
   3. Live status + resume point: `docs/REVAMP_BATCHES_2026-08-09.md`.
+  4. The Batch 3 A↔B contract (`BATCH_0B_SCHEMA.md` §7) shipped with two
+     deliberate divergences — `CreatePickupInput` gains `vendorId` (core does
+     not read the session), and weightless lines are still quoted from a typical
+     unit weight. Both are written up in `REVAMP_BATCHES_2026-08-09.md`
+     → "Batch 3".
 
 ### 2026-07-10 — Netting-up: seam + flow/component crash-fixes + PWA/deploy → A
 - **Moved to A (Aamir):** the cross-lane navigation seam (dashboard↔flow↔track

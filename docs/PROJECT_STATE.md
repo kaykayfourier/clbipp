@@ -5,8 +5,10 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-09 (**Batches 0A + 0B executed** — repo is now a
-Turborepo monorepo and schema v2 is live. Prior: 2026-08-07 Plan v2 written)
+**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 executed** — repo is now a
+Turborepo monorepo, schema v2 is live, and the booking quote engine +
+`createPickupWithItems` have shipped in `packages/core`. Next: Batch 4, the
+address book + Storage upload helper. Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
@@ -22,7 +24,7 @@ accounts + passwords, the commands, and the known gaps.
 decisions D1–D7). This file (`PROJECT_STATE.md`) is now largely **historical
 below this section** — it describes the pre-monorepo, pre-schema-v2 app.
 
-### The two structural facts that invalidate most of the detail below
+### The three structural facts that invalidate most of the detail below
 
 1. **The repo is a Turborepo monorepo** (Batch 0A, commit `a5c15e2`). Every path
    written below as `src/...` now lives at `apps/customer/src/...`, and shared
@@ -35,6 +37,11 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    `Payment`, `WalletTxn`, `PickupReceipt`, `Invoice` exist, plus agent/admin
    scaffolding tables. The seed is fully rewritten — 8 pickups, one per
    lifecycle stage, all owned by real auth users.
+3. **The booking write path now lives in `packages/core`** (Batch 3):
+   `booking.ts` (`estimateQuote` / `getQuote`) and `booking-actions.ts`
+   (`createPickupWithItems`). Anything below describing a pickup being inserted
+   from a page via raw PostgREST is the *old* request form — new booking code
+   goes through these two.
 
 **Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
 cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts
