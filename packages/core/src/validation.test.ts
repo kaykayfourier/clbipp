@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { bookingLineItemSchema, bookingSubmissionSchema } from "./validation";
+import {
+  bookingLineItemSchema,
+  bookingSubmissionSchema,
+  normaliseIndianPhone,
+  signupFleetSchema,
+  signupIndividualSchema,
+} from "./validation";
 
 // The booking payload is the one thing in this sprint that arrives from the
 // browser as free-form JSON, so these tests cover the guard rather than the
@@ -152,5 +158,92 @@ describe("bookingSubmissionSchema", () => {
   it("normalises blank notes to undefined rather than storing an empty string", () => {
     const parsed = bookingSubmissionSchema.parse(submission({ notes: "   " }));
     expect(parsed.notes).toBeUndefined();
+  });
+});
+
+describe("normaliseIndianPhone", () => {
+  it("accepts the shapes people actually type", () => {
+    for (const input of [
+      "9876543210",
+      "98765 43210",
+      "98765-43210",
+      "+91 98765 43210",
+      "+919876543210",
+      "919876543210",
+      "09876543210",
+    ]) {
+      expect(normaliseIndianPhone(input)).toBe("+919876543210");
+    }
+  });
+
+  it("rejects numbers that aren't Indian mobiles", () => {
+    // Indian mobiles start 6–9; landlines and short codes do not, and this
+    // number is what the field agent calls at the door.
+    expect(normaliseIndianPhone("1234567890")).toBeNull();
+    expect(normaliseIndianPhone("5876543210")).toBeNull();
+    expect(normaliseIndianPhone("987654321")).toBeNull();   // 9 digits
+    expect(normaliseIndianPhone("98765432101")).toBeNull(); // 11 digits
+    expect(normaliseIndianPhone("")).toBeNull();
+    expect(normaliseIndianPhone("not a phone")).toBeNull();
+  });
+
+  it("does not mistake a 12-digit non-91 number for a prefixed one", () => {
+    expect(normaliseIndianPhone("129876543210")).toBeNull();
+  });
+});
+
+describe("signup schemas", () => {
+  const individual = {
+    email: "vendor@example.com",
+    password: "hunter2",
+    fullName: "Vendor One",
+  };
+
+  it("accepts an individual signup with no phone at all", () => {
+    const result = signupIndividualSchema.safeParse(individual);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.phone).toBeUndefined();
+  });
+
+  it("treats a blank phone field as absent, not invalid", () => {
+    // An untouched optional input posts "" through FormData, which must not
+    // read as a failed validation.
+    const result = signupIndividualSchema.safeParse({ ...individual, phone: "   " });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.phone).toBeUndefined();
+  });
+
+  it("normalises a supplied phone rather than storing it as typed", () => {
+    const result = signupIndividualSchema.safeParse({ ...individual, phone: "98765 43210" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.phone).toBe("+919876543210");
+  });
+
+  it("rejects a malformed phone", () => {
+    expect(signupIndividualSchema.safeParse({ ...individual, phone: "123" }).success).toBe(false);
+  });
+
+  it("rejects a password shorter than Supabase's own minimum", () => {
+    expect(signupIndividualSchema.safeParse({ ...individual, password: "abc" }).success).toBe(false);
+  });
+
+  it("rejects a malformed email", () => {
+    expect(signupIndividualSchema.safeParse({ ...individual, email: "nope" }).success).toBe(false);
+  });
+
+  it("requires the business fields on a fleet signup", () => {
+    expect(signupFleetSchema.safeParse(individual).success).toBe(false);
+  });
+
+  it("accepts a complete fleet signup", () => {
+    const result = signupFleetSchema.safeParse({
+      ...individual,
+      companyName: "Acme Batteries Pvt Ltd",
+      eprRegId: "EPR/123",
+      gstNumber: "22AAAAA0000A1Z5",
+      panNumber: "AAAAA0000A",
+      businessAddress: "12 Industrial Area, New Delhi",
+    });
+    expect(result.success).toBe(true);
   });
 });

@@ -5,11 +5,12 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 executed** — repo is
-now a Turborepo monorepo, schema v2 is live, the booking quote engine +
+**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 + 6 executed** — repo
+is now a Turborepo monorepo, schema v2 is live, the booking quote engine +
 `createPickupWithItems` shipped in `packages/core`, the address book + Storage
-upload helper landed, and **the 4-step booking wizard at `/book` is done** —
-the centrepiece of the revamp. Next: **Batch 6, email OTP + `/verify` + roles**.
+upload helper landed, **the 4-step booking wizard at `/book` is done** — the
+centrepiece of the revamp — and **email OTP + `/verify` + the role gate are
+live**. Next: **Batch 7, tracking upgrade (partner card, chain-of-custody)**.
 Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
@@ -50,7 +51,20 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    session, so this is the check that catches a server component throwing at
    request time. Run it after every batch; add new routes to `ROUTES` in
    `scripts/smoke.mjs` as they land.
-5. **Booking now happens at `/book`, not `/request-pickup`** (Batch 5). The
+5. **Auth is role-gated and OTP-capable** (Batch 6). `apps/customer/src/middleware.ts`
+   now passes `allowRoles: ['customer']`, so **only `business@test` can enter the
+   customer app** — `agent@test` and `admin@test` are signed out to `/login`.
+   Email OTP (`/verify`) sits alongside password login, which stays primary
+   because Supabase's built-in SMTP allows only ~2–4 mails/hour. Anything below
+   describing login as password-only, or the post-login landing as `/profile`,
+   is historical — it now lands on `/dashboard`.
+   ⚠ **`supabase/grants.sql` gained a profiles column-level lockdown** in the
+   same batch: `authenticated` previously had UPDATE on every column, so a
+   customer could PATCH their own `role` to `admin`, self-clear `kyc_status`, or
+   invent a `wallet_balance_paise`. Applied to the live database. Read it before
+   touching profile writes — an insert or update naming a column outside the
+   allowlist now fails with a 403 rather than an RLS error.
+6. **Booking now happens at `/book`, not `/request-pickup`** (Batch 5). The
    4-step wizard is the only way a customer creates a pickup, and it goes through
    the `"use server"` actions in `apps/customer/src/app/(app)/book/actions.ts` →
    `getQuote` + `createPickupWithItems`. `/request-pickup` is a redirect; the old
@@ -601,7 +615,10 @@ A can assign or absorb any of these solo once ahead.
       certified RecoverySummary and profile recycled stats show real data.
 
 **P2 — validation + verify A's untested states against real data**
-- [ ] P5-B: GST/PAN/EPR validation (B, `validation.ts`) — pairs with P5-A.
+- [x] P5-A: email + password (+ phone) validation on signup — **done in Batch 6**
+      via `signupIndividualSchema` / `signupFleetSchema` in `packages/core`.
+- [ ] P5-B: GST/PAN/EPR **format** validation (B, `validation.ts`) — pairs with
+      P5-A, which deliberately stopped at presence-only for those three fields.
 - [ ] Verify with real data: cancelled state, timeline timestamps, public
       `/t/[token]` across status buckets, profile cert/recycled stats, signup
       fleet fields (re-verify after recent changes).

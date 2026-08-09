@@ -1,8 +1,11 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { signIn } from '@clbipp/auth'
+import { describeOtpError, sendEmailOtp, signIn } from '@clbipp/auth'
 
+// Password login. Kept as the primary path deliberately: Supabase's built-in
+// SMTP rate-limits at roughly 2–4 mails/hour, which is not enough to demo
+// through, so OTP sits alongside this rather than replacing it (Plan v2 D2).
 export async function login(formData: FormData) {
   const email = String(formData.get('email') ?? '')
   const password = String(formData.get('password') ?? '')
@@ -12,7 +15,20 @@ export async function login(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`)
   }
 
-  // TODO: redirect to /dashboard once Person B ships it. Until then the
-  // /profile harness is the post-login landing so the auth loop is testable.
-  redirect('/profile')
+  redirect('/dashboard')
+}
+
+// Passwordless login, step 1: mail a code, then hand off to /verify.
+export async function requestOtp(formData: FormData) {
+  const email = String(formData.get('otpEmail') ?? '').trim()
+  if (!email) {
+    redirect('/login?error=Enter+your+email+to+get+a+code.')
+  }
+
+  const { error } = await sendEmailOtp(email)
+  if (error) {
+    redirect(`/login?error=${encodeURIComponent(describeOtpError(error.message))}`)
+  }
+
+  redirect(`/verify?email=${encodeURIComponent(email)}`)
 }

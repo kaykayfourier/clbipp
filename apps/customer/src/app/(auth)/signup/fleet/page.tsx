@@ -31,6 +31,8 @@ export default async function SignupFleetPage({
           <Field label="Company name" name="companyName" type="text" required placeholder="Acme Batteries Pvt Ltd" />
           <Field label="Contact name" name="fullName" type="text" required autoComplete="name" placeholder="Primary contact person" />
           <Field label="Email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" />
+          {/* See the individual form: stored now, verified when SMS OTP ships. */}
+          <Field label="Mobile (optional)" name="phone" type="tel" autoComplete="tel" placeholder="98765 43210" />
           <Field label="Password" name="password" type="password" required minLength={6} autoComplete="new-password" placeholder="Create a password" />
           <Field label="EPR registration ID" name="eprRegId" type="text" required placeholder="EPR/…" />
           <Field label="GST number" name="gstNumber" type="text" required placeholder="22AAAAA0000A1Z5" />

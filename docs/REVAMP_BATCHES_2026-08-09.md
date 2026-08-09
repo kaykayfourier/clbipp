@@ -21,9 +21,9 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 2 | **0B — schema v2 + buckets + seed + RLS** | B | ✅ done, staged |
 | 3 | **B2 — pricing engine + `createPickupWithItems`** | B | ✅ done, committed `ac07895` |
 | 4 | A2/A3 — address book + storage upload helper | A | ✅ done, committed `73bc512` |
-| 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | ✅ done, staged |
-| 6 | A1 — email OTP + `/verify` + roles | A | ⏭ **next — start here** |
-| 7 | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | pending |
+| 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | ✅ done, committed `a8684fa` |
+| 6 | **A1 — email OTP + `/verify` + roles** | A | ✅ done, staged |
+| 7 | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | ⏭ **next — start here** |
 | 8 | B3/B6 — PDF generation + payment + receipt screens | B | pending |
 | 9 | B4/B5 — dashboard impact (CO₂) + compliance CSV | B | pending |
 | 10 | P2 screens (wallet, invoices, history, profile, `/t` parity) + **deploy** | A | pending |
@@ -34,20 +34,157 @@ receipt PDF (keep the screen) → address GPS.
 
 ---
 
-## ▶ Next: Batch 6 — A1, email OTP + `/verify` + roles
+## ▶ Next: Batch 7 — A5/B7, tracking upgrade + copy fix
 
-Everything the booking flow needed is now built, so Batch 6 is back on the auth
-lane. Three things are already staged for it:
+Per Plan v2 §5: assigned-partner card (name, phone, vehicle), ETA, and a
+chain-of-custody timeline rendering per-event GPS + photos. Realtime is unchanged
+and already works.
 
-- **`createAuthMiddleware({ …, allowRoles })`** in `packages/auth/src/middleware.ts`
-  is written and wired but **commented out** in `apps/customer/src/middleware.ts`.
-  Batch 6 turns it on. `Profile.role` exists and the seed populates it
-  (`customer` / `agent` / `admin`).
-- **Password login must keep working.** Supabase's built-in SMTP rate-limits at
-  roughly 2–4 mails/hour, which is not enough to demo through. OTP is added
-  alongside password login, not in place of it.
-- `apps/customer/src/middleware.ts` **must stay under `src/`** — Next's dev
-  bundler silently never registers root middleware when `src/app` is in use.
+Two things Batch 6 leaves teed up for it:
+
+- **`createSignedUrl` in `@clbipp/auth/storage-server` is still unconsumed.** All
+  five buckets are private, so it is the only way a stored photo path becomes
+  viewable. Batch 7's custody timeline is where the booking photos finally get
+  displayed — this has now been the "next batch will use it" item twice.
+- **`Profile.phone` is now populated at signup** (Batch 6), so the partner card
+  has a real number to show for agent profiles rather than a placeholder. The
+  seeded `agent@test` profile has one.
+
+### ⚠ One thing to action before the demo (not a code task)
+
+Email OTP delivers a **6-digit code only if the Supabase email template contains
+`{{ .Token }}`**. The default template uses `{{ .ConfirmationURL }}`, which sends
+a clickable link instead. Batch 6 supports both (`/auth/callback` handles the
+link), so nothing is broken either way — but if you want the `/verify` code
+screen to be the actual demo path, edit
+*Authentication → Email Templates → Magic Link* in the Supabase dashboard to
+include `{{ .Token }}`. That is dashboard config, not repo state, so it cannot be
+committed here.
+
+---
+
+## What Batch 6 delivered — email OTP + `/verify` + the role gate
+
+Password login is **unchanged and still primary**. OTP is additive, and the
+login screen shows it below an "OR" divider, because Supabase's built-in SMTP
+allows only ~2–4 mails/hour — not enough to demo through.
+
+| File | What it is |
+|---|---|
+| `packages/auth/src/supabase/auth.ts` | `sendEmailOtp`, `verifyEmailOtp`, `describeOtpError`; `phone` on `SignUpInput` |
+| `(auth)/verify/page.tsx` · `actions.ts` | **new** — 6-digit code screen, verify + resend |
+| `(auth)/login/page.tsx` · `actions.ts` | + `requestOtp` action and the "email me a code" form |
+| `app/auth/callback/route.ts` | **new** — magic-link landing, so link-style emails also work |
+| `(auth)/signup/*` | + optional mobile field, now validated through `@clbipp/core` |
+| `packages/core/src/validation.ts` | + `normaliseIndianPhone`, `signupIndividualSchema`, `signupFleetSchema` |
+| `apps/customer/src/middleware.ts` | `allowRoles: ['customer']` **turned on** |
+| `supabase/grants.sql` | + profiles column-level lockdown (see below) |
+
+### The decisions worth knowing
+
+1. **`shouldCreateUser: false` on `sendEmailOtp`.** Left at its default, a
+   typo'd address silently creates an `auth.users` row with no `profiles` row.
+   Before the role gate that was cosmetic; with it, the middleware finds no
+   profile, signs the session out and bounces to `/login` — an unrecoverable
+   loop, and the user can't then sign up with the real address either. Account
+   creation goes through `/signup`, which writes both rows.
+2. **`/auth/callback` exists so the email template is a preference, not a
+   prerequisite.** Code-style and link-style emails both land somewhere real. It
+   handles both `?token_hash=…&type=…` and the PKCE `?code=…` shape.
+3. **The role gate fails *open* on an infrastructure error, closed on a real
+   answer.** A dropped connection on the `profiles` read would otherwise log the
+   whole app out on a transient blip — and because `signOut` clears the refresh
+   token, users could not simply retry. Only `PGRST116` ("no rows", i.e. a
+   genuinely half-created account) counts as a rejection.
+4. **`role` is never sent by the client at signup.** It defaults to `customer` in
+   the database, and `authenticated` now has no INSERT privilege on the column,
+   so the database decides it. There's a unit test guarding against someone
+   adding it back.
+5. **Post-login redirect is now `/dashboard`, not `/profile`** — that TODO
+   ("until Person B ships the dashboard") had been stale since Batch 2.
+6. **Phone is optional and stays unverified.** `phone_verified` remains false
+   until SMS OTP ships (paid provider + Indian DLT registration, Plan v2 D2).
+   Stored normalised as `+91XXXXXXXXXX`.
+
+### 🔒 Privilege escalation found and closed (in scope, not scope creep)
+
+`supabase/grants.sql` granted `authenticated` table-wide INSERT/UPDATE on
+**every column**, and `policies.sql` lets a user update their own profile row.
+Verified live: all 21 profile columns were self-writable. Harmless while `role`
+meant nothing — but Batch 6 makes `role` the app-access boundary, so any
+logged-in customer could have run
+
+```
+PATCH /rest/v1/profiles?id=eq.<own-id>   {"role": "admin"}
+```
+
+and walked into the admin app. `kyc_status` (self-clearing compliance
+verification), `wallet_balance_paise` (inventing money) and `phone_verified`
+(pre-defeating the later SMS OTP) were writable the same way.
+
+Shipping the gate without this would have been a lock with the key taped to it,
+so it's fixed in the same batch. **RLS cannot express it** — row policies are
+all-or-nothing per statement — so the fix is column privileges in `grants.sql`:
+an **allowlist**, so a column added later is non-writable until someone
+deliberately opts it in. Note a table-level grant is not reduced by revoking a
+column, hence revoke-then-regrant.
+
+This is the same class as the H2 pickups hole, which was already closed.
+**Already applied to the live database.** Re-runnable:
+
+```bash
+cd packages/database
+npx prisma db execute --file ../../supabase/grants.sql --schema prisma/schema.prisma
+```
+
+### Verified
+
+- `npm run build` green (**26 routes**, `/verify` + `/auth/callback` present),
+  `npm run lint` clean (forced past the turbo cache), **78 tests**
+  (20 decision-engine + 24 auth + 34 core — 19 new).
+- **`npm run smoke` extended with a `--blocked` mode** that inverts every
+  expectation, which is how the role gate is proven rather than assumed:
+  - `business@test` → all 8 app routes 200.
+  - `agent@test --blocked` and `admin@test --blocked` → **all 8 bounce to
+    `/login`**, the first carrying `?error=That+account+cannot+access+this+app.`
+  - Public auth routes are now fetched **logged out** and content-asserted
+    (`/login` renders both the password form and "Email me a login code";
+    `/verify` renders the code input and the email it was given).
+- **Against the real database** (throwaway script, deleted after; a disposable
+  auth user, `business@test` only ever read; seed asserted back to 8 pickups) —
+  19 checks: a `signUpWithProfile`-shaped insert still succeeds and defaults
+  `role=customer`/`kyc=pending`/`wallet=0`/`phone_verified=false`; an insert
+  naming `role: 'admin'` is **rejected**; PATCHes of `role`, `kyc_status`,
+  `wallet_balance_paise` and `phone_verified` all return **403**; a `full_name`
+  PATCH still returns 204; nothing privileged moved; cross-user reads still see
+  one row.
+- **Against the real auth API:** an OTP request for an unknown address returns
+  *"Signups not allowed for otp"* and **creates no user** (confirmed by listing
+  users) — the `shouldCreateUser: false` guarantee, tested rather than assumed.
+  `/auth/callback` with no params redirects to `/login` rather than 500ing, and
+  refuses an off-origin `next` (both `https://evil…` and protocol-relative
+  `//evil…`), so the login flow can't be turned into an open redirect.
+
+### Known gaps in this batch
+
+- **No email was actually delivered end-to-end.** `business@test` has no
+  deliverable domain, and a real send would burn the ~2–4/hr SMTP budget the
+  demo depends on. The code path is unit-tested and the API contract verified,
+  but *"type the code from a real inbox"* is an end-of-revamp manual check
+  against a real address.
+- **The role gate costs one `profiles` read per request.** Middleware runs on
+  every non-static request, so this roughly doubles its latency. Fine at demo
+  scale; the real fix is a custom access-token hook putting `role` in the JWT,
+  which is dashboard config — worth doing before launch, not before the demo.
+- **Forgot-password is still a disabled button.** OTP partly covers the need
+  (you can log in without your password), so this dropped in priority rather
+  than being fixed.
+- **`vendor_type` is deliberately not self-updatable.** Switching
+  individual↔fleet changes which business fields and KYC apply, so it needs a
+  real flow rather than a PATCH. Add it to the update allowlist when that screen
+  exists.
+- GST/PAN/EPR are validated for **presence only** — format validation is P5-B,
+  Khalid's half of the validation task, left alone on purpose.
 
 ---
 
@@ -379,13 +516,17 @@ just needs to know so he doesn't re-introduce it from an older copy.
 | `agent@test` | `demo1234` | agent (seeded, for the Agent app on day 3) |
 | `admin@test` | `demo1234` | admin (seeded) |
 
+> **Since Batch 6, only `business@test` can enter the customer app.** `agent@test`
+> and `admin@test` are signed out by the role gate — that is the gate working,
+> not a broken account. Use `--blocked` to assert it.
+
 ```bash
 npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
-npm run test           # 59 tests (20 decision-engine + 16 auth + 23 core)
-npm run lint
+npm run test           # 78 tests (20 decision-engine + 24 auth + 34 core)
+npm run lint           # add -- --force when turbo replays a stale cache hit
 npm run smoke          # logged-in smoke test — needs `npm run dev` running
-npm run smoke -- agent@test demo1234    # …as a different account
+npm run smoke -- agent@test demo1234 --blocked   # role gate MUST block these
 npm run reset-demo     # wipe + reseed the whole demo dataset
 npm run create-buckets --workspace=@clbipp/database
 npm run db:migrate --workspace=@clbipp/database
@@ -460,3 +601,13 @@ feel of the multi-step flows.
   `redirect('/book')`.
 - Email OTP (Batch 6) may hit Supabase's built-in SMTP rate limit (~2–4/hr).
   Password login is kept working as the demo fallback — **do not remove it**.
+  `describeOtpError` maps the rate-limit error to copy that points the user at
+  the password form, so hitting the limit is survivable rather than a dead end.
+- **Supabase email template needs `{{ .Token }}`** for `/verify` to be the real
+  demo path (dashboard config, can't live in the repo). Without it the emails
+  carry a link, which `/auth/callback` handles — login works either way.
+- **The role gate adds a `profiles` read per request.** The durable fix is a
+  custom access-token hook putting `role` in the JWT; dashboard config, deferred.
+- `apps/agent` / `apps/admin` can now gate themselves by passing
+  `allowRoles: ['agent']` / `['admin']` to the same `createAuthMiddleware`
+  factory — that was the point of the factory, and it's now proven in one app.

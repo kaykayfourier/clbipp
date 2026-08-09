@@ -24,6 +24,10 @@ export default async function SignupIndividualPage({
         <form action={signupIndividual} className="flex flex-col gap-3">
           <Field label="Full name" name="fullName" type="text" required autoComplete="name" placeholder="Your name" />
           <Field label="Email" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />
+          {/* Optional and unverified for now — phone_verified stays false until
+              SMS OTP ships (needs a paid provider + DLT registration, Plan v2 D2).
+              Collected anyway so the field agent has a number to call. */}
+          <Field label="Mobile (optional)" name="phone" type="tel" autoComplete="tel" placeholder="98765 43210" />
           <Field label="Password" name="password" type="password" required minLength={6} autoComplete="new-password" placeholder="Create a password" />
 
           <Button type="submit" fullWidth className="mt-1">

@@ -184,3 +184,61 @@ export const pickupStatusUpdateSchema = z.object({
 
     notes: z.string().max(500).optional(),
 });
+
+// ─── Signup (Batch 6) ────────────────────────────────────────────────────────
+// The signup actions validate against this rather than profileSchema above:
+// that one models a stored profile row (and predates the phone column being
+// collected), while this models exactly what the two signup forms post.
+
+/**
+ * Indian mobile number → canonical `+91XXXXXXXXXX`.
+ *
+ * Accepts what people actually type: spaces, dashes, a leading 0, +91 or 91.
+ * Returns null when it isn't a valid Indian mobile, so the caller decides
+ * whether that's an error or (for an optional field) simply absent.
+ * Mobile numbers here start 6–9; landlines and short codes do not, and we're
+ * collecting a number the field agent will call on the doorstep.
+ */
+export function normaliseIndianPhone(raw: string): string | null {
+    const digits = raw.replace(/\D/g, "");
+
+    // Strip whichever prefix is present, longest first: +91 / 91 / leading 0.
+    const local = digits.startsWith("91") && digits.length === 12
+        ? digits.slice(2)
+        : digits.startsWith("0") && digits.length === 11
+            ? digits.slice(1)
+            : digits;
+
+    return /^[6-9]\d{9}$/.test(local) ? `+91${local}` : null;
+}
+
+export const signupBaseSchema = z.object({
+    email: z.email("Enter a valid email address."),
+    // 6 is Supabase's own minimum; rejecting shorter here gives a field-level
+    // message instead of bouncing off the auth API with a raw error string.
+    password: z.string().min(6, "Password must be at least 6 characters."),
+    fullName: z.string().trim().min(2, "Enter your full name.").max(100),
+    phone: z.preprocess(
+        (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+        z.string()
+            .transform((v) => normaliseIndianPhone(v))
+            .refine((v): v is string => v !== null, "Enter a valid 10-digit Indian mobile number.")
+            .optional(),
+    ),
+});
+
+export const signupIndividualSchema = signupBaseSchema;
+
+// Presence only — GST/PAN/EPR *format* validation is P5-B, Khalid's half of the
+// validation task. Adding a half-right regex here would be the thing his lands
+// on top of, so this deliberately stops at "not blank".
+export const signupFleetSchema = signupBaseSchema.extend({
+    companyName: z.string().trim().min(2, "Enter the company name."),
+    eprRegId: z.string().trim().min(1, "EPR registration ID is required."),
+    gstNumber: z.string().trim().min(1, "GST number is required."),
+    panNumber: z.string().trim().min(1, "PAN number is required."),
+    businessAddress: z.string().trim().min(5, "Enter the registered address."),
+});
+
+export type SignupIndividualInput = z.infer<typeof signupIndividualSchema>;
+export type SignupFleetInput = z.infer<typeof signupFleetSchema>;

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { AppShell, PagePadding } from '@clbipp/ui'
 import { Button } from '@clbipp/ui'
 import { Field } from '../field'
-import { login } from './actions'
+import { login, requestOtp } from './actions'
 
 // Login (wireframe S.login): the auth entry point. No top bar/back — it's the
 // root auth screen — and hideNav so the tab bar stays hidden until logged in.
@@ -38,6 +38,29 @@ export default async function LoginPage({
 
           <Button type="submit" fullWidth className="mt-1">
             Log in
+          </Button>
+        </form>
+
+        {/* Email OTP (Plan v2 D2) sits BELOW the password form on purpose.
+            Supabase's built-in SMTP allows only ~2–4 mails/hour, so on demo day
+            the password path is the one that reliably works. */}
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-border" />
+          <span className="text-[11px] font-bold tracking-wide text-text-secondary">OR</span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <form action={requestOtp} className="flex flex-col gap-3">
+          <Field
+            label="Email me a login code"
+            name="otpEmail"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@company.com"
+          />
+          <Button type="submit" variant="secondary" fullWidth>
+            Send code
           </Button>
         </form>
 

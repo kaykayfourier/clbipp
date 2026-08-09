@@ -3,7 +3,12 @@
  *
  *   npm run dev            # in another terminal
  *   npm run smoke          # every screen, as business@test
- *   npm run smoke -- agent@test demo1234
+ *   npm run smoke -- agent@test demo1234 --blocked
+ *
+ * `--blocked` inverts every expectation: the run passes only if EVERY app route
+ * bounces to /login. That is how the Batch 6 role gate is verified — a
+ * non-customer session must not reach the customer app at all, so for those
+ * accounts "bounced to login" is the pass condition, not the failure.
  *
  * Why this exists: `npm run build` type-checks but never renders a page with a
  * real session, so a server component that throws at request time (a bad Prisma
@@ -32,6 +37,20 @@ const ROUTES = [
   '/profile',
   '/compliance',
 ]
+
+// Public auth screens. Checked separately because the role gate must NOT touch
+// them — if `--blocked` bounced these too, a rejected agent would have no way
+// back to a login form. /verify needs its email param or it redirects to /login
+// by design (see the page's comment).
+const PUBLIC_ROUTES = ['/login', '/signup', '/verify?email=demo%40example.com']
+
+// Substrings that must appear on a rendered page. Status alone proves a route
+// answered, not that it rendered the right thing (Batch 5 precedent).
+const CONTENT = {
+  '/login': ['Email me a login code', 'Send code', 'Log in'],
+  '/verify?email=demo%40example.com': ['6-digit code', 'demo@example.com'],
+  '/signup': ['Individual', 'Fleet / company'],
+}
 
 // Note the `KEY =value` spacing and quoted values in .env.local — Next's dotenv
 // tolerates both, a naive split does not (same trap as packages/database/prisma/env.ts).
@@ -65,7 +84,11 @@ function sessionCookie(session, projectRef) {
 }
 
 async function main() {
-  const [email = 'business@test', password = 'businesstest'] = process.argv.slice(2)
+  const args = process.argv.slice(2)
+  const blocked = args.includes('--blocked')
+  const [email = 'business@test', password = 'businesstest'] = args.filter(
+    (a) => !a.startsWith('--'),
+  )
 
   const env = loadEnv(path.join(ROOT, 'apps/customer/.env.local'))
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL
@@ -85,14 +108,22 @@ async function main() {
   }
 
   const Cookie = sessionCookie(session, projectRef)
-  console.log(`\nSmoke test — ${BASE} as ${email}\n`)
+  console.log(
+    `\nSmoke test — ${BASE} as ${email}` +
+      (blocked ? '  [--blocked: app routes MUST bounce to /login]' : '') +
+      '\n',
+  )
 
   let failures = 0
 
-  for (const route of ROUTES) {
+  /** Fetches one route and prints a verdict. `expectBounce` inverts the check. */
+  async function probe(route, { expectBounce = false, mustContain = [], anon = false } = {}) {
     let status, body = '', note = ''
     try {
-      const r = await fetch(`${BASE}${route}`, { headers: { Cookie }, redirect: 'manual' })
+      const r = await fetch(`${BASE}${route}`, {
+        headers: anon ? {} : { Cookie },
+        redirect: 'manual',
+      })
       status = r.status
       if (status === 200) body = await r.text()
       const location = r.headers.get('location')
@@ -100,23 +131,42 @@ async function main() {
     } catch (e) {
       console.error(`  ERR   ${route}  (is \`npm run dev\` running?)`, e.message)
       failures++
-      continue
+      return
     }
 
     // A Next error page still returns 200, so status alone proves nothing.
     const errored = /__next_error__|Application error|Internal Server Error/.test(body)
     const redirectedToLogin = note.includes('/login')
+    const missing = mustContain.filter((s) => !body.includes(s))
 
-    if (errored || redirectedToLogin || status >= 500) failures++
+    let verdict
+    if (errored || status >= 500) verdict = 'ERROR PAGE'
+    else if (expectBounce) verdict = redirectedToLogin ? 'blocked (correct)' : 'LEAKED THROUGH'
+    else if (redirectedToLogin) verdict = 'BOUNCED TO LOGIN'
+    else if (missing.length) verdict = `MISSING: ${missing.join(' | ')}`
+    else verdict = 'ok'
 
-    const verdict = errored ? 'ERROR PAGE' : redirectedToLogin ? 'BOUNCED TO LOGIN' : 'ok'
-    console.log(`  ${String(status).padEnd(3)} ${route.padEnd(20)} ${verdict} ${note}`)
+    if (verdict !== 'ok' && verdict !== 'blocked (correct)') failures++
+    console.log(`  ${String(status).padEnd(3)} ${route.padEnd(34)} ${verdict} ${note}`)
   }
 
+  console.log('  — app routes —')
+  for (const route of ROUTES) await probe(route, { expectBounce: blocked })
+
+  // Fetched WITHOUT the session cookie — that is the state they're built for,
+  // and a logged-in hit on /login legitimately redirects to /dashboard, which
+  // would make a content check meaningless. A rejected session that also
+  // couldn't load /login would have nowhere to go, so these must always render.
+  console.log('\n  — public auth routes (logged out) —')
+  for (const route of PUBLIC_ROUTES) {
+    await probe(route, { anon: true, mustContain: CONTENT[route] ?? [] })
+  }
+
+  const total = ROUTES.length + PUBLIC_ROUTES.length
   console.log(
     failures === 0
-      ? `\nAll ${ROUTES.length} routes rendered.\n`
-      : `\n${failures} of ${ROUTES.length} routes failed.\n`,
+      ? `\nAll ${total} routes behaved as expected.\n`
+      : `\n${failures} of ${total} routes failed.\n`,
   )
   process.exit(failures === 0 ? 0 : 1)
 }

@@ -5,7 +5,12 @@ import { createAuthMiddleware } from '@clbipp/auth/middleware'
 export const middleware = createAuthMiddleware({
   publicPaths: ['/login', '/signup', '/auth', '/t', '/verify'],
   homePath: '/dashboard',
-  // allowRoles: ['customer'] — enabled once profiles.role exists (Batch 6).
+  // Enabled in Batch 6. An agent or admin session reaching the customer app is
+  // signed out rather than shown a customer's screens — the same factory call
+  // is what will gate apps/agent and apps/admin on their own roles.
+  // Backed by supabase/grants.sql: `authenticated` has no write privilege on
+  // profiles.role, so a customer cannot promote themselves past this check.
+  allowRoles: ['customer'],
 })
 
 export const config = {
