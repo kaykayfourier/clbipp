@@ -1,0 +1,22 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "globalEnv": ["DATABASE_URL", "DIRECT_URL", "SUPABASE_SERVICE_ROLE_KEY", "PAYMENTS_MODE"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build", "^db:generate"],
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["^db:generate"],
+      "persistent": true,
+      "cache": false
+    },
+    "lint": {},
+    "test": {
+      "dependsOn": ["^db:generate"]
+    }
+  }
+}

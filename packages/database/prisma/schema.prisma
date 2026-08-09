@@ -1,0 +1,290 @@
+generator client {
+  provider = "prisma-client-js"
+  // Explicit output (gitignored): resolves correctly regardless of npm
+  // hoisting in the workspace; Prisma 6 deprecates the default path anyway.
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model BatteryPack {
+  id                 String              @id @default(uuid())
+  packAadhaar        String              @unique @map("pack_aadhaar")
+  weightKg           Decimal?            @map("weight_kg") @db.Decimal(8, 2)
+  chemistry          Chemistry
+  manufacturer       String?
+  modelNumber        String?             @map("model_number")
+  nominalCapacityKwh Decimal?            @map("nominal_capacity_kwh") @db.Decimal(8, 2)
+  nominalVoltage     Decimal?            @map("nominal_voltage") @db.Decimal(8, 2)
+  manufactureDate    DateTime?           @map("manufacture_date")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  inspections        BatteryInspection[]
+  decisions          PathwayDecision[]
+
+  @@map("battery_packs")
+}
+
+model BatteryInspection {
+  id                    String              @id @default(uuid())
+  packId                String              @map("pack_id")
+  inspectionTimestamp   DateTime            @default(now()) @map("inspection_timestamp")
+  inspectorId           String?             @map("inspector_id")
+  visualScore           Int?                @map("visual_score")
+  leakageScore          Int?                @map("leakage_score")
+  thermalScore          Int?                @map("thermal_score")
+  damageScore           Decimal?            @map("damage_score") @db.Decimal(4, 2)
+  sohPct                Decimal?            @map("soh_pct") @db.Decimal(5, 2)
+  socPct                Decimal?            @map("soc_pct") @db.Decimal(5, 2)
+  entropyValue          Decimal?            @map("entropy_value") @db.Decimal(8, 4)
+  entropyAnomaliesCount Int                 @default(0) @map("entropy_anomalies_count")
+  irImbalanceRatio      Decimal?            @map("ir_imbalance_ratio") @db.Decimal(6, 3)
+  voltageImbalanceMv    Decimal?            @map("voltage_imbalance_mv") @db.Decimal(6, 1)
+  tempMaxC              Decimal?            @map("temp_max_c") @db.Decimal(5, 2)
+  cycleCount            Int?                @map("cycle_count")
+  rulMonths             Int?                @map("rul_months")
+  notes                 String?
+  diagnostics           BatteryDiagnostic[]
+  pack                  BatteryPack         @relation(fields: [packId], references: [id], onDelete: Cascade)
+  decisions             PathwayDecision[]
+
+  @@map("battery_inspections")
+}
+
+model BatteryDiagnostic {
+  id               String            @id @default(uuid())
+  inspectionId     String            @map("inspection_id")
+  cellDataSnapshot Json?             @map("cell_data_snapshot")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  inspection       BatteryInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@map("battery_diagnostics")
+}
+
+model MarketPrices {
+  id        String   @id @default(uuid())
+  Li        Decimal  @map("Li_price")
+  Co        Decimal  @map("Co_price")
+  Ni        Decimal  @map("Ni_price")
+  Mn        Decimal  @map("Mn_price")
+  Cu        Decimal  @map("Cu_price")
+  Al        Decimal  @map("Al_price")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("market_prices")
+}
+
+model PathwayFactor {
+  id                   String            @id @default(uuid())
+  configVersion        String            @map("config_version")
+  processingRatePerKg  Decimal?          @map("processing_rate_per_kg")
+  refurbLaborRatePerKg Decimal?          @map("refurb_labor_rate_per_kg")
+  cellReplacementRate  Decimal?          @map("cell_replacement_rate")
+  ageCap               Int?              @map("age_cap")
+  cycleCap             Int?              @map("cycle_cap")
+  testingRatePerKg     Decimal?          @map("testing_rate_per_kg")
+  hydrometRatePerKg    Decimal?          @map("hydromet_rate_per_kg")
+  chemistryComposition Json?             @map("chemistry_composition")
+  isActive             Boolean           @default(true) @map("is_active")
+  effectiveFrom        DateTime?         @map("effective_from")
+  effectiveTo          DateTime?         @map("effective_to")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  decisions            PathwayDecision[]
+
+  @@map("pathway_factors")
+}
+
+model PathwayDecision {
+  id                String            @id @default(uuid())
+  packId            String            @map("pack_id")
+  inspectionId      String            @map("inspection_id")
+  factorConfigId    String            @map("factor_config_id")
+  pathway           Pathway
+  costBreakdown     Json?             @map("cost_breakdown")
+  revenueBreakdown  Json?             @map("revenue_breakdown")
+  netRevenue        Decimal?          @map("net_revenue") @db.Decimal(12, 2)
+  costsTotal        Decimal?          @map("costs_total") @db.Decimal(12, 2)
+  pMin              Decimal?          @map("p_min") @db.Decimal(12, 2)
+  pRecommended      Decimal?          @map("p_recommended") @db.Decimal(12, 2)
+  pMax              Decimal?          @map("p_max") @db.Decimal(12, 2)
+  confidenceScore   Decimal?          @map("confidence_score") @db.Decimal(4, 3)
+  decisionRationale String?           @map("decision_rationale")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  factorConfig      PathwayFactor     @relation(fields: [factorConfigId], references: [id])
+  inspection        BatteryInspection @relation(fields: [inspectionId], references: [id])
+  pack              BatteryPack       @relation(fields: [packId], references: [id])
+
+  @@map("pathway_decisions")
+}
+
+enum Chemistry {
+  LFP
+  NMC622
+  NMC811
+  LCO
+}
+
+enum Pathway {
+  REUSE
+  REFURBISH
+  RECYCLE
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum VendorType {
+  individual
+  fleet
+}
+
+enum KycStatus {
+  pending
+  submitted
+  verified
+  rejected
+}
+
+enum PickupStatus {
+  requested
+  scheduled
+  collected
+  tested
+  processed
+  recovered
+  certified
+  cancelled
+}
+
+enum BatteryType {
+  li_ion_nmc
+  li_ion_lfp
+  li_ion_nca
+  lead_acid
+  nimh
+  other
+}
+
+enum RecoveryPathway {
+  recycle
+  refurbish
+  reuse
+  dispose
+}
+
+// ── Models ───────────────────────────────────────────────────────────────────
+
+model Profile {
+  id         String     @id @db.Uuid
+  vendorType VendorType @map("vendor_type")
+
+  fullName String  @map("full_name")
+  email    String
+  phone    String?
+
+  // fleet-only (null for individual)
+  companyName     String? @map("company_name")
+  gstNumber       String? @map("gst_number")
+  panNumber       String? @map("pan_number")
+  businessAddress String? @map("business_address")
+  eprRegId        String? @map("epr_reg_id")
+
+  kycStatus  KycStatus @default(pending) @map("kyc_status")
+  kycDocUrls String[]  @map("kyc_doc_urls")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  pickups      Pickup[]
+  offers       Offer[]
+  certificates Certificate[]
+
+  @@map("profiles")
+}
+
+model Pickup {
+  id       String @id
+  vendorId String @map("vendor_id") @db.Uuid
+
+  batteryType    BatteryType @map("battery_type")
+  approxQuantity String      @map("approx_quantity")
+  approxWeightKg Decimal?    @map("approx_weight_kg")
+  location       String
+  preferredDate  DateTime?   @map("preferred_date") @db.Date
+  notes          String?
+  photoUrls      String[]    @map("photo_urls")
+  publicToken    String      @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
+
+  status PickupStatus @default(requested)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  vendor       Profile       @relation(fields: [vendorId], references: [id])
+  statusEvents StatusEvent[]
+  offer        Offer?
+  certificate  Certificate?
+
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("pickups")
+}
+
+model StatusEvent {
+  id         BigInt       @id @default(autoincrement())
+  pickupId   String       @map("pickup_id")
+  status     PickupStatus
+  actorId    String?      @map("actor_id") @db.Uuid
+  actorRole  String?      @map("actor_role")
+  notes      String?
+  occurredAt DateTime     @default(now()) @map("occurred_at")
+
+  pickup Pickup @relation(fields: [pickupId], references: [id])
+
+  @@index([pickupId])
+  @@index([occurredAt])
+  @@map("status_events")
+}
+
+model Offer {
+  id       BigInt @id @default(autoincrement())
+  pickupId String @unique @map("pickup_id")
+  vendorId String @map("vendor_id") @db.Uuid
+
+  pathway           RecoveryPathway
+  estimatedPrice    Int             @map("estimated_price")
+  rationale         String
+  materialBreakdown Json            @default("[]") @map("material_breakdown")
+  deductions        Json            @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pickup Pickup  @relation(fields: [pickupId], references: [id])
+  vendor Profile @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("offers")
+}
+
+model Certificate {
+  id       BigInt @id @default(autoincrement())
+  pickupId String @unique @map("pickup_id")
+  vendorId String @map("vendor_id") @db.Uuid
+
+  pdfUrl      String @map("pdf_url")
+  publicToken String @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
+
+  totalWeightKg   Decimal @map("total_weight_kg")
+  materialSummary Json    @default("[]") @map("material_summary")
+
+  certifiedAt DateTime @default(now()) @map("certified_at")
+
+  pickup Pickup  @relation(fields: [pickupId], references: [id])
+  vendor Profile @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("certificates")
+}

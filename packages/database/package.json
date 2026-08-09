@@ -1,0 +1,23 @@
+{
+  "name": "@clbipp/database",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "reset-demo": "tsx prisma/reset-demo.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  },
+  "devDependencies": {
+    "@clbipp/tsconfig": "*",
+    "prisma": "^6.19.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}

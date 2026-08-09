@@ -1,0 +1,20 @@
+{
+  "name": "@clbipp/core",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clbipp/database": "*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@clbipp/tsconfig": "*",
+    "typescript": "^5",
+    "vitest": "^4.1.7"
+  }
+}

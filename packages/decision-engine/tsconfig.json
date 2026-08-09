@@ -1,0 +1,4 @@
+{
+  "extends": "@clbipp/tsconfig/base.json",
+  "include": ["src"]
+}

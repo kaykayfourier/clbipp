@@ -2,43 +2,21 @@
   "name": "clbipp",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "reset-demo": "npx ts-node prisma/reset-demo.ts"
-
-  },
-  "dependencies": {
-    "@prisma/client": "^6.19.3",
-    "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.106.1",
-    "@types/papaparse": "^5.5.2",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "csv-parse": "^6.2.1",
-    "csv-parser": "^3.2.1",
-    "next": "16.2.6",
-    "papaparse": "^5.5.3",
-    "pdf-parse": "^2.4.5",
-    "prisma": "^6.19.3",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "tailwind-merge": "^3.6.0",
-    "zod": "^4.4.3"
+    "dev": "turbo run dev --filter=customer",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "turbo run db:generate",
+    "db:migrate": "npm run db:migrate --workspace=@clbipp/database",
+    "reset-demo": "npm run reset-demo --workspace=@clbipp/database"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.6",
-    "tailwindcss": "^4",
-    "typescript": "^5",
-    "vitest": "^4.1.7"
+    "turbo": "^2.5.8"
   }
 }

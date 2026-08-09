@@ -1,0 +1,16 @@
+{
+  "name": "@clbipp/decision-engine",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/decisionEngine/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@clbipp/tsconfig": "*",
+    "typescript": "^5",
+    "vitest": "^4.1.7"
+  }
+}
