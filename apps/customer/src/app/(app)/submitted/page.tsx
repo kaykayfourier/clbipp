@@ -1,14 +1,22 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@clbipp/auth/server";
+import { prisma } from "@clbipp/database";
 import { AppShell, PagePadding } from "@clbipp/ui";
 import { Button } from "@clbipp/ui";
 import { Card } from "@clbipp/ui";
 import { StatusBadge } from "@clbipp/ui";
 import { ErrorState } from "@clbipp/ui";
+import { CATEGORY_LABELS, formatPaise } from "../book/copy";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 // Server component — reads ?id= from the URL, fetches the pickup row, renders.
+// This is where the booking wizard lands.
+//
+// Reads through Prisma (scoped by vendorId in code, since Prisma bypasses RLS)
+// rather than the session client, so it can count the pickup's BatteryItems in
+// the same round trip. It used to render `battery_type`, which schema v2
+// superseded and the wizard leaves null.
 
 interface PageProps {
   searchParams: Promise<{ id?: string }>;
@@ -22,14 +30,26 @@ export default async function SubmittedPage({ searchParams }: PageProps) {
   }
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const { data: pickup, error } = await supabase
-    .from("pickups")
-    .select("id, status, battery_type, location, created_at")
-    .eq("id", id)
-    .single();
+  if (!user) redirect("/login");
 
-  if (error || !pickup) {
+  const pickup = await prisma.pickup.findFirst({
+    where: { id, vendorId: user.id },
+    select: {
+      id: true,
+      status: true,
+      category: true,
+      location: true,
+      createdAt: true,
+      indicativeQuotePaise: true,
+      _count: { select: { items: true } },
+    },
+  });
+
+  if (!pickup) {
     return (
       <AppShell title="Request Submitted" hideNav>
         <PagePadding>
@@ -87,13 +107,29 @@ export default async function SubmittedPage({ searchParams }: PageProps) {
             }
           />
           <Divider />
-          <DetailRow label="Battery type" value={formatBatteryType(pickup.battery_type)} />
+          <DetailRow
+            label="What we're collecting"
+            value={`${CATEGORY_LABELS[pickup.category]} · ${pickup._count.items} line${
+              pickup._count.items === 1 ? "" : "s"
+            }`}
+          />
+          {pickup.indicativeQuotePaise !== null && (
+            <>
+              <Divider />
+              {/* Indicative, not a commitment — the wording matters, this is the
+                  number the customer will remember. */}
+              <DetailRow
+                label="Indicative quote"
+                value={formatPaise(pickup.indicativeQuotePaise)}
+              />
+            </>
+          )}
           <Divider />
           <DetailRow label="Collection address" value={pickup.location} />
           <Divider />
           <DetailRow
             label="Submitted"
-            value={new Date(pickup.created_at).toLocaleDateString("en-IN", {
+            value={pickup.createdAt.toLocaleDateString("en-IN", {
               day: "numeric",
               month: "short",
               year: "numeric",
@@ -156,16 +192,4 @@ function DetailRow({
 
 function Divider() {
   return <hr className="border-t border-border" />;
-}
-
-function formatBatteryType(raw: string): string {
-  const map: Record<string, string> = {
-    li_ion_nmc: "Li-ion NMC",
-    li_ion_lfp: "Li-ion LFP",
-    li_ion_nca: "Li-ion NCA",
-    lead_acid: "Lead Acid",
-    nimh: "NiMH",
-    other: "Other",
-  };
-  return map[raw] ?? raw;
 }

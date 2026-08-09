@@ -26,6 +26,7 @@ const ROUTES = [
   '/dashboard',
   '/addresses',
   '/addresses/new',
+  '/book',
   '/request-pickup',
   '/track',
   '/profile',

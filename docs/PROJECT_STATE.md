@@ -5,11 +5,12 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 executed** — repo is now
-a Turborepo monorepo, schema v2 is live, the booking quote engine +
-`createPickupWithItems` have shipped in `packages/core`, and the address book +
-Storage upload helper have landed. Next: **Batch 5, the 4-step booking wizard**
-— the centrepiece. Prior: 2026-08-07 Plan v2 written)
+**Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 executed** — repo is
+now a Turborepo monorepo, schema v2 is live, the booking quote engine +
+`createPickupWithItems` shipped in `packages/core`, the address book + Storage
+upload helper landed, and **the 4-step booking wizard at `/book` is done** —
+the centrepiece of the revamp. Next: **Batch 6, email OTP + `/verify` + roles**.
+Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
@@ -49,6 +50,14 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    session, so this is the check that catches a server component throwing at
    request time. Run it after every batch; add new routes to `ROUTES` in
    `scripts/smoke.mjs` as they land.
+5. **Booking now happens at `/book`, not `/request-pickup`** (Batch 5). The
+   4-step wizard is the only way a customer creates a pickup, and it goes through
+   the `"use server"` actions in `apps/customer/src/app/(app)/book/actions.ts` →
+   `getQuote` + `createPickupWithItems`. `/request-pickup` is a redirect; the old
+   raw-PostgREST insert it used to do is gone. Anything below describing that
+   form is historical. The schema-v1 columns (`batteryType`, `approxQuantity`,
+   `approxWeightKg`) are **null on every new pickup** — read `category` and the
+   `BatteryItem` rows instead.
 
 **Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
 cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts

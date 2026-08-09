@@ -8,6 +8,24 @@ import { Button } from "@clbipp/ui"
 import { Card, CardContent } from "@clbipp/ui"
 import type { Pickup } from "@clbipp/database"
 import { AddressChip } from "../addresses/AddressChip"
+import { CATEGORY_LABELS } from "../book/copy"
+
+function pickupSubtitle(pickup: PickupRow): string {
+  const lines = pickup._count.items
+  // Seeded and wizard-created pickups both have items; the handful of legacy
+  // rows written by the old request form have none, so fall back to the
+  // superseded columns rather than showing "0 lines".
+  if (lines === 0) {
+    return [pickup.batteryType, pickup.approxQuantity].filter(Boolean).join(" · ") || "Pickup"
+  }
+  return `${CATEGORY_LABELS[pickup.category]} · ${lines} line${lines === 1 ? "" : "s"}`
+}
+
+// A Pickup plus its line count. The row subtitle used to read `batteryType` +
+// `approxQuantity`, but schema v2 superseded both and the Batch 5 booking wizard
+// leaves them null — a new pickup rendered "null · null". Category plus the
+// BatteryItem count is the shape that's actually populated now.
+type PickupRow = Pickup & { _count: { items: number } }
 
 type DashboardStats = {
   pickupCount: number
@@ -21,7 +39,7 @@ function PopulatedDashboardPage({
   displayName,
   profileId,
 }: {
-  pickups: Pickup[]
+  pickups: PickupRow[]
   stats: DashboardStats
   displayName: string
   profileId: string
@@ -60,7 +78,7 @@ function PopulatedDashboardPage({
       </div>
 
       {/* fixed: Link wraps Button for navigation */}
-      <Link href="/request-pickup">
+      <Link href="/book">
         <Button variant="primary" fullWidth>Request a pickup</Button>
       </Link>
 
@@ -81,7 +99,7 @@ function PopulatedDashboardPage({
           >
             <ListRow
               id={pickup.id}
-              subtitle={`${pickup.batteryType} · ${pickup.approxQuantity}`}
+              subtitle={pickupSubtitle(pickup)}
               status={pickup.status}
             />
           </Link>
@@ -99,7 +117,7 @@ function EmptyDashboardPage({ profileId }: { profileId: string }) {
       <p className="text-sm text-[#3B3F3B] max-w-[220px] leading-relaxed">
         Request your first battery pickup to start recovering materials and earning EPR certificates.
       </p>
-      <Link href="/request-pickup">
+      <Link href="/book">
         <Button variant="primary" fullWidth className="max-w-[220px]">
           Request a pickup
         </Button>
@@ -120,6 +138,7 @@ export default async function DashboardPage() {
     prisma.pickup.findMany({
       where: { vendorId },
       orderBy: { createdAt: "desc" },
+      include: { _count: { select: { items: true } } },
     }),
     prisma.certificate.count({ where: { vendorId } }),
     // fixed: scope recovered kg only to recovered/certified pickups

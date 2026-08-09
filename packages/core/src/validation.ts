@@ -94,6 +94,73 @@ export const addressSchema = z.object({
 
 export type AddressInput = z.infer<typeof addressSchema>;
 
+// ─── Booking wizard (Batch 5) ────────────────────────────────────────────────
+// The booking payload crosses the client→server boundary as JSON, so this is
+// the trust boundary: everything the wizard sends is re-parsed here before it
+// reaches `createPickupWithItems`. The wizard validates the same shapes for
+// inline field errors, but that copy is a convenience — this one is the guard.
+
+export const batteryCategorySchema = z.enum([
+    "portable",
+    "automotive",
+    "industrial",
+    "ev",
+]);
+
+export const batteryConditionSchema = z.enum([
+    "healthy",
+    "swollen",
+    "leaking",
+    "dead",
+]);
+
+// Photos are Storage OBJECT PATHS ("<uid>/bookings/…"), never URLs — the five
+// buckets are private, so a path only becomes viewable through a server-signed
+// URL. `z.url()` here would reject every real value.
+const storagePathSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9._\-/]+$/, "Unexpected photo reference")
+    // `..` would climb out of the caller's own folder, which is the one thing
+    // the "<uid>/…" object layout exists to prevent.
+    .refine((p) => !p.includes(".."), "Unexpected photo reference");
+
+export const bookingLineItemSchema = z.object({
+    category: batteryCategorySchema,
+    quantity: z.number().int().min(1, "Quantity must be at least 1").max(9999),
+    // Null means "I can't weigh these" — a supported answer, not a missing one.
+    // The quote engine falls back to a typical unit weight and flags the line.
+    weightKg: z.number().positive("Weight must be greater than zero").max(100000).nullable(),
+    condition: batteryConditionSchema,
+    photoUrls: z.array(storagePathSchema).max(6, "Up to 6 photos per line").default([]),
+});
+
+export const bookingSubmissionSchema = z.object({
+    category: batteryCategorySchema,
+    addressId: z.uuid("Choose a pickup address"),
+    items: z
+        .array(bookingLineItemSchema)
+        .min(1, "Add at least one battery line")
+        .max(20, "Up to 20 lines per pickup — split a larger load across bookings"),
+    // Plain "YYYY-MM-DD". Kept as a string all the way to the write path so a
+    // browser timezone can't shift the customer's chosen date by a day.
+    preferredDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a valid date")
+        .nullable(),
+    notes: z.preprocess(blankToUndefined, z.string().trim().max(500).optional().nullable()),
+}).refine(
+    // Step 1 sets one category for the whole pickup; `Pickup.category` is a
+    // single header column, so a mixed-category basket could not be represented
+    // faithfully. The wizard never produces one — this catches a hand-rolled payload.
+    (d) => d.items.every((item) => item.category === d.category),
+    { path: ["items"], message: "Every line must match the pickup category" },
+);
+
+export type BookingSubmissionInput = z.infer<typeof bookingSubmissionSchema>;
+
 export const pickupSchema = z.object({
     status: pickupstatusSchema,
     batteryType: batterytypeSchema,

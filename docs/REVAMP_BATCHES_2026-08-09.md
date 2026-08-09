@@ -20,9 +20,9 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 1 | **0A — Turborepo migration** | A | ✅ done, committed `a5c15e2` |
 | 2 | **0B — schema v2 + buckets + seed + RLS** | B | ✅ done, staged |
 | 3 | **B2 — pricing engine + `createPickupWithItems`** | B | ✅ done, committed `ac07895` |
-| 4 | A2/A3 — address book + storage upload helper | A | ✅ done, staged |
-| 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | ⏭ **next — start here** |
-| 6 | A1 — email OTP + `/verify` + roles | A | pending |
+| 4 | A2/A3 — address book + storage upload helper | A | ✅ done, committed `73bc512` |
+| 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | ✅ done, staged |
+| 6 | A1 — email OTP + `/verify` + roles | A | ⏭ **next — start here** |
 | 7 | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | pending |
 | 8 | B3/B6 — PDF generation + payment + receipt screens | B | pending |
 | 9 | B4/B5 — dashboard impact (CO₂) + compliance CSV | B | pending |
@@ -34,26 +34,129 @@ receipt PDF (keep the screen) → address GPS.
 
 ---
 
-## ▶ Next: Batch 5 — A4, the 4-step booking wizard
+## ▶ Next: Batch 6 — A1, email OTP + `/verify` + roles
 
-**Batch 5 consumes Batch 3 directly** — no stubs needed. Import `getQuote` and
-`createPickupWithItems` from `@clbipp/core`, and remember
-`createPickupWithItems` does **not** read the session: the wizard's
-`"use server"` action resolves the logged-in user and passes `vendorId` in.
+Everything the booking flow needed is now built, so Batch 6 is back on the auth
+lane. Three things are already staged for it:
 
-Batch 4 has now supplied the other two things the wizard needs:
+- **`createAuthMiddleware({ …, allowRoles })`** in `packages/auth/src/middleware.ts`
+  is written and wired but **commented out** in `apps/customer/src/middleware.ts`.
+  Batch 6 turns it on. `Profile.role` exists and the seed populates it
+  (`customer` / `agent` / `admin`).
+- **Password login must keep working.** Supabase's built-in SMTP rate-limits at
+  roughly 2–4 mails/hour, which is not enough to demo through. OTP is added
+  alongside password login, not in place of it.
+- `apps/customer/src/middleware.ts` **must stay under `src/`** — Next's dev
+  bundler silently never registers root middleware when `src/app` is in use.
 
-- **The address step** reads `Address` rows via Prisma scoped by `profileId`.
-  Show only `status: "operational"` ones in the picker (`not_operational` means
-  "on file but can't be collected from today"), preselect `isDefault: true`, and
-  link out to `/addresses/new` when the customer has none.
-- **The photo step** calls `uploadFiles({ bucket: "pickup-photos", userId, files,
-  segments })` from `@clbipp/auth/storage` — client-side, because a `File`
-  doesn't survive a trip through a server action. It returns
-  `{ paths, errors }`: partial success is a real outcome, so keep the paths that
-  landed and only re-prompt for the ones that failed. Store the returned paths
-  (not URLs — the buckets are private) on `BatteryItem.photoUrls`, and render
-  them later through `createSignedUrl` from `@clbipp/auth/storage-server`.
+---
+
+## What Batch 5 delivered — the 4-step booking wizard
+
+`/book` replaces `/request-pickup` (which is now a redirect). Nine new files
+under `apps/customer/src/app/(app)/book/`:
+
+| File | What it is |
+|---|---|
+| `page.tsx` | server component — resolves the caller, loads operational addresses |
+| `BookingWizard.tsx` | `"use client"` — holds the whole draft, owns step nav |
+| `StepCategory.tsx` | step 1 — category radio cards |
+| `StepItems.tsx` | step 2 — line rows: quantity, weight, condition chips, photos |
+| `StepSchedule.tsx` | step 3 — address picker, preferred date, notes |
+| `StepReview.tsx` | step 4 — indicative quote + summary |
+| `actions.ts` | `"use server"` — `quoteBooking`, `submitBooking` |
+| `copy.ts` · `types.ts` | labels + draft shapes, shared by the steps |
+
+**Nothing is written until step 4.** A half-finished booking must not exist as a
+row — the dashboard, tracking and compliance screens all read pickups
+unconditionally.
+
+### The decisions worth knowing
+
+1. **One category per pickup, not per line.** `Pickup.category` is a single
+   header column, so a mixed basket could not be represented faithfully. Step 1
+   sets it, every line inherits it, and `bookingSubmissionSchema` has a `.refine`
+   that rejects a payload where they disagree. The screen tells the customer to
+   book mixed loads as separate pickups. `BatteryItem.category` still exists per
+   item because the *agent* may reclassify on site.
+2. **The quote is recomputed server-side on submit.** The wizard displays the
+   quote it got from `quoteBooking`, but `submitBooking` calls `getQuote` again
+   on the submitted lines and writes *that* number to
+   `Pickup.indicativeQuotePaise`. A client-supplied price is a price the customer
+   can set themselves.
+3. **Photo paths are ownership-checked.** Every path must start with
+   `<caller-uid>/`. Storage RLS already scopes reads, but without this check a
+   hand-rolled payload could attach another customer's object path to its own
+   pickup, where it would surface in the agent's and the certificate's view.
+4. **A failed quote never blocks a booking.** If `getQuote` throws, the pickup is
+   written unpriced and the agent quotes on site. Pricing is a convenience; the
+   booking is the product.
+5. **`preferredDate` stays a `"YYYY-MM-DD"` string end-to-end**, and the date
+   `min=` uses a locally-computed today. `toISOString()` on a local Date shifts
+   the day for anyone east of UTC — which is everyone here.
+6. **`scheduledSlot` is written as `null`.** The customer states a *preferred*
+   date; the slot is what ops confirm. Two columns, two different facts.
+
+**One divergence from this file's Batch 5 brief:** the photo step calls
+`uploadFile` per file rather than `uploadFiles` on the batch. Same module, same
+behaviour — but the per-file call keeps each result **paired with its `File`**,
+which the batch helper's flat `paths` array cannot do once one upload fails. The
+pairing is what makes the thumbnail possible: the buckets are private, so the
+preview is a local `URL.createObjectURL(file)` blob rather than a signed-URL
+round trip per photo. Partial success still behaves as specified — the paths that
+landed are kept, and only the failures are re-prompted.
+
+### Collateral fixes (caused by this batch, not scope creep)
+
+New bookings leave the schema-v1 columns null, which broke two screens that
+still read them:
+
+- **Dashboard** row subtitle read `batteryType · approxQuantity` and would have
+  rendered `null · null`. Now reads category + `_count.items`, with a fallback to
+  the old columns for the handful of legacy rows that have no `BatteryItem`.
+- **`/submitted`** read `battery_type` through the session client. Now reads via
+  Prisma (scoped by `vendorId` in code), and shows category, line count and the
+  indicative quote.
+- **`/request-pickup`** is a `redirect('/book')`. Kept rather than deleted
+  because it's the URL every older doc and screenshot points at.
+
+### Verified
+
+- `npm run build` green (**24 routes**, `/book` present), `npm run lint` clean,
+  **59 tests** (20 decision-engine + 16 auth + 23 core — 11 new booking-schema
+  tests in `packages/core/src/validation.test.ts`).
+- `npm run smoke` — all 8 routes render as `business@test`, including `/book`
+  at 200 and `/request-pickup` → 307 → `/book`.
+- **Content-asserted, not just status-asserted:** a logged-in fetch of `/book`
+  renders step 1 — the step indicator, all four category cards and the
+  "you don't need to know it" chemistry disclaimer — and is *not* the
+  no-address fallback.
+- **Against the real database** (throwaway script, rows deleted after, seed count
+  asserted back to 8): a 2-line booking writes one pickup + 2 `BatteryItem` +
+  one `requested` `StatusEvent`; `indicativeQuotePaise` equals the recomputed
+  quote; `conditionFlags` carries only the non-healthy line; the id matches
+  `PKP-YYYY-XXXXXX`; `preferredDate` stores the chosen day; an unknown/foreign
+  `addressId` returns `{ ok: false }` without writing; the picker query excludes
+  the seeded `not_operational` address; and the schema rejects traversal in a
+  photo path and an empty basket.
+
+### Known gaps in this batch
+
+- **Photos uploaded into an abandoned draft are orphaned** in `pickup-photos`.
+  Removing a photo or a line deletes its object, but closing the tab mid-booking
+  does not. Needs a sweep of `<uid>/bookings/…` objects with no referencing
+  `BatteryItem` — worth doing before launch, not before the demo.
+- **A draft does not survive a refresh.** State is in React only. Deliberate:
+  persisting it means either localStorage (which would hold blob URLs that die
+  with the page) or a draft row (which is the "half-finished booking" this batch
+  explicitly avoids creating).
+- **Stored photos are still never rendered back.** `createSignedUrl` from
+  `@clbipp/auth/storage-server` is written and still unconsumed — Batch 7's
+  chain-of-custody timeline is where the booking photos get displayed.
+- Post-submit the customer lands on `/submitted` → `/scheduled?id=`, the existing
+  requested-state screen. Untouched this batch.
+- **Needs a real handset** (end-of-revamp manual pass): the camera/file-picker
+  sheet, multi-photo selection, and the 4-step flow's feel on a small screen.
 
 ---
 
@@ -279,7 +382,7 @@ just needs to know so he doesn't re-introduce it from an older copy.
 ```bash
 npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
-npm run test           # 48 tests (3 auth + 13 storage + 20 decision-engine + 12 booking)
+npm run test           # 59 tests (20 decision-engine + 16 auth + 23 core)
 npm run lint
 npm run smoke          # logged-in smoke test — needs `npm run dev` running
 npm run smoke -- agent@test demo1234    # …as a different account
@@ -353,7 +456,7 @@ feel of the multi-step flows.
   table with a cited source** is Batch 9 (`packages/core/src/impact.ts`). This is
   a compliance-adjacent claim — it needs a real citation before any demo.
 - `apps/agent` and `apps/admin` are scaffolds only.
-- Old `(app)/request-pickup` still exists; Batch 5 replaces it with `(app)/book`
-  and leaves a redirect.
+- ~~Old `(app)/request-pickup` still exists~~ — **done in Batch 5**: it is now a
+  `redirect('/book')`.
 - Email OTP (Batch 6) may hit Supabase's built-in SMTP rate limit (~2–4/hr).
   Password login is kept working as the demo fallback — **do not remove it**.
