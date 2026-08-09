@@ -3,9 +3,10 @@ import { redirect } from "next/navigation"
 
 import { prisma } from "@clbipp/database"
 import { getCurrentProfile } from "@clbipp/auth"
+import { aggregateMaterials, formatPaise, type RecoveredMaterial } from "@clbipp/core"
 import { ListRow } from "@clbipp/ui"
 import { Button } from "@clbipp/ui"
-import { Card, CardContent } from "@clbipp/ui"
+import { Card, CardContent, DetailRow, SectionLabel } from "@clbipp/ui"
 import type { Pickup } from "@clbipp/database"
 import { AddressChip } from "../addresses/AddressChip"
 import { CATEGORY_LABELS } from "../book/copy"
@@ -33,14 +34,94 @@ type DashboardStats = {
   recoveredKg: number
 }
 
+// Batch 9 (B4). Everything in this card comes from ISSUED CERTIFICATES only —
+// the stored `Certificate.co2AvoidedKg` and `materialSummary`, not a live
+// recomputation and not anything still in progress.
+//
+// That is a deliberate limit rather than a shortcut. The same CO₂ figure is
+// printed on the EPR certificate PDF, so it is a compliance-adjacent claim;
+// counting batteries that are still in a truck towards "avoided" would be
+// claiming an outcome that hasn't happened. The heading says where the numbers
+// come from and the footnote says they are estimates, so the screen states what
+// it is showing instead of implying a measurement. Factors + sources:
+// packages/core/src/impact.ts.
+type ImpactSummary = {
+  co2AvoidedKg: number
+  materials: RecoveredMaterial[]
+  walletBalancePaise: number
+}
+
+function ImpactCard({ impact }: { impact: ImpactSummary }) {
+  // Nothing certified yet → no impact to report. An "0 kg CO₂e avoided" tile on
+  // a brand-new account reads as a failure rather than as "not yet".
+  if (impact.co2AvoidedKg === 0 && impact.materials.length === 0) return null
+
+  return (
+    <div className="flex flex-col">
+      <SectionLabel>Your impact</SectionLabel>
+      <Card variant="elevated" className="mt-3">
+        <CardContent className="flex flex-col gap-1">
+          <div className="flex flex-col items-center gap-0.5 pb-3">
+            <span className="font-serif text-3xl font-semibold text-text-primary">
+              {impact.co2AvoidedKg.toLocaleString("en-IN")} kg
+            </span>
+            <span className="text-xs font-bold uppercase tracking-widest text-text-secondary">
+              CO₂e avoided
+            </span>
+          </div>
+
+          {impact.materials.map((material, index) => (
+            <DetailRow
+              key={material.material}
+              label={material.material}
+              value={`${material.kg.toLocaleString("en-IN")} kg`}
+              last={index === impact.materials.length - 1}
+            />
+          ))}
+
+          <p className="pt-3 text-[11px] leading-relaxed text-text-secondary">
+            From your issued certificates. CO₂e is estimated from published
+            recycling factors for each battery chemistry, not a measured figure.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// The wallet has no tab of its own (the bottom bar is fixed at four), so it is
+// reached from here and from /profile. Both read `profiles.wallet_balance_paise`
+// — the CACHE column that settlePayment writes alongside the WalletTxn ledger in
+// one transaction — so the dashboard, the profile and /wallet cannot disagree.
+// formatPaise is the app's only ₹ formatter; never a local /100.
+function WalletCard({ balancePaise }: { balancePaise: number }) {
+  return (
+    <Link href="/wallet" className="block">
+      <Card variant="elevated">
+        <CardContent className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[15px] font-bold text-text-primary">Wallet</p>
+            <p className="text-xs text-text-secondary">Payouts from your pickups</p>
+          </div>
+          <span className="font-serif text-lg font-semibold text-text-primary">
+            {formatPaise(balancePaise)}
+          </span>
+        </CardContent>
+      </Card>
+    </Link>
+  )
+}
+
 function PopulatedDashboardPage({
   pickups,
   stats,
+  impact,
   displayName,
   profileId,
 }: {
   pickups: PickupRow[]
   stats: DashboardStats
+  impact: ImpactSummary
   displayName: string
   profileId: string
 }) {
@@ -81,6 +162,10 @@ function PopulatedDashboardPage({
       <Link href="/book">
         <Button variant="primary" fullWidth>Request a pickup</Button>
       </Link>
+
+      <WalletCard balancePaise={impact.walletBalancePaise} />
+
+      <ImpactCard impact={impact} />
 
       <p className="text-[11px] font-semibold tracking-widest uppercase text-[#666666]">
         Recent Pickups
@@ -139,13 +224,19 @@ export default async function DashboardPage() {
   const { user, profile } = current
   const vendorId = user.id
 
-  const [pickups, certificateCount, offers] = await Promise.all([
+  const [pickups, certificates, offers, walletProfile] = await Promise.all([
     prisma.pickup.findMany({
       where: { vendorId },
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { items: true } } },
     }),
-    prisma.certificate.count({ where: { vendorId } }),
+    // Batch 9 (B4): the impact card's whole source. Selected rather than counted
+    // now, because the count, the CO₂ total and the material list all come out
+    // of the same rows — three queries for one table would be careless.
+    prisma.certificate.findMany({
+      where: { vendorId },
+      select: { co2AvoidedKg: true, materialSummary: true },
+    }),
     // fixed: scope recovered kg only to recovered/certified pickups
     prisma.offer.findMany({
       where: {
@@ -153,6 +244,11 @@ export default async function DashboardPage() {
         pickup: { status: { in: ["recovered", "certified"] } },
       },
       select: { materialBreakdown: true },
+    }),
+    // The cache column, matching /wallet and /profile. See WalletCard.
+    prisma.profile.findUnique({
+      where: { id: vendorId },
+      select: { walletBalancePaise: true },
     }),
   ])
 
@@ -163,8 +259,19 @@ export default async function DashboardPage() {
 
   const stats: DashboardStats = {
     pickupCount: pickups.length,
-    certificateCount,
+    certificateCount: certificates.length,
     recoveredKg,
+  }
+
+  const impact: ImpactSummary = {
+    // Prisma hands back a Decimal; Number() it here so no Decimal ever crosses
+    // into a component. `co2AvoidedKg` is nullable — a certificate issued before
+    // the column existed contributes 0 rather than NaN.
+    co2AvoidedKg: Math.round(
+      certificates.reduce((sum, cert) => sum + Number(cert.co2AvoidedKg ?? 0), 0),
+    ),
+    materials: aggregateMaterials(certificates.map((cert) => cert.materialSummary)),
+    walletBalancePaise: walletProfile?.walletBalancePaise ?? 0,
   }
 
   const displayName = profile.company_name ?? profile.full_name
@@ -174,6 +281,7 @@ export default async function DashboardPage() {
     <PopulatedDashboardPage
       pickups={pickups}
       stats={stats}
+      impact={impact}
       displayName={displayName}
       profileId={vendorId}
     />

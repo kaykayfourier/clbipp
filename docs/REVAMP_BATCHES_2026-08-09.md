@@ -27,8 +27,8 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 7A | **Lifecycle: add `arrived` + `offered` stages** | A/B | ✅ done, staged |
 | 7B | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | ✅ done, staged |
 | 8 | B3/B6 — PDF generation + payment + receipt screens | B | ✅ done, staged |
-| 9 | B4/B5 — dashboard impact (CO₂) + compliance CSV | B | ⏭ **next — start here** |
-| 10 | P2 screens (wallet, invoices, history, profile, `/t` parity) + **deploy** | A | pending |
+| 9 | **B4/B5 — dashboard impact (CO₂) + compliance CSV** | B | ✅ done, staged |
+| 10 | P2 screens (invoices, history, profile, `/t` parity) + **deploy** | A | ⏭ **next — start here** |
 | 11 | **Google / Apple sign-in** (new — see below, has a real blocker) | A | pending |
 
 > **No demo is being shown right now** (changed 2026-08-09). Aamir is finishing
@@ -552,35 +552,231 @@ type-checked green and would have shipped.
 
 ---
 
-## ▶ Next: Batch 9 — B4/B5, dashboard impact (CO₂) + compliance CSV
+## What Batch 9 delivered — cited CO₂ factors, dashboard impact, CPCB CSV
 
-Per Plan v2 §5:
+### `packages/core/src/impact.ts` — the thing that must not be hand-waved
 
-- **B4 — Impact dashboard.** CO₂ avoided, materials recovered, aggregate weight,
-  wallet balance on `(app)/dashboard`. **CO₂ needs a per-chemistry kg-CO₂e/kg
-  constant table in `packages/core/src/impact.ts` with the source in a comment**
-  — it is a compliance-adjacent claim and the seed's inline ~8 kg/kg has no
-  citation. This is the one thing in Batch 9 that must not be hand-waved.
-- **B5 — Compliance CSV export.** `papaparse` is already a dependency of
-  `apps/customer`.
+The seed wrote `co2AvoidedKg: Math.round(weight * 8)` — **one figure applied to
+every chemistry**, with no citation, on a number that renders on
+`/certificates/[id]` **and inside the EPR certificate PDF**. It was therefore an
+uncited compliance-adjacent claim printed on a document, and for the seeded
+lead-acid loads it overstated by roughly 4×.
 
-**What Batch 8 leaves teed up for it:**
+There is now one canonical table, `CO2E_AVOIDED_KG_PER_KG`, keyed by
+`BatteryType` so a chemistry added later is a **compile error rather than a
+silent zero on a certificate**:
 
-- **`formatPaise` from `@clbipp/core` is the app's only ₹ formatter.** The
-  dashboard's wallet figure must use it, not a local `/100`.
-- **The wallet balance is already read on two screens** (`/wallet`, `/profile`)
-  as `profile.walletBalancePaise` — the cache, not a ledger aggregate. Keep that
-  consistent on the dashboard; the two are asserted equal by the verification
-  pattern above.
-- **`Certificate.co2AvoidedKg` is populated for the certified pickup** and now
-  renders on `/certificates/[id]` and in the certificate PDF. When B4 introduces
-  the constants table, **the seed, the screen and the PDF must all read the same
-  number** — three places, one source.
-- **The document route is the pattern for any new file the app hands out.**
-  A CSV export should follow it: ownership-scoped read, stream the bytes, no
-  signed URL. Do NOT give it a `loading.tsx`-adjacent page guard (see the 7A
-  streaming-redirect trap below).
-- `DetailRow` from `@clbipp/ui` exists now if the dashboard needs stat rows.
+| chemistry | kg CO₂e/kg | why |
+|---|---|---|
+| `li_ion_nmc` | 8.0 | high Ni/Co — the emissions-heavy virgin route it displaces. Range ~6–10 |
+| `li_ion_nca` | 7.5 | same family, marginally less cobalt |
+| `li_ion_lfp` | 2.5 | no Co, no Ni. Range ~1–4; the **mid-low** end is taken deliberately |
+| `lead_acid` | 2.0 | secondary vs primary lead, battery ~65% Pb by mass |
+| `nimh` | 4.5 | Ni-dominant |
+| `other` | 1.5 | conservative floor — "we don't know what it is" shouldn't earn a chemistry-specific claim |
+
+Sources are named in the file header: Dunn et al. 2015 (*Energy Environ. Sci.* 8,
+158–168, Argonne/GREET), Ciez & Whitacre 2019 (*Nature Sustainability* 2,
+148–156), and secondary-vs-primary lead for lead-acid. The header also says
+plainly what these are **not** — not a certified LCA, not audited, not
+CPCB-issued — and that they must be swapped for the company's or a CPCB-accepted
+set before any real filing. **Swapping them is a value change in that one file
+and nowhere else.** That is the whole reason it exists.
+
+**A second, separate table for unknown chemistry.** `BatteryItem.chemistry` is
+*agent-confirmed* and null on everything pre-collection (the customer is never
+asked for chemistry at booking — Batch 5). So there is a
+`CO2E_AVOIDED_KG_PER_KG_BY_CATEGORY` fallback: `portable 4.0 · automotive 2.0 ·
+industrial 2.0 · ev 5.0`. Kept as its own table rather than mapping each category
+onto a representative chemistry, for two reasons: a reader can see a fallback is
+in play, and the values sit at the **conservative** end of each category's mix —
+**a guess must not be able to out-claim a confirmed measurement**, and there is a
+test asserting exactly that.
+
+`co2eAvoidedKg()` **rounds once at the end, not per line**: rounding each line
+and summing drifts upward on a load with many small rows, and a certificate has
+to agree with a recomputation of itself. Also `aggregateMaterials()` /
+`formatMaterials()`, which parse the untyped `Certificate.materialSummary` JSON
+defensively — the same posture `parseMaterialWeights` already takes in `offer.ts`.
+
+### The one duplication, and how drift is caught
+
+`packages/database` **must not** import `@clbipp/core` (core depends on database;
+the cycle breaks the generated client's build) — the same constraint that made
+Batch 8 restate the invoice number format in the seed. So `reset-demo.ts`
+restates the chemistry table with a pointer comment.
+
+Drift is caught by **verification, not by hope**: the throwaway script asserts
+every seeded `co2AvoidedKg` equals what `co2eAvoidedKg()` computes over that
+pickup's real `BatteryItem` rows. It passes — `PKP-2026-000109` is now **300 kg**
+(31.5 kg NMC + 11.4 kg LFP + 2.6 kg NCA), where the flat rate said 364.
+
+> ⚠ **The seed certifies exactly one pickup, and it is portable Li-ion.** So the
+> table's largest correction — lead-acid — is real in the code and in the tests
+> but is **not visible in demo data**. If a demo needs to show it, a second
+> certified pickup on an automotive load is the change.
+
+### B4 — dashboard impact
+
+`(app)/dashboard` keeps its three tiles and status-routed rows, and gains:
+
+- a **wallet card** reading `profiles.wallet_balance_paise` — the **cache**
+  column, the same source as `/wallet` and `/profile`, formatted with
+  `formatPaise`, so the three screens cannot disagree;
+- an **impact card**: CO₂e avoided as the headline, then recovered materials in
+  kg, then the footnote.
+
+**Both figures count `certified` pickups only**, read from the stored
+`Certificate.co2AvoidedKg` / `materialSummary`. Deliberate: the same CO₂ number is
+printed on the EPR certificate, so counting batteries still in a truck towards
+"avoided" would claim an outcome that hasn't happened. The card is headed *"From
+your issued certificates"* and its footnote says the CO₂ is **estimated from
+published recycling factors, not measured** — the screen states what it is showing
+rather than implying a measurement. The card **renders nothing at all** when
+nothing is certified: `0 kg CO₂e avoided` on a new account reads as a failure
+rather than as "not yet".
+
+One query change, not four: `certificate.count()` became a `findMany` selecting
+`co2AvoidedKg` + `materialSummary`, because the count, the CO₂ total and the
+material list all come out of the same rows. `Number()` at the boundary so no
+Decimal crosses into a component.
+
+### B5 — compliance CSV export
+
+The **"Export for CPCB return" button had no handler at all**. It is now a plain
+`<a download>` to a real route — not a fetch + blob, because the route already
+sends `Content-Disposition: attachment`, so the browser's own download handling
+does the work and it survives JS being disabled or mid-hydration. **The active
+year filter rides along**, so what you export is what you are looking at.
+
+| File | What |
+|---|---|
+| `apps/customer/src/lib/compliance-export.ts` | `server-only`. Ownership-scoped read → `papaparse` → string |
+| `apps/customer/src/app/api/exports/compliance/route.ts` | `runtime='nodejs'`, `dynamic='force-dynamic'`, streams `text/csv; charset=utf-8` |
+
+Built on the Batch 8 document route: same `vendorId` scoping in code (Prisma
+bypasses RLS), same **stream-the-bytes, never mint a signed URL**, same explicit
+no-cache, same own session check rather than trusting the middleware matcher.
+
+- **No stored object, unlike the PDFs.** A CSV is cheap to regenerate and changes
+  the moment a certificate is issued; caching it would serve a stale compliance
+  return, which is the one document where stale is worst. So the whole export
+  path is genuinely read-only — the smoke test's documented PDF write exception
+  does not extend to it.
+- **One row per certificate.** A CPCB return is filed per consignment, and a
+  stable column set is worth more in a spreadsheet than columns that change shape
+  between exports — which is what per-material columns would do, since the
+  material list varies by chemistry. Materials collapse into one text cell
+  (`Nickel: 8 kg; Copper: 4 kg; …`). Columns: `certificate_number, pickup_id,
+  certified_on, category, total_weight_kg, co2e_avoided_kg, materials_recovered,
+  verification_link`.
+- `certified_on` is **ISO, not localised** — a compliance file gets opened in an
+  unknown locale where `09/08/2026` is ambiguous.
+- `co2e_avoided_kg` is **blank, not 0**, when the column is null. An empty cell
+  reads as "not recorded"; a zero reads as a claim.
+- `verification_link` is the existing `/t/<publicToken>` page, absolute, built
+  from the **request's own origin** so a Vercel export doesn't link to localhost.
+
+### 🐛 A real bug the smoke test caught
+
+The first version used `Papa.unparse(rows, { columns })`, which emits **nothing at
+all** for an empty array — so `?year=1999` downloaded a **zero-byte file**. That
+reads as a broken download rather than as "no certificates in 1999". Fixed by
+switching to the `{ fields, data }` form, which guarantees the header row and the
+column order in both cases from the one `COLUMNS` array. Type-checked green and
+would have shipped; the assertion that caught it was "**the filter must return
+headers and no rows**", not a status check.
+
+### Collateral fix
+
+`ComplianceClient`'s year filter list was hard-coded `["All", "2026"]`. It is now
+derived from the data. That was cosmetic until this batch and is not any more:
+the filter now **drives the download**, so a stale list would have quietly
+exported the wrong year — and would have hidden every certificate the moment the
+year rolled over. The "Total certified" card also gained a CO₂e line.
+
+### Verified
+
+- `npm run build` green (**31 routes**, `/api/exports/compliance` present),
+  `npm run lint --force` clean, **119 tests** (20 decision-engine + 24 auth + 75
+  core — **18 new**, all in `impact.test.ts`).
+- `npm run reset-demo` — **required this batch**, the seeded certificate CO₂
+  changed.
+- `npm run smoke` — **all 32 routes**. The export asserts `content-type:
+  text/csv`, the header row, and `CERT-2026-PKP-2026-000109-PORTABLE`. That
+  certificate number is the load-bearing assertion, the equivalent of 7B's
+  `token=` and 8's `%PDF-`: it is **derived and never stored**, so it is only in
+  the file if the route ran the real scoped query and serialised the row through
+  `certificateNumber()`. `?year=1999` asserts headers-and-no-rows — a filter that
+  silently returns everything is worse on a compliance return than one that
+  returns nothing.
+- `npm run smoke -- agent@test demo1234 --blocked` — all 32 bounce, **including
+  the export route**.
+- **Against the real database** (throwaway script, deleted after) — 17 checks:
+  the seed↔`impact.ts` drift guard; the dashboard CO₂ total equals
+  `sum(certificates.co2_avoided_kg)`; the materials aggregate is sorted
+  heaviest-first; the **wallet cache equals `sum(ledger)`** so the dashboard,
+  wallet and profile agree; the export row count equals the certificate count; **a
+  foreign `vendorId`'s export contains none of `business@test`'s certificates**;
+  `?year=` filters and `?year=1999` returns none; the seed is still 10 pickups.
+- CSV output eyeballed end to end: correct headers, correct disposition
+  (`clbipp-compliance-all.csv`), one well-formed row, no mangled quoting.
+
+### Known gaps in this batch
+
+- **The factors are literature estimates, not a certified LCA.** Stated in the
+  file header and in the on-screen footnote. Replacing them is a value change in
+  `packages/core/src/impact.ts` alone — plus the restated copy in the seed.
+- **The exact CPCB column set is an open question for the company**, same class
+  as the invoice's zero `taxPaise`. Their answer changes `COLUMNS` and the mapper
+  in `compliance-export.ts` and nothing else.
+- **No totals row in the CSV** — it breaks spreadsheet sorting. The screen shows
+  the totals instead.
+- **The seed's only certified pickup is portable Li-ion**, so the lead-acid
+  correction isn't visible in demo data (see the box above).
+- **`/handover` still mutates on GET.** Untouched again, and still the
+  highest-value small fix outstanding.
+
+---
+
+## ▶ Next: Batch 10 — P2 screens + deploy
+
+Per Plan v2 §4 and the cut order in §8. `/wallet` was listed here originally but
+**shipped in Batch 8**, so what's left is:
+
+- **Invoices** — `(app)/invoices[/id]`. The data and the PDF already exist
+  (`Invoice` rows are written by `settlePayment`, and
+  `/api/documents/invoice/[id]` streams them); this is a list screen plus a
+  detail screen over them. `/payment/[id]` already links to the PDF directly, so
+  this is genuinely additive.
+- **History / repeat booking** — `(app)/history`. Pure UI over existing data; the
+  "book again" path prefills the wizard from a past pickup.
+- **Profile** — phone + an addresses link. Small.
+- **`/t/[token]` parity** with the current tracking screen. ⚠ Re-read the 7B
+  reasoning first: the public page deliberately gets the custody log and GPS but
+  **not photos and not the partner card**, and `includePhotos: false` **skips
+  minting the signed URLs** rather than hiding rendered images. Parity means the
+  *layout*, not lifting that isolation.
+- **A6 — deploy.** Vercel project + env vars + PWA. Note this interacts with
+  Batch 11: OAuth redirect URLs are per-origin, so the Vercel URL has to be
+  registered with the providers.
+
+**What Batch 9 leaves teed up for it:**
+
+- **The export route is now the pattern for any new file the app hands out**,
+  alongside the document route: ownership-scoped read → stream the bytes → no
+  signed URL → `Cache-Control: private, no-store`. An invoices CSV, if one is
+  ever wanted, is a copy of `compliance-export.ts` with a different `COLUMNS`.
+- **`formatPaise` is still the app's only ₹ formatter.** The invoice screens must
+  use it, never a local `/100`.
+- **`impact.ts` is where any impact number comes from now** — if a history screen
+  wants per-pickup CO₂, call `co2eAvoidedKg()` on the pickup's items rather than
+  writing arithmetic in the screen.
+- **`smoke.mjs` has three probe shapes now** — `probe` (HTML),
+  `probeDocument` (PDF bytes), `probeExport` (CSV). Add new screens to `ROUTES`
+  with content assertions, not just a status check.
+- Deploy note: the export's `verification_link` is built from the **request
+  origin**, so it will point at the Vercel URL automatically — nothing to change.
 
 ### ⚠ Still true, still not a code task
 
@@ -1327,9 +1523,9 @@ just needs to know so he doesn't re-introduce it from an older copy.
 ```bash
 npm run dev            # customer app (turbo --filter=customer)
 npm run build          # all apps + packages
-npm run test           # 101 tests (20 decision-engine + 24 auth + 57 core)
+npm run test           # 119 tests (20 decision-engine + 24 auth + 75 core)
 npm run lint           # add -- --force when turbo replays a stale cache hit
-npm run smoke          # 29 routes since Batch 8 — needs `npm run dev` running
+npm run smoke          # 32 routes since Batch 9 — needs `npm run dev` running
 npm run smoke -- agent@test demo1234 --blocked   # role gate MUST block these
 npm run reset-demo     # wipe + reseed: 10 pickups + Storage photos
                        # (slow — it uploads real objects; give it ~2 min)
@@ -1479,9 +1675,21 @@ Items batches have explicitly deferred to one real-device pass:
 - Bottom-nav clearance is owned by `(app)/layout.tsx` since Batch 6.5. New `(app)`
   screens must pass `hideNav` to `AppShell` and must **not** add their own bottom
   padding.
-- CO₂ in the seed uses ~8 kg CO₂e/kg (Li-ion) inline. The **canonical constants
-  table with a cited source** is Batch 9 (`packages/core/src/impact.ts`). This is
-  a compliance-adjacent claim — it needs a real citation before any demo.
+- ~~CO₂ in the seed uses ~8 kg CO₂e/kg (Li-ion) inline~~ — **done in Batch 9**:
+  `packages/core/src/impact.ts` is the canonical per-chemistry table, with named
+  sources, published ranges, and a header saying plainly that these are
+  literature estimates rather than a certified LCA. **They still must be replaced
+  with the company's or a CPCB-accepted set before any real compliance filing** —
+  that swap is a value change in that one file (plus the copy restated in the
+  seed, which the Batch 9 drift check guards).
+- **The compliance CSV's column set is an open question for the company** (Batch
+  9), same class as the invoice's zero `taxPaise`. `COLUMNS` in
+  `apps/customer/src/lib/compliance-export.ts` is the single place their answer
+  lands.
+- **The seed certifies exactly one pickup, and it is portable Li-ion** — so the
+  per-chemistry table's biggest correction (lead-acid, ~4× lower than the old
+  flat rate) is real in code and tests but invisible in demo data. A second
+  certified pickup on an automotive load would surface it.
 - `apps/agent` and `apps/admin` are scaffolds only.
 - ~~Old `(app)/request-pickup` still exists~~ — **done in Batch 5**: it is now a
   `redirect('/book')`.

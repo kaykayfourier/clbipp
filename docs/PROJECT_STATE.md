@@ -6,17 +6,19 @@
 > `HANDOFF_PROTOCOL.md`.
 
 **Last updated:** 2026-08-09 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
-+ 8 executed** — repo is now a Turborepo monorepo, schema v2 is live, the booking
-quote engine + `createPickupWithItems` shipped in `packages/core`, the address
-book + Storage upload helper landed, **the 4-step booking wizard at `/book` is
-done** — the centrepiece of the revamp — **email OTP + `/verify` + the role gate
-are live**, **Batch 6.5 cleared the first manual test pass**, **Batch 7A added
-the `arrived` + `offered` lifecycle stages** (the locked contract is now nine
-stages), **Batch 7B shipped the tracking upgrade** — assigned-partner card, ETA,
-and a chain-of-custody log rendering real per-event GPS and real photos out of
-the private bucket — and **Batch 8 shipped the three PDF documents, payouts and
-the wallet**, which makes the P0 demo path run end to end for the first time.
-Next: **Batch 9, dashboard impact (CO₂) + compliance CSV**.
++ 8 + 9 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
+booking quote engine + `createPickupWithItems` shipped in `packages/core`, the
+address book + Storage upload helper landed, **the 4-step booking wizard at
+`/book` is done** — the centrepiece of the revamp — **email OTP + `/verify` + the
+role gate are live**, **Batch 6.5 cleared the first manual test pass**, **Batch 7A
+added the `arrived` + `offered` lifecycle stages** (the locked contract is now
+nine stages), **Batch 7B shipped the tracking upgrade** — assigned-partner card,
+ETA, and a chain-of-custody log rendering real per-event GPS and real photos out
+of the private bucket — **Batch 8 shipped the three PDF documents, payouts and
+the wallet**, which makes the P0 demo path run end to end for the first time, and
+**Batch 9 shipped the cited per-chemistry CO₂ table, the dashboard impact card
+and the working CPCB CSV export**.
+Next: **Batch 10, P2 screens (invoices, history, profile, `/t` parity) + deploy**.
 Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
@@ -108,6 +110,27 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    default is now **scoped, not lifted**: those money surfaces show ₹ per Plan v2
    D6, while `/offer`, `/offer-breakdown` and `/track` stay weight-only. Anything
    below describing the vendor app as showing no ₹ at all is stale.
+9. **Impact numbers have one source as of Batch 9**:
+   `packages/core/src/impact.ts`. `CO2E_AVOIDED_KG_PER_KG` (per `BatteryType`)
+   plus a deliberately conservative `…_BY_CATEGORY` fallback for pre-collection
+   loads, where `BatteryItem.chemistry` is still null. Sources and published
+   ranges are named in the file header, which also states plainly that these are
+   **literature estimates, not a certified LCA** — they must be swapped for the
+   company's or a CPCB-accepted set before any real filing, and that swap is a
+   value change in that one file. It replaced a flat `weight * 8` in the seed
+   that overstated lead-acid by ~4×. **Never write CO₂ arithmetic in a screen.**
+   `packages/database` restates the table (it must not import `packages/core` —
+   the cycle breaks the generated client), and the Batch 9 verification asserts
+   the two agree.
+   The **dashboard impact card counts `certified` pickups only**, from the stored
+   `Certificate.co2AvoidedKg` / `materialSummary` — the same figure is printed on
+   the EPR certificate, so claiming it for batteries still in a truck would claim
+   an outcome that hasn't happened.
+   Also new: **`GET /api/exports/compliance[?year=]`** streams the CPCB CSV,
+   following the Batch 8 document route (ownership-scoped read, stream the bytes,
+   no signed URL, no cache). The column set lives in `COLUMNS` in
+   `apps/customer/src/lib/compliance-export.ts` and is an open question for the
+   company.
 
 **Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
 cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts

@@ -27,7 +27,8 @@ packages/auth            supabase server/browser/admin clients, auth.ts,
                          realtime, createAuthMiddleware()  → @clbipp/auth
 packages/core            validation, offer, booking/pricing,
                          document numbering + ₹ formatting,
-                         payments/wallet ledger            → @clbipp/core
+                         payments/wallet ledger,
+                         CO₂e impact factors (impact.ts)   → @clbipp/core
 packages/pdf             EPR certificate · pickup receipt ·
                          invoice templates + renderers     → @clbipp/pdf
 packages/database        prisma schema + migrations + client + seed
@@ -234,7 +235,14 @@ explicitly asked to.
   Supabase dashboard is fine; the final version must land in a repo file.
 - Wrap Supabase calls (Storage, Realtime, auth) in helpers inside
   `packages/auth` rather than scattering client calls across pages.
-- All money is **integer paise** — never a float, never rupees, anywhere.
+- All money is **integer paise** — never a float, never rupees, anywhere. Format
+  it with `formatPaise` from `@clbipp/core`, never a local `/100`.
+- **CO₂e factors live only in `packages/core/src/impact.ts`** — never write CO₂
+  arithmetic in a screen or a seed. They are cited literature estimates, not a
+  certified LCA; the header says so, and replacing them with the company's or a
+  CPCB-accepted set is a value change in that one file. `packages/database`
+  restates the table (it must not import `packages/core` — the cycle breaks the
+  generated client), and Batch 9's verification asserts the two agree.
 - Branch naming: `feat/<scope>`. No direct pushes to `main` — branch → PR →
   1 review → merge.
 - Inline error handling at API route / async boundaries; let internal pure

@@ -412,6 +412,36 @@ const PICKUPS: PickupSpec[] = [
 
 const totalWeight = (items: ItemSpec[]) => items.reduce((sum, i) => sum + i.weightKg, 0)
 
+/**
+ * kg CO₂e avoided per kg recycled, by chemistry.
+ *
+ * ⚠ MUST MATCH `CO2E_AVOIDED_KG_PER_KG` in `packages/core/src/impact.ts`, which
+ * is the canonical table and carries the sources, the ranges, and the warning
+ * about what these numbers are not. Restated here rather than imported because
+ * `packages/database` must not depend on `packages/core` — core depends on
+ * database, and the cycle breaks the generated client's build. Exactly the
+ * reason Batch 8's invoice number format is restated in this file too.
+ *
+ * Drift between the two is caught by verification, not by hope: the Batch 9
+ * check asserts every seeded `co2AvoidedKg` equals what `co2eAvoidedKg()`
+ * computes over the same pickup's items.
+ *
+ * This replaced a flat `weight * 8` applied to every chemistry — which meant the
+ * seeded lead-acid certificates claimed roughly 4× the CO₂ they should.
+ */
+const CO2E_AVOIDED_KG_PER_KG: Record<BatteryType, number> = {
+  li_ion_nmc: 8.0,
+  li_ion_nca: 7.5,
+  li_ion_lfp: 2.5,
+  lead_acid: 2.0,
+  nimh: 4.5,
+  other: 1.5,
+}
+
+/** Rounded once over the whole load, the same way `co2eAvoidedKg` does it. */
+const co2Avoided = (items: ItemSpec[]) =>
+  Math.round(items.reduce((sum, i) => sum + i.weightKg * CO2E_AVOIDED_KG_PER_KG[i.chemistry], 0))
+
 /** Rough line price: rate × weight × condition multiplier, in integer paise. */
 function linePrice(item: ItemSpec): number {
   const rate =
@@ -722,9 +752,9 @@ async function seed() {
             { material: "Lithium", recovered_kg: Math.round(weight * 0.05) },
             { material: "Copper", recovered_kg: Math.round(weight * 0.09) },
           ],
-          // ~8 kg CO2e avoided per kg of Li-ion recycled vs virgin material.
-          // Canonical constants + citation live in packages/core/src/impact.ts.
-          co2AvoidedKg: Math.round(weight * 8),
+          // Per-chemistry, not a flat rate — see CO2E_AVOIDED_KG_PER_KG above.
+          // Canonical table + citations live in packages/core/src/impact.ts.
+          co2AvoidedKg: co2Avoided(spec.items),
           certifiedAt: day(spec.daysAgo - 6),
         },
       })

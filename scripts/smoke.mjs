@@ -89,6 +89,26 @@ const DOCUMENT_REJECTS = [
   '/api/documents/certificate/PKP-2026-999999',
 ]
 
+// Batch 9 — the compliance CSV export, fetched as a file rather than HTML.
+//
+// `CERT-2026-PKP-2026-000109-PORTABLE` in the body is the load-bearing
+// assertion, the equivalent of 7B's `token=` and 8's `%PDF-`: the certificate
+// number is DERIVED, never stored, so it is only in the file if the route ran
+// the real ownership-scoped query and serialised the row through
+// certificateNumber(). The header row proves the column contract separately.
+const EXPORT_ROUTES = {
+  '/api/exports/compliance': [
+    'certificate_number,pickup_id,certified_on',
+    'CERT-2026-PKP-2026-000109-PORTABLE',
+    '/t/',
+  ],
+  // The year filter the screen passes through. 2026 holds the seeded
+  // certificate; 1999 must come back as headers and nothing else — a filter
+  // that silently returns everything is worse than one that returns nothing.
+  '/api/exports/compliance?year=2026': ['CERT-2026-PKP-2026-000109-PORTABLE'],
+}
+const EXPORT_EMPTY = '/api/exports/compliance?year=1999'
+
 // Routes whose STATUS GUARD must reject. Asserting a guard rejects is as much
 // a part of proving it works as asserting it admits: since Batch 7A the offer
 // screens are reachable at `offered` and nowhere else, so these two bouncing is
@@ -113,6 +133,13 @@ const APP_REJECTS = {
 // Content that must appear on a logged-in route. A redirect returns no body, so
 // asserting on text is also what proves the route RENDERED rather than bounced.
 const APP_CONTENT = {
+  // Batch 9 (B4). The impact card is certificate-derived, so these three assert
+  // the whole chain: a stored co2_avoided_kg, a material folded out of the
+  // materialSummary JSON, and the wallet cache formatted by formatPaise.
+  '/dashboard': ['CO₂e avoided', 'From your issued certificates', 'Nickel', 'Wallet', '₹'],
+  // The export button was dead until Batch 9 — asserting the href is what stops
+  // it silently reverting to a <Button> with no handler.
+  '/compliance': ['Compliance log', 'Export for CPCB return', '/api/exports/compliance'],
   '/offer?id=PKP-2026-000104': ['Estimated Offer', 'Why this price?'],
   '/offer-breakdown?id=PKP-2026-000104': ['Estimated Value', 'Why this valuation?'],
   // Batch 7B. `token=` on the img src is the part worth asserting: it only
@@ -374,6 +401,61 @@ async function main() {
     await probeDocument(route, { expectPdf: false, expectBounce: blocked })
   }
 
+  /**
+   * Batch 9. Fetches the CSV export and checks it is a real, correctly-typed
+   * file. Separate from probe() for the same reason probeDocument() is: it
+   * answers with a file and a Content-Type, so the tab-bar and error-page
+   * heuristics don't apply.
+   *
+   * Unlike the PDF route this writes nothing — the CSV is built per request and
+   * never cached, so the whole export section is genuinely read-only.
+   */
+  async function probeExport(route, { mustContain = [], expectEmpty = false } = {}) {
+    let status, type = '', body = '', note = ''
+    try {
+      const r = await fetch(`${BASE}${route}`, { headers: { Cookie }, redirect: 'manual' })
+      status = r.status
+      type = r.headers.get('content-type') ?? ''
+      note = r.headers.get('location') ? `→ ${r.headers.get('location')}` : ''
+      if (status === 200) body = await r.text()
+    } catch (e) {
+      console.error(`  ERR   ${route}`, e.message)
+      failures++
+      return
+    }
+
+    const isCsv = type.includes('text/csv')
+    // Header row only. Split on newlines and drop trailing blanks, because
+    // papaparse does not terminate the last row.
+    const dataRows = body.split('\n').filter((line) => line.trim().length > 0).length - 1
+    const missing = mustContain.filter((s) => !body.includes(s))
+
+    let verdict
+    if (blocked) {
+      verdict = note.includes('/login') ? 'blocked (correct)' : 'LEAKED THROUGH'
+    } else if (!isCsv) {
+      verdict = `NOT A CSV (${status}, ${type || 'no type'})`
+    } else if (expectEmpty) {
+      // A year filter that matches nothing must return the header and no rows.
+      // Returning everything would be a filter that quietly does nothing, which
+      // on a compliance return is the worst kind of wrong.
+      verdict = dataRows === 0 ? 'empty (correct)' : `FILTER IGNORED (${dataRows} rows)`
+    } else if (missing.length) {
+      verdict = `MISSING: ${missing.join(' | ')}`
+    } else {
+      verdict = `ok (${dataRows} row${dataRows === 1 ? '' : 's'})`
+    }
+
+    if (!/^(ok|empty \(correct\)|blocked \(correct\))/.test(verdict)) failures++
+    console.log(`  ${String(status).padEnd(3)} ${route.padEnd(46)} ${verdict} ${note}`)
+  }
+
+  console.log('\n  — compliance export —')
+  for (const [route, expected] of Object.entries(EXPORT_ROUTES)) {
+    await probeExport(route, { mustContain: expected })
+  }
+  await probeExport(EXPORT_EMPTY, { expectEmpty: true })
+
   // Fetched WITHOUT the session cookie — that is the state they're built for,
   // and a logged-in hit on /login legitimately redirects to /dashboard, which
   // would make a content check meaningless. A rejected session that also
@@ -388,6 +470,8 @@ async function main() {
     Object.keys(APP_REJECTS).length +
     DOCUMENT_ROUTES.length +
     DOCUMENT_REJECTS.length +
+    Object.keys(EXPORT_ROUTES).length +
+    1 + // EXPORT_EMPTY
     PUBLIC_ROUTES.length
   console.log(
     failures === 0
