@@ -11,6 +11,12 @@ export const middleware = createAuthMiddleware({
   // Backed by supabase/grants.sql: `authenticated` has no write privilege on
   // profiles.role, so a customer cannot promote themselves past this check.
   allowRoles: ['customer'],
+  // Batch 11. Google sign-in creates an auth.users row and no profile, which
+  // the role gate above would otherwise read as a half-created account and sign
+  // out. /onboarding is where that session picks individual vs fleet and the
+  // profile row gets written. NOT in publicPaths — it needs a session, it just
+  // doesn't need a role yet.
+  onboardingPath: '/onboarding',
 })
 
 export const config = {

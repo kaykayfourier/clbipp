@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { AppShell, PagePadding } from '@clbipp/ui'
 import { Button } from '@clbipp/ui'
 import { Field } from '../field'
+import { OAuthButtons } from '../oauth-buttons'
 import { login, requestOtp } from './actions'
 
 // Login (wireframe S.login): the auth entry point. No top bar/back — it's the
@@ -63,6 +64,12 @@ export default async function LoginPage({
             Send code
           </Button>
         </form>
+
+        {/* Batch 11. Below OTP because it is the newest and least-proven path:
+            it depends on a provider configured in the Supabase dashboard, and
+            an unconfigured one sends the user back here with a readable error
+            rather than a raw provider string. */}
+        <OAuthButtons />
 
         <Link href="/signup" className="text-center text-sm font-medium underline">
           Create account

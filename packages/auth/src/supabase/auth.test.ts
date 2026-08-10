@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  createProfileForCurrentUser,
   describeOtpError,
   sendEmailOtp,
   signIn,
+  signInWithOAuth,
   signUpWithProfile,
   verifyEmailOtp,
 } from './auth'
@@ -11,6 +13,8 @@ const mockSignInWithPassword = vi.fn()
 const mockSignUp = vi.fn()
 const mockSignInWithOtp = vi.fn()
 const mockVerifyOtp = vi.fn()
+const mockSignInWithOAuth = vi.fn()
+const mockGetUser = vi.fn()
 const mockInsert = vi.fn()
 const mockFrom = vi.fn(() => ({ insert: mockInsert }))
 
@@ -21,6 +25,8 @@ vi.mock('./server', () => ({
       signUp: mockSignUp,
       signInWithOtp: mockSignInWithOtp,
       verifyOtp: mockVerifyOtp,
+      signInWithOAuth: mockSignInWithOAuth,
+      getUser: mockGetUser,
     },
     from: mockFrom,
   })),
@@ -31,6 +37,8 @@ beforeEach(() => {
   mockSignUp.mockReset()
   mockSignInWithOtp.mockReset()
   mockVerifyOtp.mockReset()
+  mockSignInWithOAuth.mockReset()
+  mockGetUser.mockReset()
   mockInsert.mockReset()
   mockFrom.mockClear()
 })
@@ -117,6 +125,121 @@ describe('signUpWithProfile — Batch 6 columns', () => {
     expect(payload).not.toHaveProperty('kyc_status')
     expect(payload).not.toHaveProperty('wallet_balance_paise')
     expect(payload).not.toHaveProperty('phone_verified')
+  })
+})
+
+// ─── Batch 11 — OAuth + onboarding ──────────────────────────────────────────
+
+describe('signInWithOAuth', () => {
+  it('asks Supabase for the provider URL and hands it back for the caller to redirect to', async () => {
+    mockSignInWithOAuth.mockResolvedValue({
+      data: { url: 'https://accounts.google.com/o/oauth2/auth?…' },
+      error: null,
+    })
+
+    const { url, error } = await signInWithOAuth(
+      'google',
+      'http://localhost:3000/auth/callback?next=/dashboard',
+    )
+
+    expect(mockSignInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: { redirectTo: 'http://localhost:3000/auth/callback?next=/dashboard' },
+    })
+    expect(url).toBe('https://accounts.google.com/o/oauth2/auth?…')
+    expect(error).toBeNull()
+  })
+
+  // The provider isn't enabled in the Supabase dashboard until Aamir does
+  // docs/DEPLOY.md §6, so this is the state the button is in today. `url` must
+  // be null rather than undefined — the action branches on it.
+  it('returns a null url when the provider is not configured', async () => {
+    mockSignInWithOAuth.mockResolvedValue({
+      data: null,
+      error: { message: 'Unsupported provider: provider is not enabled' },
+    })
+
+    const { url, error } = await signInWithOAuth('google', 'http://localhost:3000/auth/callback')
+
+    expect(url).toBeNull()
+    expect(error).not.toBeNull()
+  })
+})
+
+describe('createProfileForCurrentUser', () => {
+  const details = { fullName: 'Vendor One', vendorType: 'individual' as const }
+
+  function signedInAs(user: unknown) {
+    mockGetUser.mockResolvedValue({ data: { user } })
+    mockInsert.mockResolvedValue({ error: null })
+  }
+
+  // The uid and email are the two fields a caller must NOT be able to choose:
+  // the uid is what profiles' RLS INSERT policy checks against auth.uid(), and
+  // the email is the one the provider actually verified.
+  it('writes the row under the session uid and the session email', async () => {
+    signedInAs({ id: 'oauth-user-1', email: 'someone@gmail.com' })
+
+    await createProfileForCurrentUser(details)
+
+    expect(mockFrom).toHaveBeenCalledWith('profiles')
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'oauth-user-1',
+        email: 'someone@gmail.com',
+        vendor_type: 'individual',
+        full_name: 'Vendor One',
+      }),
+    )
+  })
+
+  it('maps the fleet business fields onto their columns', async () => {
+    signedInAs({ id: 'oauth-user-2', email: 'ops@acme.com' })
+
+    await createProfileForCurrentUser({
+      fullName: 'Riya Sharma',
+      vendorType: 'fleet',
+      companyName: 'Acme Batteries',
+      gstNumber: '22AAAAA0000A1Z5',
+      panNumber: 'AAAAA0000A',
+      eprRegId: 'EPR/123',
+      businessAddress: '1 Industrial Estate',
+    })
+
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vendor_type: 'fleet',
+        company_name: 'Acme Batteries',
+        gst_number: '22AAAAA0000A1Z5',
+        pan_number: 'AAAAA0000A',
+        epr_reg_id: 'EPR/123',
+        business_address: '1 Industrial Estate',
+      }),
+    )
+  })
+
+  // The twin of the signUpWithProfile guard above. Both paths write a profile
+  // row and both are constrained by the same grants.sql allowlist, so both need
+  // the regression test — this is the one an OAuth user would come through.
+  it('never sends a role, letting the database default decide it', async () => {
+    signedInAs({ id: 'oauth-user-3', email: 'someone@gmail.com' })
+
+    await createProfileForCurrentUser(details)
+
+    const [payload] = mockInsert.mock.calls[0]
+    expect(payload).not.toHaveProperty('role')
+    expect(payload).not.toHaveProperty('kyc_status')
+    expect(payload).not.toHaveProperty('wallet_balance_paise')
+    expect(payload).not.toHaveProperty('phone_verified')
+  })
+
+  it('refuses and writes nothing when there is no session', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null } })
+
+    const { error } = await createProfileForCurrentUser(details)
+
+    expect(error).toBeInstanceOf(Error)
+    expect(mockInsert).not.toHaveBeenCalled()
   })
 })
 

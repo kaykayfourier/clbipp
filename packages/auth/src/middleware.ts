@@ -18,10 +18,25 @@ export type AuthMiddlewareOptions = {
    * customer app omits it until roles ship).
    */
   allowRoles?: string[]
+  /**
+   * Where a signed-in user with NO profiles row goes to finish account setup
+   * (Batch 11). Set this and a profile-less session is redirected there instead
+   * of being signed out — which is what OAuth needs, because Google creates an
+   * auth.users row and no profile.
+   *
+   * The path requires a session but is exempt from the role gate: gating it
+   * would bounce the very session it exists to serve. It is deliberately NOT a
+   * public path, so a logged-out visitor still goes to /login.
+   *
+   * Omit it (agent/admin apps today) and the old behaviour is unchanged: a
+   * profile-less session is signed out, because those apps have no way to
+   * complete an account.
+   */
+  onboardingPath?: string
 }
 
 export function createAuthMiddleware(options: AuthMiddlewareOptions) {
-  const { publicPaths, homePath, allowRoles } = options
+  const { publicPaths, homePath, allowRoles, onboardingPath } = options
 
   const isPublicPath = (pathname: string) =>
     publicPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
@@ -60,9 +75,15 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
     }
 
     if (user) {
+      const onOnboarding =
+        onboardingPath !== undefined &&
+        (pathname === onboardingPath || pathname.startsWith(`${onboardingPath}/`))
+
       // Role gate: a session whose profile role isn't allowed in this app is
       // signed out and sent to login (e.g. an agent opening the customer app).
-      if (allowRoles && !isPublicPath(pathname)) {
+      // The same read answers the Batch 11 question — does this session have a
+      // profile row at all — so onboarding costs no extra query.
+      if ((allowRoles || onboardingPath) && !isPublicPath(pathname)) {
         const { data: profile, error } = await supabase
           .from('profiles')
           .select('role')
@@ -76,18 +97,49 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
         // open on an infrastructure error; fail closed on a real answer.
         //
         // PGRST116 is "no rows": a genuine answer, meaning an auth user with no
-        // profile row. That account is half-created and every RLS-scoped screen
-        // would render empty, so it is treated as not allowed.
+        // profile row.
         const noProfileRow = error?.code === 'PGRST116'
         if (error && !noProfileRow) {
           return supabaseResponse
         }
 
-        if (!profile || !allowRoles.includes(profile.role)) {
+        if (noProfileRow || !profile) {
+          // A half-created account: an auth user with no profile. Every
+          // RLS-scoped screen would render empty, so it cannot be let through.
+          //
+          // Whether that is recoverable depends on the app. With an onboarding
+          // path it is — this is the normal state right after an OAuth sign-in,
+          // which creates an auth.users row and nothing else — so send them
+          // there. Without one, the old behaviour stands.
+          //
+          // Handling it HERE rather than only in /auth/callback is deliberate:
+          // the callback is one way in, but a refresh, a bookmark or a
+          // history entry all arrive with the same profile-less cookie and
+          // never pass through it. Fixing only the callback would leave the
+          // sign-out loop reachable by pressing reload.
+          if (!onboardingPath) {
+            await supabase.auth.signOut()
+            return redirectTo(request, '/login', supabaseResponse, {
+              error: 'That account cannot access this app.',
+            })
+          }
+          // Already on the onboarding screen: let it render, or it can never
+          // be reached by the session it exists for.
+          if (onOnboarding) return supabaseResponse
+          return redirectTo(request, onboardingPath, supabaseResponse)
+        }
+
+        if (allowRoles && !allowRoles.includes(profile.role)) {
           await supabase.auth.signOut()
           return redirectTo(request, '/login', supabaseResponse, {
             error: 'That account cannot access this app.',
           })
+        }
+
+        // Onboarding is finished — the row exists. Keep them off the form so a
+        // second insert can't be posted over a profile that is already there.
+        if (onOnboarding) {
+          return redirectTo(request, homePath, supabaseResponse)
         }
       }
 

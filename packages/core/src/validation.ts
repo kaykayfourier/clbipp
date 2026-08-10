@@ -217,11 +217,15 @@ export function normaliseIndianPhone(raw: string): string | null {
     return /^[6-9]\d{9}$/.test(local) ? `+91${local}` : null;
 }
 
-export const signupBaseSchema = z.object({
-    email: z.email("Enter a valid email address."),
-    // 6 is Supabase's own minimum; rejecting shorter here gives a field-level
-    // message instead of bouncing off the auth API with a raw error string.
-    password: z.string().min(6, "Password must be at least 6 characters."),
+/**
+ * The profile details every account gives us, however it was created.
+ *
+ * Split out from signupBaseSchema in Batch 11: an OAuth account collects exactly
+ * these at /onboarding and NOT email or password, because the provider already
+ * settled both. One shape means the two paths cannot drift into validating the
+ * same field differently.
+ */
+export const profileDetailsBaseSchema = z.object({
     fullName: z.string().trim().min(2, "Enter your full name.").max(100),
     phone: z.preprocess(
         (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
@@ -232,18 +236,38 @@ export const signupBaseSchema = z.object({
     ),
 });
 
-export const signupIndividualSchema = signupBaseSchema;
-
 // Presence only — GST/PAN/EPR *format* validation is P5-B, Khalid's half of the
 // validation task. Adding a half-right regex here would be the thing his lands
 // on top of, so this deliberately stops at "not blank".
-export const signupFleetSchema = signupBaseSchema.extend({
+const fleetFieldsShape = {
     companyName: z.string().trim().min(2, "Enter the company name."),
     eprRegId: z.string().trim().min(1, "EPR registration ID is required."),
     gstNumber: z.string().trim().min(1, "GST number is required."),
     panNumber: z.string().trim().min(1, "PAN number is required."),
     businessAddress: z.string().trim().min(5, "Enter the registered address."),
+};
+
+export const signupBaseSchema = profileDetailsBaseSchema.extend({
+    email: z.email("Enter a valid email address."),
+    // 6 is Supabase's own minimum; rejecting shorter here gives a field-level
+    // message instead of bouncing off the auth API with a raw error string.
+    password: z.string().min(6, "Password must be at least 6 characters."),
 });
+
+export const signupIndividualSchema = signupBaseSchema;
+
+export const signupFleetSchema = signupBaseSchema.extend(fleetFieldsShape);
 
 export type SignupIndividualInput = z.infer<typeof signupIndividualSchema>;
 export type SignupFleetInput = z.infer<typeof signupFleetSchema>;
+
+// ─── Onboarding (Batch 11) ───────────────────────────────────────────────────
+// What /onboarding posts after an OAuth sign-in. Same fields as signup minus
+// email and password — the provider supplied the first and there is no second.
+
+export const onboardingIndividualSchema = profileDetailsBaseSchema;
+
+export const onboardingFleetSchema = profileDetailsBaseSchema.extend(fleetFieldsShape);
+
+export type OnboardingIndividualInput = z.infer<typeof onboardingIndividualSchema>;
+export type OnboardingFleetInput = z.infer<typeof onboardingFleetSchema>;

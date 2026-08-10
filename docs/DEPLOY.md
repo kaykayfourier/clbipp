@@ -4,10 +4,13 @@
 **Status: PREPARED, NOT EXECUTED.** No Vercel project exists yet, no env vars
 are set, and there is no live URL.
 
-That is deliberate (decision taken 2026-08-10). OAuth redirect URLs are
-**per-origin**, so standing the site up *before* Batch 11 (Google / Apple
-sign-in) means registering callback URLs with the providers twice. The site goes
-up **after Batch 11**, and §6 below is the one extra step that then applies.
+That was deliberate (decision taken 2026-08-10). OAuth redirect URLs are
+**per-origin**, so standing the site up *before* Batch 11 meant registering
+callback URLs with the providers twice.
+
+**Batch 11 has now shipped** (Google sign-in + `/onboarding`), so this runbook is
+the next batch. §6 is no longer an addendum — it is a required step, and it is
+Google-only: Apple was dropped.
 
 Everything in this file is repo-side work that is already done, plus the
 dashboard clicks that are not. Nothing here needs another code change.
@@ -120,19 +123,43 @@ handset** — it is on the end-of-revamp manual list and cannot be automated.
 
 ---
 
-## 6. Batch 11 addendum (OAuth) — the reason deploy waits
+## 6. Google sign-in (Batch 11) — required, and not only for the deploy
 
-When Google / Apple sign-in lands, each provider needs the deployed origin
-registered as an authorised redirect:
+Google sign-in is **built and merged, and not yet enabled anywhere** — including
+on localhost. Until these three steps are done, the button on `/login` and
+`/signup` redirects back with *"Google sign-in isn't available right now"* and
+points the user at the password and OTP paths, which both work. That is a
+deliberate soft failure, not a bug to chase.
 
-- **Google** (free): a GCP OAuth client, then client id/secret into Supabase →
-  Authentication → Providers → Google. Authorised redirect URI is Supabase's
-  own callback, `https://<project-ref>.supabase.co/auth/v1/callback`, and the
-  app origins go in §4's Redirect URLs.
-- **Apple**: needs a **paid Apple Developer account ($99/yr)**. Nothing is
-  testable before that exists — ship Google alone if the account isn't wanted.
+1. **GCP** → APIs & Services → Credentials → OAuth 2.0 Client ID (Web
+   application). The authorised redirect URI is **Supabase's** callback, not the
+   app's: `https://<project-ref>.supabase.co/auth/v1/callback`.
+2. **Supabase** → Authentication → Providers → **Google**: enable, paste the
+   client id + secret from step 1.
+3. **Supabase** → Authentication → URL Configuration → **Redirect URLs**: add
+   `http://localhost:3000/**` *and* the Vercel origin. This is the per-origin
+   list — a missing entry is why an OAuth redirect silently lands on the wrong
+   site.
 
-Doing §4 and this together is one pass instead of two.
+The app itself needs **no env var for this**: `oauth-actions.ts` derives its
+origin from the request headers, so localhost, production and every preview
+deployment work off the same code. Only the Supabase list above has to know the
+origins.
+
+Doing this together with §4 is one dashboard pass instead of two.
+
+> **Apple is dropped, not pending** (Aamir, 2026-08-10). It needs a paid Apple
+> Developer account ($99/yr) before the provider can be enabled at all.
+> `signInWithOAuth` in `@clbipp/auth` is already typed `'google' | 'apple'`, so
+> if that changes it is a `<form>` in `(auth)/oauth-buttons.tsx` plus steps 1–3
+> above against Apple instead of Google.
+
+### After the deploy, check the OAuth path specifically
+
+A first Google sign-in produces a session with **no `profiles` row** and must
+land on `/onboarding`, not `/login`. If it bounces to `/login` on the deployed
+origin but works locally, the cause is almost certainly step 3 above rather than
+anything in the app.
 
 ---
 

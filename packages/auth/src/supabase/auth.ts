@@ -23,9 +23,45 @@ export type SignUpInput = {
   businessAddress?: string
 }
 
+// The profile details collected AFTER an OAuth sign-in (Batch 11). Same shape
+// as SignUpInput minus the two things OAuth already settled: there is no
+// password, and the email is whatever the provider verified — taking it from a
+// form would let the profile row and the auth identity disagree.
+export type ProfileDetailsInput = Omit<SignUpInput, 'email' | 'password'>
+
 export async function signIn(email: string, password: string) {
   const supabase = await createClient()
   return supabase.auth.signInWithPassword({ email, password })
+}
+
+// ─── OAuth (Batch 11) ───────────────────────────────────────────────────────
+
+/** Providers configured in the Supabase dashboard. Apple is deferred — it needs
+ *  a paid Apple Developer account, so nothing about it is testable yet. The
+ *  union is here so adding it later is a button, not a signature change. */
+export type OAuthProvider = 'google' | 'apple'
+
+/**
+ * Starts an OAuth sign-in and returns the provider URL to send the user to.
+ *
+ * The redirect itself is the caller's job, the same way signIn and sendEmailOtp
+ * leave it to theirs — this package stays free of next/navigation so it can be
+ * used from a route handler or an action equally.
+ *
+ * `redirectTo` must be an origin registered in Supabase's Redirect URLs, and
+ * points at /auth/callback, which already handles the PKCE `?code=` shape this
+ * flow comes back with.
+ *
+ * ⚠ Unlike password sign-in, this creates an auth.users row with NO profiles
+ * row on first use. The middleware's onboardingPath is what catches that.
+ */
+export async function signInWithOAuth(provider: OAuthProvider, redirectTo: string) {
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo },
+  })
+  return { url: data?.url ?? null, error }
 }
 
 // Atomic account creation: the auth user and the profiles row are created
@@ -46,26 +82,70 @@ export async function signUpWithProfile(input: SignUpInput) {
   const userId = data.user?.id
   if (!userId) return { error: new Error('Sign-up did not return a user.') }
 
-  // Fleet-only columns are left undefined (→ NULL) for individual accounts.
-  // Supabase ignores undefined keys, so this one insert serves both flows.
-  // `role` is deliberately NOT sent: it defaults to 'customer' in the database
-  // and `authenticated` has no INSERT privilege on the column (supabase/grants.sql).
-  // Naming it here would both fail and hand the client a say in its own role.
-  const { error: profileError } = await supabase.from('profiles').insert({
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .insert(profileInsertPayload(userId, input.email, input))
+  if (profileError) return { error: profileError }
+
+  return { error: null }
+}
+
+/**
+ * The one place the profile-insert column list lives.
+ *
+ * Two callers write a profile row now — signUpWithProfile (email/password) and
+ * createProfileForCurrentUser (OAuth → /onboarding) — and the columns they may
+ * name are constrained by supabase/grants.sql's INSERT allowlist. Two copies of
+ * this object is how one of them ends up naming a column the database refuses.
+ *
+ * Fleet-only columns are left undefined (→ NULL) for individual accounts;
+ * Supabase ignores undefined keys, so this one payload serves both flows.
+ *
+ * `role` is deliberately NOT here: it defaults to 'customer' in the database and
+ * `authenticated` has no INSERT privilege on the column (supabase/grants.sql).
+ * Naming it would both fail and hand the client a say in its own role.
+ */
+function profileInsertPayload(userId: string, email: string, input: ProfileDetailsInput) {
+  return {
     id: userId,
     vendor_type: input.vendorType,
     full_name: input.fullName,
-    email: input.email,
+    email,
     phone: input.phone,
     company_name: input.companyName,
     gst_number: input.gstNumber,
     pan_number: input.panNumber,
     business_address: input.businessAddress,
     epr_reg_id: input.eprRegId,
-  })
-  if (profileError) return { error: profileError }
+  }
+}
 
-  return { error: null }
+/**
+ * Writes the profile row for a session that already exists — the second half of
+ * OAuth sign-in (Batch 11).
+ *
+ * signUpWithProfile can't serve this: the auth user is already created by the
+ * provider, so there is nothing to sign up, and there is no password to send.
+ *
+ * The uid and email come from the SESSION, never from the caller. The uid is
+ * what profiles' RLS INSERT policy checks against auth.uid(), and the email is
+ * the one the provider verified — accepting either from a form would let a
+ * profile row be written for someone else, or under an address nobody proved
+ * they own.
+ */
+export async function createProfileForCurrentUser(input: ProfileDetailsInput) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: new Error('You need to be signed in to finish setting up your account.') }
+
+  const { error } = await supabase
+    .from('profiles')
+    .insert(profileInsertPayload(user.id, user.email ?? '', input))
+
+  return { error }
 }
 
 export async function signOut() {

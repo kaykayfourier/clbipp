@@ -62,6 +62,9 @@ const ROUTES = [
   // Repeat booking. 109 is certified and carries real booking photos, which is
   // exactly why it's the one used here — see the assertion below.
   '/book?from=PKP-2026-000109',
+  // Batch 11. business@test HAS a profile row, so the pass condition is that
+  // the form does NOT render — see ONBOARDING_ISOLATION below.
+  '/onboarding',
   // ⚠ Do NOT add '/handover?id=…' here. That page calls acceptOffer() during
   // render, so a plain GET advances the pickup to `collected` — it would mutate
   // the demo data on every run and break the two offer routes above, which need
@@ -229,6 +232,28 @@ const BOOK_PREFILL_ISOLATION = {
   '/book?from=PKP-2026-000109': ['token='],
 }
 
+// ── Batch 11 — /onboarding ───────────────────────────────────────────────────
+// The screen that finishes an OAuth account by writing its profiles row. Every
+// seeded account already HAS one, so what is assertable here is the guard, not
+// the form: the middleware must redirect an onboarded session to /dashboard
+// before the account-type selector can render.
+//
+// That matters because the form posts an INSERT. A user who can re-open it
+// after onboarding is a user posting a second insert over a row that exists.
+//
+// ⚠ The profile-LESS case — the state Google actually produces — cannot be
+// reached from here: this script authenticates as a seeded user, and creating a
+// profile-less auth user would leave one behind on every run. It is covered by
+// packages/auth/src/middleware.test.ts instead, and end to end by the throwaway
+// verification script.
+// ⚠ Every string here is asserted to genuinely APPEAR for a profile-less
+// session by the batch's verification script. A `mustNotContain` on copy that
+// exists nowhere passes vacuously — the Batch 10 lesson, and the reason these
+// three were checked against the real page rather than written from the source.
+const ONBOARDING_ISOLATION = {
+  '/onboarding': ['SIGNED IN AS', 'what kind of account is this', 'Not you? Sign out'],
+}
+
 // ── /t/<publicToken> — the public tracking page (Batch 10) ───────────────────
 // Never smoke-tested before this batch, because `publicToken` defaulted to
 // gen_random_uuid() and changed on every reseed. The seed now derives it from
@@ -274,10 +299,20 @@ const PUBLIC_ROUTES = ['/login', '/signup', '/verify?email=demo%40example.com']
 // Substrings that must appear on a rendered page. Status alone proves a route
 // answered, not that it rendered the right thing (Batch 5 precedent).
 const CONTENT = {
-  '/login': ['Email me a login code', 'Send code', 'Log in'],
+  // 'Continue with Google' is Batch 11. It must be on BOTH screens: with OAuth
+  // there is no difference between signing in and signing up, and a user who
+  // only ever sees it on one of them will look for it on the other.
+  '/login': ['Email me a login code', 'Send code', 'Log in', 'Continue with Google'],
   '/verify?email=demo%40example.com': ['6-digit code', 'demo@example.com'],
-  '/signup': ['Individual', 'Fleet / company'],
+  '/signup': ['Individual', 'Fleet / company', 'Continue with Google'],
 }
+
+// Batch 11. /onboarding needs a SESSION but not a role — it is where a
+// profile-less OAuth user lands. It is deliberately NOT in the middleware's
+// publicPaths, and this is the assertion that keeps it that way: a future
+// redirect loop must not be "fixed" by making the profile-writing form
+// reachable logged out.
+const ONBOARDING_ANON = '/onboarding'
 
 // Note the `KEY =value` spacing and quoted values in .env.local — Next's dotenv
 // tolerates both, a naive split does not (same trap as packages/database/prisma/env.ts).
@@ -414,7 +449,9 @@ async function main() {
     await probe(route, {
       expectBounce: blocked,
       mustContain: blocked ? [] : (APP_CONTENT[route] ?? []),
-      mustNotContain: blocked ? [] : (BOOK_PREFILL_ISOLATION[route] ?? []),
+      mustNotContain: blocked
+        ? []
+        : (BOOK_PREFILL_ISOLATION[route] ?? ONBOARDING_ISOLATION[route] ?? []),
     })
   }
 
@@ -551,6 +588,9 @@ async function main() {
   for (const route of PUBLIC_ROUTES) {
     await probe(route, { anon: true, mustContain: CONTENT[route] ?? [] })
   }
+  // The other half of the /onboarding guard: a session is required. `anon` with
+  // `expectBounce` is the pass condition here, unlike the /t routes below.
+  await probe(ONBOARDING_ANON, { anon: true, expectBounce: true })
 
   // Batch 10. Anonymous by definition — these must render with NO session, in
   // both normal and --blocked mode, so they are never given `expectBounce`.
@@ -580,6 +620,7 @@ async function main() {
     Object.keys(EXPORT_ROUTES).length +
     1 + // EXPORT_EMPTY
     PUBLIC_ROUTES.length +
+    1 + // ONBOARDING_ANON
     Object.keys(PUBLIC_TRACK_ROUTES).length +
     1 // PUBLIC_TRACK_UNKNOWN
   console.log(

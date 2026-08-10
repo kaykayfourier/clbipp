@@ -6,7 +6,7 @@
 > `HANDOFF_PROTOCOL.md`.
 
 **Last updated:** 2026-08-10 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
-+ 8 + 9 + 10 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
++ 8 + 9 + 10 + 11 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
 booking quote engine + `createPickupWithItems` shipped in `packages/core`, the
 address book + Storage upload helper landed, **the 4-step booking wizard at
 `/book` is done** — the centrepiece of the revamp — **email OTP + `/verify` + the
@@ -22,9 +22,11 @@ invoices, history + repeat booking, the profile phone edit, and `/t/[token]`
 parity delivered as a real de-duplication into `@clbipp/ui` rather than a second
 copy of the layout — plus deploy PREP (`docs/DEPLOY.md`), with the deploy itself
 deliberately held until after Batch 11 so OAuth redirect URLs are registered
-once**.
-Next: **Batch 11, Google / Apple sign-in + `/onboarding`**; then **Batch 12,
-the actual deploy**.
+once**, and **Batch 11 shipped Google sign-in plus the `/onboarding` step that
+makes it possible — the profile-less-session branch went into the shared
+middleware rather than `/auth/callback`, and Apple was dropped (it needs a paid
+developer account)**.
+Next: **Batch 12, the actual deploy**.
 Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
@@ -177,6 +179,34 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    - **The app is NOT deployed.** `docs/DEPLOY.md` is the runbook; it runs after
      Batch 11. The Vercel build command must go through turbo — the generated
      Prisma client is gitignored.
+11. **OAuth exists and it brought a new session state with it (Batch 11).**
+   `signInWithOAuth` + `createProfileForCurrentUser` in `@clbipp/auth`, one
+   Google button shared by `/login` and `/signup`, and a new `/onboarding`
+   screen. The build is **34 routes** and `npm run smoke` covers **42**.
+   - **Google creates an `auth.users` row and NO `profiles` row**, which the
+     Batch 6 role gate reads as a half-created account and signs out. The fix is
+     a new `onboardingPath` option on `createAuthMiddleware`: a profile-less
+     session is redirected to `/onboarding` instead of being signed out, and a
+     session that *has* a profile is redirected **off** `/onboarding` so the
+     form's INSERT can't be posted twice.
+     ⚠ **It lives in the middleware, not `/auth/callback`, deliberately.** The
+     callback is one way in; a refresh or a bookmark carries the same
+     profile-less cookie and never passes through it. `/auth/callback` is
+     unchanged.
+     ⚠ **`/onboarding` is NOT a public path.** It needs a session, just not a
+     role. There is a smoke assertion standing on that.
+   - **`signUpWithProfile` and `createProfileForCurrentUser` share one
+     `profileInsertPayload`** — both are constrained by `grants.sql`'s INSERT
+     allowlist, and `role` is in neither. **No `grants.sql` change was needed**;
+     its allowlist already matched, verified live.
+   - **The uid and email come from the session, never the form.** Same posture
+     as everything else that touches identity.
+   - The origin for the OAuth `redirectTo` is read from the **request headers**,
+     not an env var, so localhost, production and previews all work unchanged.
+   - **Apple was dropped** (needs a paid Apple Developer account) — the helper
+     is provider-typed so it stays a one-form addition.
+   - **`packages/auth/src/middleware.test.ts` is new** because the profile-less
+     session is the one state `npm run smoke` cannot construct.
 
 **Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
 cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts

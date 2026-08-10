@@ -29,8 +29,8 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 8 | B3/B6 — PDF generation + payment + receipt screens | B | ✅ done, staged |
 | 9 | **B4/B5 — dashboard impact (CO₂) + compliance CSV** | B | ✅ done, staged |
 | 10 | P2 screens (invoices, history, profile, `/t` parity) + **deploy prep** | A | ✅ done, staged |
-| 11 | **Google / Apple sign-in** (new — see below, has a real blocker) | A | ⏭ **next — start here** |
-| 12 | **Deploy** — deferred out of 10 on purpose, see `docs/DEPLOY.md` | A | pending, after 11 |
+| 11 | **Google sign-in + `/onboarding`** (Apple dropped — see below) | A | ✅ done, staged |
+| 12 | **Deploy** — deferred out of 10 on purpose, see `docs/DEPLOY.md` | A | ⏭ **next — start here** |
 
 > **No demo is being shown right now** (changed 2026-08-09). Aamir is finishing
 > the revamp and the remaining batches first, then deploying a proper link. So
@@ -975,32 +975,182 @@ boundary behaves differently. Reasoning and a suggested handling are in §7 of
 
 ---
 
-## ▶ Next: Batch 11 — Google / Apple sign-in
+## What Batch 11 delivered — Google sign-in + `/onboarding`
 
-Full brief is further down this file ("Batch 11 — Google / Apple sign-in"), and
-it is unchanged. The short version: **the OAuth wiring is the easy half**; the
-real work is that OAuth creates an `auth.users` row but no `profiles` row, and
-the Batch 6 role gate signs out any session whose profile read returns
-`PGRST116`. So the batch is OAuth **plus a post-callback `/onboarding` step**
-that collects account type + the individual/fleet fields.
+### Apple is dropped, not deferred-with-code (Aamir, 2026-08-10)
 
-**What Batch 10 leaves teed up for it:**
+The provider cannot be enabled in Supabase without a **paid Apple Developer
+account ($99/yr)**, so an Apple button could only ever return *"provider is not
+enabled"*. Shipping dead UI to look complete is worse than not shipping it.
 
-- **`docs/DEPLOY.md` §6 is the OAuth-origin checklist**, written while the
-  reasoning was fresh. Batch 11's dashboard work and the deploy's dashboard work
-  are the same pass.
-- **Prerequisites Aamir must do outside the repo**, and they gate testing:
-  a GCP OAuth client (free) for Google; a **paid Apple Developer account
-  ($99/yr)** for Apple. If the Apple account isn't wanted, ship Google alone.
-- The new profile write path (`updatePhone` in `profile/actions.ts`) is the
-  pattern `/onboarding`'s insert should follow: **server Supabase client, so the
-  `grants.sql` allowlist applies.** `role` must stay server-defaulted —
-  `authenticated` has no INSERT privilege on that column, and there is a unit
-  test asserting it.
-- `smoke.mjs` has four probe shapes now — `probe` (HTML, with both
-  `mustContain` and `mustNotContain` working since this batch), `probeDocument`
-  (PDF bytes), `probeExport` (CSV), plus the anonymous `/t` block. `/onboarding`
-  should land in `ROUTES` with content assertions.
+`signInWithOAuth` in `@clbipp/auth` is typed `'google' | 'apple'`, so if the
+account is ever bought, Apple is a `<form>` in `oauth-buttons.tsx` plus a
+dashboard toggle — no signature change and no rework.
+
+### The design decision — the profile-less branch lives in the MIDDLEWARE
+
+This file's Batch 11 brief said `/auth/callback` should gain the "no profile row
+→ `/onboarding`" branch. It was built in `packages/auth/src/middleware.ts`
+instead, and the reasoning is worth keeping:
+
+**The callback is one way in, not the only one.** Once the OAuth session cookie
+exists, a refresh, a bookmark, a history entry or coming back tomorrow all
+arrive with the same profile-less cookie and never pass through
+`/auth/callback`. Every one of them hits the middleware — which, before this
+batch, signed them out. Fixing only the callback would have left the exact loop
+this batch exists to close **reachable by pressing reload**.
+
+It also costs nothing: the middleware already reads `profiles.role` for the
+Batch 6 role gate, so this is a branch on a result we already have rather than a
+second query. **`/auth/callback` is unchanged** — it already handled the PKCE
+`?code=` shape and already refused off-origin `next` values.
+
+New option on the shared factory, so the behaviour is opt-in per app:
+
+| Situation | Before | After |
+|---|---|---|
+| No profile row, `onboardingPath` set | signOut → `/login` | → `/onboarding` |
+| No profile row, already on `/onboarding` | signOut → `/login` | renders |
+| **Has** a profile, on `/onboarding` | rendered the form | → `homePath` |
+| Wrong role (anywhere, incl. `/onboarding`) | signOut → `/login` | unchanged |
+| Infrastructure error on the read | fail **open** | unchanged |
+| `onboardingPath` unset (agent · admin) | signOut → `/login` | **unchanged** |
+
+Two rows there are load-bearing beyond the obvious one:
+
+- **"Has a profile, on `/onboarding` → home."** Without it, an onboarded user can
+  re-open a form whose submit is an `INSERT`.
+- **`/onboarding` is NOT in `publicPaths`.** It needs a *session*; it just
+  doesn't need a *role* yet. Adding it to `publicPaths` would make a
+  profile-writing form reachable logged out, and there is a smoke assertion
+  standing on that so a future redirect loop can't be "fixed" that way.
+
+### The files
+
+| File | What |
+|---|---|
+| `packages/auth/src/middleware.ts` | `onboardingPath` + the branch above |
+| `packages/auth/src/supabase/auth.ts` | `signInWithOAuth`, `createProfileForCurrentUser`, shared `profileInsertPayload` |
+| `packages/core/src/validation.ts` | `profileDetailsBaseSchema` + `fleetFieldsShape` extracted; `onboarding{Individual,Fleet}Schema` added |
+| `(auth)/onboarding/page.tsx` · `actions.ts` | **new** — account type + the fields that choice decides |
+| `(auth)/oauth-buttons.tsx` · `oauth-actions.ts` | **new** — one Google button, shared by `/login` and `/signup` |
+| `apps/customer/src/middleware.ts` | one line: `onboardingPath: '/onboarding'` |
+
+### The decisions worth knowing
+
+1. **The uid and the email come from the SESSION, never the form.**
+   `createProfileForCurrentUser` reads both from `auth.getUser()`. The uid is
+   what `profiles`' RLS INSERT policy checks against `auth.uid()`; the email is
+   the one Google actually verified. Accepting either from a form would let a
+   row be written for someone else, or under an address nobody proved they own.
+   There is a schema test asserting a posted `email`/`password` is stripped
+   rather than carried through.
+2. **One `profileInsertPayload`, two callers.** `signUpWithProfile` and
+   `createProfileForCurrentUser` now share the column list, because
+   `supabase/grants.sql`'s INSERT allowlist constrains both and two copies is
+   how one of them ends up naming a column the database refuses. **`role` is in
+   neither** — the database defaults it and `authenticated` has no INSERT
+   privilege on the column. Both paths now carry that regression test.
+   **No `grants.sql` change was needed**: its allowlist already covered exactly
+   the columns onboarding writes. Verified against the live database rather
+   than read off the file.
+3. **The schemas were split, not copied.** Onboarding needs signup's fields
+   *minus* email and password — reusing `signupIndividualSchema` would reject a
+   valid Google account for missing a password it cannot have, and a second copy
+   of the fleet field list is how GST validation ends up different on two
+   screens. `profileDetailsBaseSchema` + `fleetFieldsShape` are now the shared
+   halves; the existing signup tests are the proof the refactor changed nothing.
+4. **The origin is read from the request, not an env var.** OAuth redirect URLs
+   are per-origin — the fact that made deploy wait for this batch — but the app
+   doesn't need telling what its own origin is. `oauth-actions.ts` reads
+   `x-forwarded-host`/`host`, so localhost, production **and every preview
+   deployment** work with nothing to keep in sync.
+5. **An unconfigured provider is a readable error, not a stack trace.** Google
+   isn't enabled in the Supabase dashboard yet, so today the button redirects
+   back to `/login` saying sign-in isn't available and pointing at password and
+   OTP, rather than forwarding *"Unsupported provider: provider is not
+   enabled"*. **This is what let the batch be built, built green and smoke-tested
+   before Aamir touches the GCP console.**
+6. **"Not you? Sign out" exists for a real reason.** Signing in with the wrong
+   Google account is otherwise unrecoverable — the middleware sends every route
+   back to `/onboarding` until a profile exists, so without it the only way out
+   is clearing cookies.
+7. **The button is on `/login` AND `/signup`.** With OAuth there is no
+   difference between the two, and a user who sees it on one screen will look
+   for it on the other. One shared component, asserted on both by smoke.
+
+### Verified
+
+- `npm run build` green — **34 routes**, `/onboarding` new. (Batch 10's "34" was
+  one high; the actual count before this batch was 33, checked by building the
+  stashed tree.)
+- `npm run lint --force` clean. **142 tests** (20 decision-engine + 39 auth +
+  83 core — **23 new**).
+- **`packages/auth/src/middleware.test.ts` is new**, and it is the important
+  one. The profile-less session is the state Google actually produces, and
+  `npm run smoke` **structurally cannot create it** — smoke logs in as a seeded
+  user and every seeded user has a profile row. Nine tests drive the real
+  factory with a mocked Supabase client across all six rows of the table above.
+- `npm run smoke` — **all 42 routes** (was 40). `/onboarding` authenticated must
+  redirect to `/dashboard`; `/onboarding` anonymous must bounce to `/login`;
+  `Continue with Google` asserted on both `/login` and `/signup`.
+- `npm run smoke -- agent@test demo1234 --blocked` — all 42 correct, including
+  `/onboarding` bouncing (a wrong-role session gets no free pass from the
+  onboarding exemption).
+- **Against the real database + the running app** (throwaway script, deleted
+  after) — **26 checks**: a disposable auth user with **no** profile row is
+  created, then `/dashboard` → `/onboarding` and **not** `/login`; a *second*
+  request still routes there, which is what proves the session was not destroyed
+  (`signOut` clears the refresh token, so a signed-out session cannot recover);
+  every other app route routes there too; `/onboarding` renders with the right
+  email; an insert naming `role: 'admin'` is **403 and writes nothing**; the
+  onboarding-shaped insert succeeds and defaults `role=customer`,
+  `kyc_status=pending`, `wallet=0`, `phone_verified=false`; **`/onboarding` then
+  redirects to `/dashboard`** and `/dashboard` renders; `business@test` is
+  untouched; the seed is still 10 pickups; and the disposable user and its row
+  are deleted.
+- **🐛 Caught by that script, in the Batch 10 tradition:** smoke's
+  `mustNotContain` for `/onboarding` originally listed `'What kind of account'`
+  — copy that **appears nowhere in the page** (the real string is lowercase and
+  mid-sentence). It passed, vacuously. The verification now asserts all three
+  strings are genuinely PRESENT for a profile-less session, so the negative
+  assertion in smoke is provably non-vacuous. Exactly the failure mode Batch 10
+  found in `probe()` itself, one layer up.
+
+### Known gaps in this batch
+
+- **No real Google round trip has happened.** The provider isn't enabled yet
+  (prerequisites below), so what is proven is everything on our side of the
+  redirect: the profile-less session, the onboarding write, the guards, and a
+  readable failure when the provider is missing. The round trip itself joins
+  *"type the code from a real inbox"* on the end-of-revamp manual list.
+- **The `/onboarding` server action is exercised through its parts, not as a
+  form POST.** `createProfileForCurrentUser` is unit-tested and the resulting
+  insert is verified against the live database, but nothing posts the actual
+  form — Next server actions need a generated action id, which a script can't
+  forge. The real Google run covers it.
+- **`vendor_type` still can't be changed afterwards**, by design (Batch 6) — it
+  is not on the `grants.sql` UPDATE allowlist. An OAuth user who picks the wrong
+  one needs the same "switch account type" flow a password user does, which
+  doesn't exist yet.
+- **No account linking.** Signing in with Google using an address that already
+  has a password account is Supabase's identity-linking behaviour, untested here
+  and not something the app does anything special about.
+- **`/handover` still mutates on GET.** Untouched for the fifth batch running.
+  Still the highest-value small fix outstanding.
+
+### ▶ Next: Batch 12 — deploy
+
+`docs/DEPLOY.md` is the runbook and §6 is now the Google-only OAuth checklist.
+**Prerequisites Aamir must do in dashboards, not in the repo** — they gate the
+live Google flow, nothing else:
+
+1. GCP → OAuth 2.0 client (Web application). The authorised redirect URI is
+   **Supabase's** callback, `https://<project-ref>.supabase.co/auth/v1/callback`.
+2. Supabase → Authentication → Providers → **Google**: enable, paste the client
+   id + secret.
+3. Supabase → Authentication → URL Configuration → **Redirect URLs**: add
+   `http://localhost:3000/**`, and the Vercel origin as part of the deploy pass.
 
 ### ⚠ Still true, still not a code task
 
@@ -1247,7 +1397,12 @@ works as-is. Worth a small task before launch.
 
 ---
 
-## Batch 11 — Google / Apple sign-in (new, deferred from 6.5)
+## Superseded — the original Batch 11 brief
+
+**Delivered — see "What Batch 11 delivered" above** for what actually shipped,
+including the two places this brief was overtaken: the profile-less branch went
+into the **middleware** rather than `/auth/callback` (reasoning up there), and
+**Apple was dropped** rather than built. Kept for the reasoning trail.
 
 Requested by Aamir. **The OAuth wiring is the easy half.** The real blocker:
 

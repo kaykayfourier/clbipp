@@ -3,6 +3,8 @@ import {
   bookingLineItemSchema,
   bookingSubmissionSchema,
   normaliseIndianPhone,
+  onboardingFleetSchema,
+  onboardingIndividualSchema,
   signupFleetSchema,
   signupIndividualSchema,
 } from "./validation";
@@ -245,5 +247,72 @@ describe("signup schemas", () => {
       businessAddress: "12 Industrial Area, New Delhi",
     });
     expect(result.success).toBe(true);
+  });
+});
+
+// Batch 11. What /onboarding posts after a Google sign-in. Same details as
+// signup MINUS email and password: the provider verified the first and there is
+// no second. Both sets are built from one shared shape in validation.ts, so
+// these tests plus the signup ones above are what stop the two drifting.
+describe("onboarding schemas", () => {
+  const details = { fullName: "Vendor One" };
+
+  it("accepts details with neither an email nor a password", () => {
+    // The whole reason this schema exists. Reusing signupIndividualSchema here
+    // would reject a valid OAuth account for missing a password it can't have.
+    const result = onboardingIndividualSchema.safeParse(details);
+    expect(result.success).toBe(true);
+  });
+
+  it("normalises a phone exactly as signup does", () => {
+    const result = onboardingIndividualSchema.safeParse({ ...details, phone: "098765 43210" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.phone).toBe("+919876543210");
+  });
+
+  it("treats a blank phone field as absent", () => {
+    const result = onboardingIndividualSchema.safeParse({ ...details, phone: "" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.phone).toBeUndefined();
+  });
+
+  it("rejects a malformed phone", () => {
+    expect(onboardingIndividualSchema.safeParse({ ...details, phone: "123" }).success).toBe(false);
+  });
+
+  it("still requires a name — the provider's is a suggestion, not a guarantee", () => {
+    expect(onboardingIndividualSchema.safeParse({ fullName: "" }).success).toBe(false);
+  });
+
+  it("requires the business fields on a fleet account", () => {
+    expect(onboardingFleetSchema.safeParse(details).success).toBe(false);
+  });
+
+  it("accepts a complete fleet account", () => {
+    const result = onboardingFleetSchema.safeParse({
+      ...details,
+      companyName: "Acme Batteries Pvt Ltd",
+      eprRegId: "EPR/123",
+      gstNumber: "22AAAAA0000A1Z5",
+      panNumber: "AAAAA0000A",
+      businessAddress: "12 Industrial Area, New Delhi",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("does not carry email or password through even if they are posted", () => {
+    // A stray field must not reach createProfileForCurrentUser, which takes its
+    // email from the session. Zod strips unknown keys by default; asserting it
+    // means a later `.passthrough()` can't quietly change that.
+    const result = onboardingIndividualSchema.safeParse({
+      ...details,
+      email: "attacker@example.com",
+      password: "hunter2",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty("email");
+      expect(result.data).not.toHaveProperty("password");
+    }
   });
 });
