@@ -43,3 +43,11 @@ packages/database/src/generated/
 
 CLAUDE.local.md
 post-review.md
+
+# Superseded working docs — kept locally, out of the repo (2026-08-12).
+# All four describe the PRE-monorepo app and were replaced by
+# REVAMP_BATCHES_2026-08-09.md and HANDOVER_KHALID_2026-08-12.md.
+docs/BATCH_A_FLAGS.md
+docs/REMEDIATION_PLAN.md
+docs/REVIEW_findings_2026-07-10.md
+docs/schema-contract-verify.txt

@@ -280,7 +280,7 @@ several batches old.
 | # | Item | Notes |
 |---|---|---|
 | 5 | **Decide the `successText` colour** | §1b. Currently a silent WCAG AA regression if merged as-is |
-| 6 | **Batch 13 — the full-app scan** | Never done. Brief in `REVAMP_BATCHES_2026-08-09.md`. Every batch verified *itself*; nothing has looked across the seams for cross-batch drift, dead ends, or the two locked rules holding app-wide |
+| 6 | **Batch 13 — the full-app scan** | Never done, and **it's yours now**. Brief in `REVAMP_BATCHES_2026-08-09.md`. Every batch verified *itself*; nothing has looked across the seams for cross-batch drift, dead ends, or the two locked rules holding app-wide. **Cheapest high-value slice: `/code-review high` over the branch diff** (or `/code-review ultra` — it's a large diff). Do it *after* the §1 merge, so the review sees the resolved tree rather than the collision |
 | 7 | **A real manual pass on a handset** | The one thing no script covers. Accumulated list in `REVAMP_BATCHES` → "Manual checks owed": Google round trip, an OTP code from a real inbox, GPS over LAN http, how a PDF opens on a phone, phone-width layout on payment/history/invoice/profile, and the `cancelled` state against real data |
 | 8 | **Fleet vs individual — a decision, not code** | §4. Needs the company's answer, not a sprint |
 
