@@ -1,20 +1,34 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@clbipp/auth/server";
+import { getCurrentProfile } from "@clbipp/auth";
+import { prisma } from "@clbipp/database";
 import { AppShell, PagePadding, SectionLabel } from "@clbipp/ui";
 import { Button } from "@clbipp/ui";
 import { Card } from "@clbipp/ui";
 import { Timeline } from "@clbipp/ui";
 import { Banner } from "@clbipp/ui";
-import { ErrorState } from "@clbipp/ui";
-import { acceptOffer } from "./actions";
+import { isStageBefore } from "@clbipp/ui";
+import { CATEGORY_LABELS } from "../book/copy";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
-// Server component. Vendor arrives here by pressing "Accept offer" on /offer or
-// /offer-breakdown. On load:
-//   1. Call acceptOffer() — updates pickup status → "collected" + status_event
-//   2. Fetch the updated pickup for display
-//   3. Render the handover confirmation screen
+// The confirmation screen a customer lands on AFTER accepting an offer.
+//
+// ⚠ It used to be the thing that DID the accepting: it called acceptOffer()
+// during its own render, so a GET advanced the lifecycle. Batch 12 moved that
+// to `acceptOfferAndConfirm`, the POST form action behind AcceptOfferButton.
+// This page is now a pure read, which is why it is finally in `npm run smoke`.
+//
+// Because the write moved out, a direct GET has to be handled: someone opening
+// /handover?id=… by hand has not accepted anything, so an unaccepted pickup is
+// sent back to its offer rather than shown a confirmation for a decision nobody
+// made.
+//
+// Data comes from Prisma scoped by vendorId. The old query read `battery_type`
+// and `approx_quantity`, which are schema-v1 columns that `createPickupWithItems`
+// stopped writing in Batch 5 — they are null on every pickup in the database, so
+// the summary card rendered a blank type and the literal string "null units".
+// Category lives on the Pickup header and the real quantities/weights live on
+// BatteryItem.
 
 interface PageProps {
   searchParams: Promise<{ id?: string }>;
@@ -27,36 +41,34 @@ export default async function HandoverPage({ searchParams }: PageProps) {
     redirect("/dashboard");
   }
 
-  // Run the accept action — idempotent if already "collected"
-  const { error: acceptError } = await acceptOffer(id);
+  const result = await getCurrentProfile();
+  if (!result) redirect("/login");
 
-  if (acceptError) {
-    return (
-      <AppShell title="Handover" showBack backHref={`/offer?id=${id}`} hideNav>
-        <PagePadding>
-          <ErrorState
-            heading="Couldn't confirm handover"
-            message={acceptError}
-          />
-          <div className="mt-4">
-            <Link href={`/offer?id=${id}`}>
-              <Button variant="secondary" fullWidth>
-                Back to offer
-              </Button>
-            </Link>
-          </div>
-        </PagePadding>
-      </AppShell>
-    );
+  // Scoped by vendorId — Prisma bypasses RLS, so ownership is enforced here.
+  const pickup = await prisma.pickup.findFirst({
+    where: { id, vendorId: result.user.id },
+    select: {
+      id: true,
+      status: true,
+      category: true,
+      location: true,
+      items: { select: { quantity: true, weightKg: true } },
+    },
+  });
+
+  if (!pickup) redirect("/dashboard");
+
+  // Nothing was accepted — either a hand-typed URL or a stale tab. Send them to
+  // the decision instead of confirming one that hasn't been taken.
+  if (isStageBefore(pickup.status, "collected")) {
+    redirect(`/offer?id=${pickup.id}`);
+  }
+  if (pickup.status === "cancelled") {
+    redirect(`/track/${pickup.id}`);
   }
 
-  // Fetch updated pickup for the confirmation display
-  const supabase = await createClient();
-  const { data: pickup } = await supabase
-    .from("pickups")
-    .select("id, status, battery_type, approx_quantity, location")
-    .eq("id", id)
-    .single();
+  const units = pickup.items.reduce((sum, item) => sum + item.quantity, 0);
+  const weightKg = pickup.items.reduce((sum, item) => sum + Number(item.weightKg), 0);
 
   return (
     <AppShell title="Handover Confirmed" hideNav>
@@ -85,11 +97,9 @@ export default async function HandoverPage({ searchParams }: PageProps) {
             <h1 className="text-2xl font-semibold text-text-primary">
               Handover Confirmed
             </h1>
-            {pickup && (
-              <p className="text-sm text-text-secondary mt-1 font-mono">
-                {pickup.id}
-              </p>
-            )}
+            <p className="text-sm text-text-secondary mt-1 font-mono">
+              {pickup.id}
+            </p>
           </div>
         </div>
 
@@ -107,23 +117,24 @@ export default async function HandoverPage({ searchParams }: PageProps) {
           />
         </Card>
 
-        {/* Pickup summary */}
-        {pickup && (
-          <Card variant="tinted" className="flex flex-col gap-3">
-            <SectionLabel>Pickup Details</SectionLabel>
-            <SummaryRow
-              label="Battery type"
-              value={formatBatteryType(pickup.battery_type)}
-            />
-            <hr className="border-t border-border" />
-            <SummaryRow
-              label="Quantity"
-              value={`${pickup.approx_quantity} units`}
-            />
-            <hr className="border-t border-border" />
-            <SummaryRow label="Location" value={pickup.location} />
-          </Card>
-        )}
+        {/* Pickup summary. Category comes off the header row; units and weight
+            are summed from the BatteryItem lines, which is where booking has
+            actually written them since Batch 5. Chemistry is deliberately not
+            shown — it's the field agent's call, confirmed per item after
+            collection, and this screen fires before that. */}
+        <Card variant="tinted" className="flex flex-col gap-3">
+          <SectionLabel>Pickup Details</SectionLabel>
+          <SummaryRow label="Category" value={CATEGORY_LABELS[pickup.category]} />
+          <hr className="border-t border-border" />
+          <SummaryRow label="Quantity" value={`${units} units`} />
+          <hr className="border-t border-border" />
+          <SummaryRow
+            label="Approx. weight"
+            value={`${weightKg.toLocaleString("en-IN")} kg`}
+          />
+          <hr className="border-t border-border" />
+          <SummaryRow label="Location" value={pickup.location} />
+        </Card>
 
         {/* Next steps */}
         <Banner variant="success">
@@ -172,14 +183,3 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatBatteryType(raw: string): string {
-  const map: Record<string, string> = {
-    li_ion_nmc: "Li-ion NMC",
-    li_ion_lfp: "Li-ion LFP",
-    li_ion_nca: "Li-ion NCA",
-    lead_acid: "Lead Acid",
-    nimh: "NiMH",
-    other: "Other",
-  };
-  return map[raw] ?? raw;
-}

@@ -37,7 +37,17 @@ Prior: 2026-08-07 Plan v2 written)
 
 **→ `docs/REVAMP_BATCHES_2026-08-09.md` is the live status file and the place to
 resume.** It has the batch tracker, what batches 1–2 delivered, the demo
-accounts + passwords, the commands, and the known gaps.
+accounts + passwords, the commands, and the known gaps. Start at its
+**"▶ Resume here"** section.
+
+> **🔀 The revamp's build phase is over (2026-08-10).** Batches 0A–11 are all
+> applied on `feat/customer-v2`. Two things remain, each its own chat:
+> **Batch 12 — deploy** (`docs/DEPLOY.md` is the runbook) and **Batch 13 — a
+> full-app scan**, the first pass that looks across batch seams rather than
+> inside one batch. The **consolidated outstanding list** — every known gap from
+> all eleven batches, plus the manual checks owed on a real handset — is in
+> `REVAMP_BATCHES_2026-08-09.md` under that heading. Don't rebuild that list
+> from the per-batch sections; it's already been done.
 
 `docs/PLAN_V2_CUSTOMER_APP.md` remains the operative *plan* (the why, and
 decisions D1–D7). This file (`PROJECT_STATE.md`) is now largely **historical

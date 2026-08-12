@@ -65,14 +65,19 @@ const ROUTES = [
   // Batch 11. business@test HAS a profile row, so the pass condition is that
   // the form does NOT render — see ONBOARDING_ISOLATION below.
   '/onboarding',
-  // ⚠ Do NOT add '/handover?id=…' here. That page calls acceptOffer() during
-  // render, so a plain GET advances the pickup to `collected` — it would mutate
-  // the demo data on every run and break the two offer routes above, which need
-  // a pickup still at `offered`. See the Batch 6.5 notes.
+  // Batch 12. This route was excluded from Batch 6.5 to Batch 11 because the
+  // page called acceptOffer() during its own render, so a plain GET advanced the
+  // pickup to `collected` — it mutated the demo data on every run and broke the
+  // two offer routes above, which need a pickup still at `offered`.
   //
-  // The payment screen is safe to fetch by contrast, and deliberately so:
-  // settling is a POST form action, never something a render does. That is the
-  // difference this batch was careful about.
+  // The accept is now `acceptOfferAndConfirm`, a POST form action, and this page
+  // is a pure read — so it is finally safe to fetch, and being in this list is
+  // what stops it regressing. 105 is already `collected`, so the confirmation is
+  // the correct thing to render for it. The pickup that must NOT be advanced by
+  // a GET is asserted separately in APP_REJECTS.
+  '/handover?id=PKP-2026-000105',
+  // The payment screen is safe to fetch for the same reason: settling is a POST
+  // form action, never something a render does.
 ]
 
 // Batch 8 — the three PDF documents, fetched as bytes rather than HTML.
@@ -138,6 +143,23 @@ const APP_REJECTS = {
   // Batch 8: nothing is collected at `requested`, so there is no receipt to
   // show. The screen must render its empty state, not receipt fields.
   '/receipt/PKP-2026-000101': ['Receipt number', 'Agreed payout'],
+  // Batch 12 — half of the assertion that the accept is no longer a GET. 104 is
+  // still at `offered` and nobody has accepted it, so /handover must show no
+  // confirmation. Paired with OFFER_SURVIVED_GET below, which is the half that
+  // proves nothing was WRITTEN — this one alone would still pass if the page
+  // advanced the pickup and then redirected.
+  '/handover?id=PKP-2026-000104': ['Handover Confirmed'],
+}
+
+// The other half, and the load-bearing one. Re-fetched AFTER the /handover probe
+// above, deliberately: '/offer?id=PKP-2026-000104' is also asserted in
+// APP_CONTENT, but ROUTES runs before APP_REJECTS, so that earlier pass says
+// nothing about the state afterwards. This route renders only while the pickup
+// is still at `offered` — so if a GET to /handover ever advances it again (the
+// Batch 6.5 bug), the pickup lands on `collected`, the guard turns this away,
+// and the run fails here.
+const OFFER_SURVIVED_GET = {
+  '/offer?id=PKP-2026-000104': ['Estimated Offer', 'Why this price?'],
 }
 
 // Content that must appear on a logged-in route. A redirect returns no body, so
@@ -221,6 +243,19 @@ const APP_CONTENT = {
   // "Copied from" proves the prefill branch ran; the id proves it read THIS
   // pickup.
   '/book?from=PKP-2026-000109': ['Copied from', 'PKP-2026-000109', 'Portable'],
+  // Batch 12. 105 is `industrial`, 6 + 3 units and 240 + 120 kg across its two
+  // BatteryItem lines. Asserting the summed figures is the point: the old query
+  // read the schema-v1 `battery_type` / `approx_quantity` columns, which nothing
+  // has written since Batch 5, so this card used to render a blank type and the
+  // literal string "null units". Numbers that can only come from the item rows
+  // are what proves it is reading the live shape.
+  '/handover?id=PKP-2026-000105': [
+    'Handover Confirmed',
+    'PKP-2026-000105',
+    'Industrial',
+    '9 units',
+    '360 kg',
+  ],
 }
 
 // The half of repeat booking that actually matters. PKP-2026-000109 carries
@@ -463,6 +498,15 @@ async function main() {
     await probe(route, {
       expectBounce: blocked,
       mustNotContain: blocked ? [] : forbidden,
+    })
+  }
+
+  // Batch 12. Must come after the loop above — see OFFER_SURVIVED_GET.
+  console.log('\n  — the offer survived being GET-ed at /handover —')
+  for (const [route, expected] of Object.entries(OFFER_SURVIVED_GET)) {
+    await probe(route, {
+      expectBounce: blocked,
+      mustContain: blocked ? [] : expected,
     })
   }
 

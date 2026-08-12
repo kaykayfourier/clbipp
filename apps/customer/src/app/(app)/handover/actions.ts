@@ -1,5 +1,6 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { createClient } from '@clbipp/auth/server'
 import { createAdminClient } from '@clbipp/auth/admin'
 
@@ -90,6 +91,37 @@ export async function acceptOffer(
   if (eventError) console.error('[acceptOffer] status_events insert failed:', eventError)
 
   return { error: null }
+}
+
+// ─── acceptOfferAndConfirm ───────────────────────────────────────────────────
+// The form action behind the "Accept offer" button on /offer and
+// /offer-breakdown, and the ONLY thing that should ever call acceptOffer().
+//
+// Until Batch 12 that button was a <Link> to /handover, and /handover called
+// acceptOffer() during its render — so the lifecycle advanced on a GET. That is
+// the wrong shape for a state change: a GET is fetched by link prefetchers, by
+// crawlers, and by anything that "opens" a URL on the user's behalf, none of
+// which represent a person deciding to sell their batteries. It also had to be
+// excluded from `npm run smoke` for exactly that reason, which meant the one
+// screen doing a lifecycle write was the one screen never smoke-tested.
+//
+// Now: POST does the write, then redirects to /handover, which is a pure read.
+// Redirect-after-POST also means a refresh on the confirmation page re-renders
+// rather than re-submitting.
+export async function acceptOfferAndConfirm(formData: FormData) {
+  const pickupId = String(formData.get('pickupId') ?? '')
+  if (!pickupId) redirect('/dashboard')
+
+  const { error } = await acceptOffer(pickupId)
+
+  // Back to the offer with the reason, rather than onward to a confirmation
+  // screen confirming something that didn't happen. acceptOffer has already
+  // done the ownership check, so there is nothing to re-verify here.
+  if (error) {
+    redirect(`/offer?id=${encodeURIComponent(pickupId)}&error=${encodeURIComponent(error)}`)
+  }
+
+  redirect(`/handover?id=${encodeURIComponent(pickupId)}`)
 }
 
 // ─── cancelPickup ────────────────────────────────────────────────────────────

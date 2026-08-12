@@ -29,8 +29,15 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 | 8 | B3/B6 — PDF generation + payment + receipt screens | B | ✅ done, staged |
 | 9 | **B4/B5 — dashboard impact (CO₂) + compliance CSV** | B | ✅ done, staged |
 | 10 | P2 screens (invoices, history, profile, `/t` parity) + **deploy prep** | A | ✅ done, staged |
-| 11 | **Google sign-in + `/onboarding`** (Apple dropped — see below) | A | ✅ done, staged |
-| 12 | **Deploy** — deferred out of 10 on purpose, see `docs/DEPLOY.md` | A | ⏭ **next — start here** |
+| 11 | **Google sign-in + `/onboarding`** (Apple dropped — see below) | A | ✅ done, committed `de602fa` |
+| 12 | **Deploy** — deferred out of 10 on purpose, see `docs/DEPLOY.md` | A | 🔨 code half **done**; dashboard half (Google + Vercel) is yours to click |
+| 13 | **Full-app scan** — the whole revamp reviewed end to end (brief below) | A | pending, after 12 |
+
+> **🔀 HANDOFF POINT (2026-08-10).** Batch 11 was the last *build* batch. Every
+> feature batch of the revamp is done and staged on `feat/customer-v2`. What
+> remains is **Batch 12 (deploy)** and **Batch 13 (a thorough scan of the whole
+> revamp and app)** — both are their own chats, and both start from this file.
+> Read "▶ Resume here" immediately below before anything else.
 
 > **No demo is being shown right now** (changed 2026-08-09). Aamir is finishing
 > the revamp and the remaining batches first, then deploying a proper link. So
@@ -40,6 +47,225 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 **Cut order if time runs short** (Plan v2 §8): P2 screens → wallet → invoices →
 receipt PDF (keep the screen) → address GPS.
 **Never cut:** booking flow, `BatteryItem`, tracking, EPR certificate.
+
+---
+
+## ▶ Resume here (2026-08-10, after Batch 11)
+
+### Where the code is
+
+- **Branch `feat/customer-v2`**, batches 0A–11 all applied and committed. Batch
+  11 is `de602fa` (*feat(customer): Google sign-in + /onboarding for OAuth
+  accounts*). The branch has **not** been merged to `main` — the revamp is still
+  one branch, and the PR is the end of Batch 13.
+- `npm run build` green (**34 routes**) · `npm run lint --force` clean ·
+  **142 tests** · `npm run smoke` **44/44** ·
+  `npm run smoke -- agent@test demo1234 --blocked` 44/44.
+  (42 → 44 in Batch 12: `/handover` is finally safe to fetch.)
+- **No reseed needed** — Batch 11 changed no seed data. If you reseed anyway,
+  `npm run reset-demo` is safe and idempotent.
+
+### The two things left, in order
+
+**Batch 12 — deploy.** `docs/DEPLOY.md` is the complete runbook. It is
+dashboard work (Vercel + Supabase), not code, with one exception already
+flagged in its §7 (the `middleware` → `proxy` rename). §6 is now a **required**
+step, not an addendum: Google sign-in is merged but not enabled in any
+environment, including localhost.
+
+**Batch 13 — full-app scan.** Brief below. This is the first time anyone has
+looked at the revamp as a whole rather than batch by batch.
+
+### What a fresh chat should read, and in what order
+
+1. **This file** — the batch tracker, the reasoning trail, and the consolidated
+   outstanding list below.
+2. `docs/DEPLOY.md` — for Batch 12 only.
+3. `CLAUDE.md` + `CLAUDE.local.md` — conventions and working style.
+4. `docs/PLAN_V2_CUSTOMER_APP.md` — decisions D1–D7, if a question is "why is it
+   like this".
+
+Do **not** read `docs/PROJECT_STATE.md` below its top section — it describes the
+pre-monorepo app and will actively mislead on file paths.
+
+---
+
+## What Batch 12 delivered (code half) — 2026-08-10
+
+The deploy itself is dashboard work (`docs/DEPLOY.md`). Three code things went in
+alongside it, because all three would have been visible to HR on the first click.
+
+### 1. The Google button was laid out wrong
+
+`OAuthButtons` passed the `<svg>` as a **child** of `Button`, and `Button` wraps
+its children in a single `<span>`. So the mark and the label shared one inline
+formatting context: the svg sat on the text baseline, which put it ~5px above the
+label's optical centre and read as a second line, and the pair became one
+shrinkable flex item that could wrap inside the fixed `h-12`.
+
+It now goes through the **`leftIcon` prop**, which is what that prop exists for —
+the mark becomes its own `shrink-0` flex item that the button's `items-center`
+centres against the label. Plus `whitespace-nowrap` on the button and `block` on
+the svg (killing the inline-descender gap). 18px instead of 16px reads better
+against 16px semibold text.
+
+### 2. `/handover` no longer mutates on a GET — open since Batch 6.5
+
+The oldest item on the outstanding list, and the one that had to be excluded from
+`npm run smoke` for five batches, which meant **the only screen performing a
+lifecycle write was the only screen never smoke-tested.**
+
+- **`acceptOfferAndConfirm`** (`handover/actions.ts`) is a POST form action: it
+  calls the unchanged `acceptOffer`, then redirects — to `/handover` on success,
+  or back to `/offer?…&error=` with a readable reason. Redirect-after-POST also
+  means refreshing the confirmation re-renders instead of re-submitting.
+- **`handover/AcceptOfferButton.tsx`** is a `<form>` shared by `/offer` and
+  `/offer-breakdown`, so the two entry points can't drift into posting different
+  things. No `"use client"` — verified to work **with JavaScript disabled**,
+  which matters on the button that moves money.
+- **`handover/page.tsx` is now a pure read**, and guards a direct GET: a pickup
+  still before `collected` is sent back to its offer rather than shown a
+  confirmation for a decision nobody made.
+
+### 3. `/handover` was rendering `null units` — never noticed, on the demo path
+
+The confirmation query read `battery_type` and `approx_quantity`. Those are
+**schema-v1 columns that `createPickupWithItems` stopped writing in Batch 5** —
+confirmed null on all 10 seeded pickups and on everything the wizard creates. So
+the summary card rendered a blank battery type and the literal string
+`null units`, on the screen that appears the instant a customer accepts an offer.
+
+Now: `category` off the header row, and units + weight summed from the
+`BatteryItem` lines. Chemistry is deliberately not shown — it is agent-confirmed
+after collection, and this screen fires before that.
+
+### Verified
+
+- `npm run build` green (**34 routes**), `npm run lint --force` clean,
+  **142 tests**.
+- `npm run smoke` — **44 routes**, up from 42. `/handover?id=…105` is in the list
+  for the first time, with content assertions on `Industrial`, `9 units` and
+  `360 kg` — figures that can only come from the item rows, so they are what
+  proves the schema-v1 read is gone.
+- **Two paired assertions cover the GET fix**, and they need each other:
+  `/handover?id=…104` must render no confirmation, **and** a re-fetch of
+  `/offer?id=…104` *after* that probe must still render the offer — which it only
+  does while the pickup is still at `offered`. The first alone would pass even if
+  the page advanced the pickup and then redirected. Ordering matters:
+  `APP_REJECTS` runs after `ROUTES`, so the re-fetch is its own step
+  (`OFFER_SURVIVED_GET`) rather than relying on the earlier pass.
+- `npm run smoke -- agent@test demo1234 --blocked` — 44/44 bounce.
+- **The accept itself, end to end** (throwaway script, deleted after) — 17
+  checks against the real database, submitting the form **as a browser with JS
+  disabled would** (multipart POST to the page URL with the `$ACTION_ID_` field,
+  no client JS): 303 → `/handover?id=…`; status advanced to `collected`; the
+  audit event written with `actorRole: vendor` and the right note; **a second
+  submit adds no second event**; the confirmation renders `Automotive`,
+  `12 units`, `168 kg` and no `null units`; a non-existent id redirects to
+  `/offer?…&error=Pickup%20not%20found.`; an empty id to `/dashboard`.
+  `npm run reset-demo` afterwards, so the demo data is back at `offered`.
+
+### Not done, deliberately
+
+`middleware` → `proxy` (`DEPLOY.md` §7) is still outstanding. Renaming the file
+that enforces the role gate on deploy day is the wrong order — it stays a
+standalone change with a full smoke run either side.
+
+---
+
+## Batch 13 brief — the full-app scan
+
+**Why this is its own batch.** Every batch so far verified *itself*: its own
+tests, its own smoke routes, its own throwaway database script. Nothing has
+looked across the seams. The known classes of thing that only a whole-app pass
+finds:
+
+- **Cross-batch drift** — three screens showing the same number from different
+  sources, copy that contradicts between screens, a convention adopted in Batch
+  8 that Batch 5's files never got.
+- **Dead ends** — screens with no route in, buttons with no handler (Batch 9
+  found one: the CPCB export button), `TODO`s that were fixed elsewhere.
+- **The rules holding as a whole**, not per-screen: *no recovery-rate % anywhere*
+  and *no material-by-material valuation to the vendor* (see "Open rules" in
+  `PROJECT_STATE.md` — these are still binding and were scoped, not lifted, in
+  Batch 8).
+- **The parked boundary** — `packages/decision-engine` and the old field-agent
+  intake code must still be untouched by the revamp.
+
+**Suggested shape** (not prescriptive):
+
+1. Take the consolidated outstanding list below as the starting inventory —
+   confirm each item is still true rather than trusting it.
+2. Read the whole customer app once, screen by screen, against
+   `docs/CLBIPP_Vendor_Wireframes_1.html` and the company flow document
+   (`docs/markdown-preview.pdf` — image-only, render it).
+3. `/code-review` over the full `feat/customer-v2` diff against `main`. It is a
+   large diff; consider `/code-review ultra` for the branch.
+4. **A real manual pass on a handset** — the one thing no script has covered.
+   The accumulated list is in "Manual checks owed" below.
+5. Fix what is small and safe; **write up rather than fix** anything that turns
+   into its own batch.
+
+**One standing instruction that applies to this scan:** several open items are
+waiting on the company, not on us (CO₂ factors, CPCB columns, GST rate,
+certificate layout). Do not invent answers to those — they are listed as open
+deliberately, and each is a value change in one file once answered.
+
+---
+
+## Consolidated outstanding list (as of Batch 11)
+
+Everything known to be unfinished, gathered from all eleven batch write-ups so a
+scan doesn't have to re-derive it. **Verify before acting** — some of these are
+several batches old.
+
+### Code — small, in our control
+
+| Item | Since | Note |
+|---|---|---|
+| ~~**`/handover` mutates on GET**~~ | 6.5 | ✅ **FIXED in Batch 12.** Accept is now `acceptOfferAndConfirm`, a POST form action; `/handover` is a pure read and is finally in `npm run smoke`. See the Batch 12 section |
+| `middleware` → `proxy` rename (Next 16.2.6 deprecation) | 10 | `DEPLOY.md` §7. Renames the file enforcing the role gate — do it with room to test, not on deploy day |
+| Orphaned booking-draft photos are never swept | 7B | `wipeStorage` only cleans on reseed. Needs a real sweep before launch |
+| Forgot-password is still a disabled button | 6 | OTP partly covers the need, so it dropped in priority |
+| No wallet redemption ("withdraw to bank") | 8 | Needs bank details the app never collects. `WalletTxnKind.redemption` already exists |
+| No "switch account type" flow; `vendor_type` deliberately not self-updatable | 6 | Add it to the `grants.sql` UPDATE allowlist when that screen exists |
+| No account linking (same email via Google *and* password) | 11 | Supabase identity-linking behaviour, untested |
+| `draftFromPickup` has no unit test | 10 | App-local, and apps hold no tests. Covered end-to-end by a smoke assertion instead |
+| P5-B: GST/PAN/EPR **format** validation | 6 | Khalid's half of the validation task — presence-only today, deliberately |
+| Role gate costs one `profiles` read per request | 6 | Real fix is a custom access-token hook putting `role` in the JWT (dashboard config) |
+
+### Waiting on the company — do not invent answers
+
+| Item | Where the answer lands |
+|---|---|
+| 🔴 **CO₂e factor values are unsourced; citations unverified** | `packages/core/src/impact.ts` (a value change in one file) + the copy restated in the seed. Open question 7 |
+| Exact CPCB column set for the compliance CSV | `COLUMNS` in `apps/customer/src/lib/compliance-export.ts` |
+| Whether GST applies to scrap from an unregistered individual, and at what rate | `taxPaise` is 0 today; the column and the line already exist |
+| Authoritative EPR certificate layout | `packages/pdf/src/templates/certificate.tsx` only — the query and `CertificateDoc` are separate from it |
+
+### Dashboard config, not repo state
+
+| Item | Where |
+|---|---|
+| **Google provider not enabled anywhere, incl. localhost** | `DEPLOY.md` §6. Until then the button fails soft with readable copy |
+| Email OTP sends a link, not a 6-digit code, unless the template uses `{{ .Token }}` | Supabase → Auth → Email Templates → Magic Link. Both paths work today |
+| Supabase Redirect URLs need every origin | `DEPLOY.md` §4 + §6 |
+
+### Manual checks owed — accumulated, never yet run on a real device
+
+No script covers any of these. They are the substance of Batch 13's step 4.
+
+- A **real Google sign-in round trip** (blocked on the dashboard config above).
+- **Type an OTP code from a real inbox** — `business@test` has no deliverable
+  domain, and a real send burns the ~2–4/hr SMTP budget.
+- **GPS capture on a handset over LAN http** — geolocation is blocked in a
+  non-secure context; the `isSecureContext` guard added in Batch 7 names the
+  real cause, but the behaviour itself is unverified on a device.
+- **How a PDF opens on a phone** — the route sends `Content-Disposition: inline`
+  and should hand off to the system viewer rather than dropping a file.
+- **At phone width:** the payment screen's radio cards, the history filter chips,
+  the invoice line rows, and the profile phone form's `type="tel"` keyboard.
+- **The `cancelled` state against real data** — eyeballed only, never tested.
 
 ---
 
@@ -2076,8 +2302,9 @@ Items batches have explicitly deferred to one real-device pass:
   `token=`-absence assertion in `npm run smoke` instead.
 - **The app is not deployed** (Batch 10 decision, deliberate). `docs/DEPLOY.md`
   holds the runbook; it happens after Batch 11 so OAuth redirect URLs are
-  registered once. ⚠ The Vercel build command **must** go through turbo — the
-  generated Prisma client is gitignored.
+  registered once. **Batch 11 has now shipped, so this is Batch 12 and it is
+  next.** ⚠ The Vercel build command **must** go through turbo — the generated
+  Prisma client is gitignored.
 - **`middleware` → `proxy` deprecation (Next 16) is unaddressed.** Read and
   written up in `DEPLOY.md` §7, deliberately not changed in Batch 10: it renames
   the file enforcing the role gate and every route guard, and it must stay under

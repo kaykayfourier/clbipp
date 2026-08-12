@@ -47,10 +47,26 @@ don't deploy them yet.)
 | Install Command | *(leave default)* — Vercel installs npm workspaces from the repo root |
 | **Build Command** | `cd ../.. && npx turbo run build --filter=customer` |
 | Output Directory | *(leave default — `.next`)* |
-| Node version | 20.x or later |
+| Node version | 20.x or later (22.x locally) |
 
 Vercel usually detects the Turborepo and proposes most of this. Verify the build
 command explicitly anyway — it is the one that matters (§1).
+
+### `apps/customer/vercel.json` — the region is deliberate
+
+```json
+{ "regions": ["syd1"] }
+```
+
+The Supabase database is in **`aws-1-ap-southeast-2`** (Sydney) — read off the
+pooler host in `DATABASE_URL`. `syd1` puts the serverless functions in the same
+region, so a page that makes several sequential Prisma calls doesn't pay a
+cross-Pacific round trip on each one. Keep them matched: if the Supabase project
+ever moves, this moves with it.
+
+⚠ If Vercel rejects the region on your plan, **delete the `regions` key** rather
+than fighting it. The app deploys and works either way — it is a latency
+setting, not a correctness one.
 
 ---
 
@@ -59,6 +75,12 @@ command explicitly anyway — it is the one that matters (§1).
 Set all of these for **Production, Preview and Development**. Values come from
 `apps/customer/.env.local` (gitignored — copy them across; do not commit them,
 and do not paste the service-role key into a PR or a chat).
+
+> ⚠ **Three keys in `.env.local` are written `KEY = value`, with spaces around
+> the `=`.** dotenv trims them, so it works locally. Vercel's UI does **not** —
+> a trailing space in the *name* field creates a different variable that nothing
+> reads, and the app boots with an undefined Supabase URL. Paste the name and the
+> value separately and check for stray whitespace on both.
 
 | Variable | Where it's used | Notes |
 |---|---|---|
@@ -133,7 +155,20 @@ deliberate soft failure, not a bug to chase.
 
 1. **GCP** → APIs & Services → Credentials → OAuth 2.0 Client ID (Web
    application). The authorised redirect URI is **Supabase's** callback, not the
-   app's: `https://<project-ref>.supabase.co/auth/v1/callback`.
+   app's — for this project, verbatim and with no trailing slash:
+
+   ```
+   https://xlssgnnrtautldouirkt.supabase.co/auth/v1/callback
+   ```
+
+   This is the single most-mistyped value in the whole setup. Google matches it
+   as an exact string; `.../callback/` or the Vercel origin instead of the
+   Supabase one both produce `redirect_uri_mismatch` at the consent screen.
+   You will also have to fill in the **OAuth consent screen** first (External,
+   app name, support email, developer email) — a new GCP project won't let you
+   create the client without it. Leave it in **Testing** and add your own Google
+   account under **Test users**; publishing invites a verification review you
+   don't need for a demo.
 2. **Supabase** → Authentication → Providers → **Google**: enable, paste the
    client id + secret from step 1.
 3. **Supabase** → Authentication → URL Configuration → **Redirect URLs**: add
@@ -197,7 +232,7 @@ SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke
 SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke -- agent@test demo1234 --blocked
 ```
 
-`scripts/smoke.mjs` already reads `SMOKE_BASE_URL`, so the same 40 assertions
+`scripts/smoke.mjs` already reads `SMOKE_BASE_URL`, so the same **42** assertions
 run against production with no change.
 
 One thing that needs **no** change: the compliance CSV's `verification_link`

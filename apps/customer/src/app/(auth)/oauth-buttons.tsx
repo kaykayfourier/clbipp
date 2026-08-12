@@ -18,8 +18,21 @@ import { signInWithGoogle } from './oauth-actions'
 export function OAuthButtons() {
   return (
     <form action={signInWithGoogle}>
-      <Button type="submit" variant="secondary" fullWidth>
-        <GoogleMark />
+      {/* The mark goes through `leftIcon`, NOT into children. Button wraps its
+          children in a single <span>, so passing the svg as a child put an
+          inline svg and the label inside one inline formatting context: the svg
+          sat on the text baseline (so it rode ~5px high, reading as a second
+          line) and the pair became one shrinkable flex item that could wrap at
+          narrow widths. `leftIcon` makes the mark its own shrink-0 flex item,
+          which the button's `items-center` then centres against the label.
+          `whitespace-nowrap` stops the label breaking inside the fixed h-12. */}
+      <Button
+        type="submit"
+        variant="secondary"
+        fullWidth
+        leftIcon={<GoogleMark />}
+        className="whitespace-nowrap"
+      >
         Continue with Google
       </Button>
     </form>
@@ -27,10 +40,12 @@ export function OAuthButtons() {
 }
 
 /** Inline so the mark ships with the bundle — the buckets are private and an
- *  external logo URL is one more thing that can fail on a slow connection. */
+ *  external logo URL is one more thing that can fail on a slow connection.
+ *  `block` kills the inline-element descender gap that made the svg box taller
+ *  than the glyph and threw the optical centring off. */
 function GoogleMark() {
   return (
-    <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" className="block">
       <path
         fill="#4285F4"
         d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"

@@ -6,6 +6,7 @@ import { Button } from "@clbipp/ui";
 import { Card } from "@clbipp/ui";
 import { Badge } from "@clbipp/ui";
 import { pathwayLabel, formatOfferPrice, parseMaterialWeights } from "@clbipp/core";
+import { AcceptOfferButton } from "../handover/AcceptOfferButton";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 // Reads the same real Offer as /offer (RLS-scoped, same guard sequence).
@@ -112,12 +113,8 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
           </p>
         </Card>
 
-        {/* Accept CTA */}
-        <Link href={`/handover?id=${pickup.id}`} className="block">
-          <Button variant="primary" fullWidth>
-            Accept offer
-          </Button>
-        </Link>
+        {/* Accept CTA — a POST form, shared with /offer. See AcceptOfferButton. */}
+        <AcceptOfferButton pickupId={pickup.id} />
 
         <Link href={`/offer?id=${pickup.id}`} className="block">
           <Button variant="ghost" fullWidth>

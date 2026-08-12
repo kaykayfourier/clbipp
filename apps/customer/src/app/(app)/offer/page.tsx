@@ -5,7 +5,9 @@ import { AppShell, PagePadding, SectionLabel } from "@clbipp/ui";
 import { Button } from "@clbipp/ui";
 import { Card } from "@clbipp/ui";
 import { Badge } from "@clbipp/ui";
+import { Banner } from "@clbipp/ui";
 import { pathwayLabel, formatOfferPrice } from "@clbipp/core";
+import { AcceptOfferButton } from "../handover/AcceptOfferButton";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 // Reads the REAL Offer row for ?id= via the RLS-scoped server client (a vendor
@@ -18,11 +20,14 @@ import { pathwayLabel, formatOfferPrice } from "@clbipp/core";
 // rationale + pathway only.
 
 interface PageProps {
-  searchParams: Promise<{ id?: string }>;
+  // `error` is set by acceptOfferAndConfirm when the accept is refused — it
+  // sends the customer back here rather than on to a confirmation screen
+  // confirming something that didn't happen.
+  searchParams: Promise<{ id?: string; error?: string }>;
 }
 
 export default async function OfferPage({ searchParams }: PageProps) {
-  const { id } = await searchParams;
+  const { id, error } = await searchParams;
 
   // Guard 1 — no id ⇒ nothing to show.
   if (!id) redirect("/dashboard");
@@ -65,6 +70,10 @@ export default async function OfferPage({ searchParams }: PageProps) {
     >
       <PagePadding className="flex flex-col gap-5">
 
+        {error ? (
+          <Banner variant="error">{error}</Banner>
+        ) : null}
+
         {/* Pathway badge */}
         <div className="flex justify-center">
           <Badge variant="success" className="text-xs px-3 py-1 uppercase tracking-wider">
@@ -99,11 +108,7 @@ export default async function OfferPage({ searchParams }: PageProps) {
             </Button>
           </Link>
 
-          <Link href={`/handover?id=${pickup.id}`} className="block">
-            <Button variant="primary" fullWidth>
-              Accept offer
-            </Button>
-          </Link>
+          <AcceptOfferButton pickupId={pickup.id} />
 
           <Link href={`/scheduled?id=${pickup.id}`} className="block">
             <Button variant="ghost" fullWidth>
