@@ -189,13 +189,18 @@ clbipp/
    used inside `packages/ui` gets purged and shared components render unstyled.
    In `apps/customer/src/app/globals.css`, add
    `@source "../../../../packages/ui/src";`. Verify visually, not just by build.
-9. **`middleware.ts` stays at `apps/customer/src/middleware.ts`.** Next's dev
-   bundler silently never registers middleware at the project root when
+9. **The app-level auth guard stays under `apps/customer/src/`.** Next's dev
+   bundler silently never registers it at the project root when
    `src/app` is in use — this bit us before. The Supabase session logic moves to
    `packages/auth` as `createAuthMiddleware({ publicPaths, homePath, allowRoles })`,
-   and each app's `src/middleware.ts` is a five-line caller. **This is what makes
+   and each app's guard is a five-line caller. **This is what makes
    the Agent and Admin apps' auth free later** — the single biggest reason the
    migration is worth its cost.
+   > **Updated 2026-08-14 (PR #18):** the file is now **`src/proxy.ts`**
+   > exporting `proxy`, not `middleware.ts` — Next 16 deprecated the
+   > `middleware` file convention. The **location** rule above is what was
+   > locked, and it still holds. ⚠ `packages/auth/src/middleware.ts` (the
+   > factory) is **not** renamed.
 10. **Delete the cruft** listed in §2.
 11. **turbo.json tasks** — `build` (`dependsOn: ["^build", "db:generate"]`,
     `outputs: [".next/**"]`), `dev` (persistent, uncached), `lint`, `test`,

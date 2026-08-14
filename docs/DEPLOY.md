@@ -44,6 +44,23 @@ generates the client first.
 > `next build` in `apps/customer` will fail with missing generated types, and
 > the error will not obviously point at Prisma.
 
+### 1a. Three more Prisma-on-Vercel fixes — already applied, don't revert them
+
+Found and fixed by Khalid on 2026-08-15 while getting the first deploy through.
+Each fails only on Vercel, never locally, which is what makes them expensive to
+rediscover:
+
+| Commit | Change | Why it's needed |
+|---|---|---|
+| `306a3c0` | `packages/core/src/offer.ts` imported `RecoveryPathway` from `@prisma/client`; now `@clbipp/database` | Also a standing CLAUDE.md rule ("never import `@prisma/client` directly"). The direct import doesn't resolve in Vercel's build |
+| `e2df7b1` | `binaryTargets = ["native", "rhel-openssl-3.0.x"]` in `schema.prisma` | Vercel's runtime is Linux. A `native`-only engine binary is built for macOS and won't run there |
+| `bb072c5` | `outputFileTracingIncludes` in `apps/customer/next.config.ts` | Prisma loads its query engine via a **dynamic require**, which Next's file tracer can't follow — so the binary was silently dropped from the deployed function bundle. Symptom: builds fine, 500s at runtime |
+
+⚠ A bad merge (`da1fbe3`) also committed **git conflict markers** into
+`apps/customer/src/proxy.ts` — the auth guard. Fixed in `f51e891`, and the whole
+repo was scanned on 2026-08-15 with no markers remaining. Worth a
+`git grep -nE "^(<<<<<<< |=======$|>>>>>>> )"` after any conflicted merge.
+
 ---
 
 ## 2. Vercel project settings
@@ -148,7 +165,7 @@ Verified as part of this batch:
   `offline.html`, precaches the shell only. **Deliberately caches no Supabase
   data and no authed pages**, so nothing sensitive is served from disk offline.
 - `app/ServiceWorkerRegister.tsx` registers it client-side.
-- `src/middleware.ts`'s matcher **excludes** `manifest.webmanifest`, `sw.js`,
+- `src/proxy.ts`'s matcher **excludes** `manifest.webmanifest`, `sw.js`,
   `offline.html` and the icons, so they load logged-out — which install and the
   offline page both require.
 
