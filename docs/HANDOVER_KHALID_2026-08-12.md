@@ -33,21 +33,24 @@ anything.
 > green, and `cd43c5d` is live in Production. Everything below about *fixing the
 > build* is historical — don't redo it.
 >
-> **One thing is left, and it is yours:** `DATABASE_URL` in Vercel is malformed.
-> The deployed app fails every database call with
+> **`DATABASE_URL` is fixed** — re-pasting it took production from 17/44 to
+> **42/44** on the smoke suite, and the role gate is a clean **44/44**. The app
+> works: all 9 lifecycle stages, both offer screens, payouts, wallet, all three
+> PDFs and the CPCB export are live.
 >
-> ```
-> Error validating datasource `db`: the URL must start with the protocol
-> `postgresql://` or `postgres://`.
-> ```
+> **One thing is left, and it is the same trap one more time:**
+> **`SUPABASE_SERVICE_ROLE_KEY`.** The 2 remaining failures are both
+> `/track/[id]` rendering with **no chain-of-custody photos**. Those photos are
+> signed by `createAdminClient()`, which reads that key — and the helper logs the
+> error then drops the URLs silently, so you get a 200 page with missing images
+> rather than a crash.
 >
-> Present but wrong, not missing. **This is the §2 whitespace trap below.**
-> Delete `DATABASE_URL`, re-add it so the value's first character is `p` (no
-> leading space, no quotes, no `DATABASE_URL=` prefix), check `DIRECT_URL` the
-> same way, redeploy.
+> **Delete `SUPABASE_SERVICE_ROLE_KEY`, re-add it with no leading space and no
+> quotes, redeploy.** It's the third of the three `KEY = value` entries in §2.
+> 🔴 It bypasses RLS — never `NEXT_PUBLIC_`, never client-side, never in a chat.
 >
 > Then Aamir runs `SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke`
-> — 44/44 means done. Full trail in
+> — 44/44 means Batch 12 is done. Full trail in
 > `REVAMP_BATCHES_2026-08-09.md` → "Batch 12 — where the deploy actually stands".
 
 ### The fast path to a URL — do only this first
