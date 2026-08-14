@@ -120,3 +120,142 @@ using (
     select id from pickups where vendor_id = (select auth.uid())
   )
 );
+
+-- ===========================================================================
+-- Schema v2 tables (Batch 0B). Same model throughout: the customer reads what
+-- belongs to them; everything that moves money or advances the lifecycle is
+-- written by service-role server actions, which bypass RLS. So most of these
+-- are SELECT-only, and the absence of an INSERT/UPDATE policy is deliberate.
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- addresses — fully owned by the customer: they create and edit their own.
+-- This is the one new table the customer writes directly.
+-- ---------------------------------------------------------------------------
+alter table addresses enable row level security;
+
+drop policy if exists "Users can read their own addresses" on addresses;
+create policy "Users can read their own addresses"
+on addresses
+for select
+to authenticated
+using ((select auth.uid()) = profile_id);
+
+drop policy if exists "Users can create their own addresses" on addresses;
+create policy "Users can create their own addresses"
+on addresses
+for insert
+to authenticated
+with check ((select auth.uid()) = profile_id);
+
+drop policy if exists "Users can update their own addresses" on addresses;
+create policy "Users can update their own addresses"
+on addresses
+for update
+to authenticated
+using ((select auth.uid()) = profile_id)
+with check ((select auth.uid()) = profile_id);
+
+drop policy if exists "Users can delete their own addresses" on addresses;
+create policy "Users can delete their own addresses"
+on addresses
+for delete
+to authenticated
+using ((select auth.uid()) = profile_id);
+
+-- ---------------------------------------------------------------------------
+-- battery_items — no vendor_id of their own; scope through the parent pickup
+-- (same shape as status_events). Read-only: booking writes them server-side in
+-- one transaction with the pickup, and the agent confirms them from the Agent
+-- app, both via the service role.
+-- ---------------------------------------------------------------------------
+alter table battery_items enable row level security;
+
+drop policy if exists "Vendors can read items on their pickups" on battery_items;
+create policy "Vendors can read items on their pickups"
+on battery_items
+for select
+to authenticated
+using (
+  pickup_id in (
+    select id from pickups where vendor_id = (select auth.uid())
+  )
+);
+
+-- ---------------------------------------------------------------------------
+-- pricing_rates — reference data. Every authenticated user may read the active
+-- rates (the quote step needs them); nobody but the admin app (service role)
+-- writes them.
+-- ---------------------------------------------------------------------------
+alter table pricing_rates enable row level security;
+
+drop policy if exists "Authenticated users can read active pricing rates" on pricing_rates;
+create policy "Authenticated users can read active pricing rates"
+on pricing_rates
+for select
+to authenticated
+using (is_active);
+
+-- ---------------------------------------------------------------------------
+-- payments — read-only. Money is only ever moved by service-role actions.
+-- ---------------------------------------------------------------------------
+alter table payments enable row level security;
+
+drop policy if exists "Vendors can read their own payments" on payments;
+create policy "Vendors can read their own payments"
+on payments
+for select
+to authenticated
+using ((select auth.uid()) = vendor_id);
+
+-- ---------------------------------------------------------------------------
+-- wallet_txns — read-only ledger. A writable ledger is not a ledger.
+-- ---------------------------------------------------------------------------
+alter table wallet_txns enable row level security;
+
+drop policy if exists "Users can read their own wallet transactions" on wallet_txns;
+create policy "Users can read their own wallet transactions"
+on wallet_txns
+for select
+to authenticated
+using ((select auth.uid()) = profile_id);
+
+-- ---------------------------------------------------------------------------
+-- pickup_receipts — scope through the pickup; issued by the agent at collection.
+-- ---------------------------------------------------------------------------
+alter table pickup_receipts enable row level security;
+
+drop policy if exists "Vendors can read receipts for their pickups" on pickup_receipts;
+create policy "Vendors can read receipts for their pickups"
+on pickup_receipts
+for select
+to authenticated
+using (
+  pickup_id in (
+    select id from pickups where vendor_id = (select auth.uid())
+  )
+);
+
+-- ---------------------------------------------------------------------------
+-- invoices — read-only; issued server-side.
+-- ---------------------------------------------------------------------------
+alter table invoices enable row level security;
+
+drop policy if exists "Vendors can read their own invoices" on invoices;
+create policy "Vendors can read their own invoices"
+on invoices
+for select
+to authenticated
+using ((select auth.uid()) = vendor_id);
+
+-- ---------------------------------------------------------------------------
+-- Agent + admin scaffolding tables. RLS is enabled with NO policy, which denies
+-- every request from an authenticated session — only the service role reaches
+-- them. The Agent and Admin apps add their own policies when they are built;
+-- until then "enabled, no policy" is the safe default (RLS is off by default on
+-- a new table, which would leave these world-readable to any logged-in user).
+-- ---------------------------------------------------------------------------
+alter table facilities enable row level security;
+alter table recyclers enable row level security;
+alter table dispatch_manifests enable row level security;
+alter table safety_checklists enable row level security;

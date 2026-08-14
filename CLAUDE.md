@@ -12,12 +12,40 @@ battery recovery + EPR compliance — vendor offloads batteries, a field agent
 assesses and quotes them, an admin oversees pricing rules and compliance.
 Three-person internship build.
 
-Three surfaces, built **in sequence, in this one repo**, separated by route folders:
-1. **Vendor / Client app** — `/` and vendor screens — **CURRENT SPRINT**
-2. **Field Agent app** — `/field/...` — later
-3. **Admin dashboard** — `/admin/...` — later
+Three surfaces, built **in sequence**, as three apps in one **Turborepo
+monorepo** (migrated 2026-08-09):
 
-Shared code (`/lib`, `/components`, Prisma schema, auth) lives at the root.
+1. **Customer / Vendor app** — `apps/customer` — **CURRENT SPRINT**
+2. **Field Agent app** — `apps/agent` — scaffolded, built later
+3. **Admin dashboard** — `apps/admin` — scaffolded, built last
+
+```
+apps/customer            the customer app (Next.js App Router)
+apps/agent · apps/admin  scaffolds only
+packages/ui              components, design tokens, cn()   → @clbipp/ui
+packages/auth            supabase server/browser/admin clients, auth.ts,
+                         realtime, createAuthMiddleware()  → @clbipp/auth
+packages/core            validation, offer, booking/pricing,
+                         document numbering + ₹ formatting,
+                         payments/wallet ledger,
+                         CO₂e impact factors (impact.ts)   → @clbipp/core
+packages/pdf             EPR certificate · pickup receipt ·
+                         invoice templates + renderers     → @clbipp/pdf
+packages/database        prisma schema + migrations + client + seed
+                                                           → @clbipp/database
+packages/decision-engine PARKED engine (Field Agent app, later)
+packages/tsconfig · packages/eslint-config
+supabase/                policies.sql, storage-policies.sql, realtime.sql,
+                         grants.sql — hand-written SQL, stays at repo root
+```
+
+**Import rules:** inside an app, `@/*` still means that app's `./src/*`. Anything
+shared is imported from `@clbipp/<pkg>` — never by relative path across
+packages, and never from `@prisma/client` directly (use `@clbipp/database`,
+which re-exports the client *and* every model type and enum).
+
+Packages ship raw TypeScript and are compiled by each app via
+`transpilePackages` — there is no per-package build step to maintain.
 
 ## Current sprint: Vendor app only
 
@@ -28,25 +56,45 @@ decisions made and why. This section is the quick version.
 (`docs/CLBIPP_Vendor_Wireframes_1.html` is the layout source of truth).
 
 **PARKED — do not edit or extend this sprint:**
-- `src/lib/decisionEngine.ts` (Layers 0–5, merged, tested) — belongs to the
+- `packages/decision-engine/` (Layers 0–5, merged, tested) — belongs to the
   later Field Agent app.
 - Any existing field-agent intake-flow code.
 
 **No recovery rate % shown to the vendor, anywhere.** This one is hard — the
 company's flow document doesn't ask for it either.
 
-**No recovered value shown to the vendor — default, not a hard rule.** Offer
+**No recovered value shown to the vendor — default, now scoped (Batch 8).** Offer
 screens show price + qualitative rationale only; `Offer.materialBreakdown` /
-`Offer.deductions` may exist in the DB but don't render them on `offer`,
-`offer-breakdown`, or tracking screens (they're fine on the certificate, a
-compliance doc). **Build to this today**, but treat it as a default that follows
-the company's ask, not a locked rule — the company flow document asks for an
-indicative quote, an invoice and a wallet, all of which are value-facing. Pending
-their confirmation; see `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
+`Offer.deductions` may exist in the DB but **don't render them on `offer`,
+`offer-breakdown`, or tracking screens** (they're fine on the certificate, a
+compliance doc). That part still holds.
+
+What changed 2026-08-09: Plan v2 **D6** relaxes the rule for the money surfaces
+the company's flow document explicitly asks for, and Batch 8 built them — so
+**`/payment/[id]`, `/wallet`, `/receipt/[id]` and the invoice PDF do show ₹.**
+A payout screen that hides the amount is not a payout screen. Use `formatPaise`
+from `@clbipp/core` so every ₹ in the app is formatted identically.
+
+So the line is: **what the customer was paid is visible; how we valued it
+material-by-material is not.** The separate **no recovery-rate %** rule is
+untouched. See `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
 
 **Status lifecycle (locked contract):**
-`requested → scheduled → collected → tested → processed → recovered → certified`
-(plus `cancelled`).
+`requested → scheduled → arrived → offered → collected → tested → processed →
+recovered → certified` (plus `cancelled`).
+
+> `arrived` and `offered` were **added 2026-08-09 (Batch 7A)** — agreed, applied,
+> and the contract is locked again at nine stages. Rationale: the company flow
+> document puts assessment and quoting *on site*, and before this "an offer
+> exists" was an implicit sub-state of `scheduled` rather than a status, which is
+> what made the offer screens unreachable in Batch 6.5. `/offer` and
+> `/offer-breakdown` now admit `status === 'offered'` exactly.
+
+**Stage order has one source of truth per layer, and they must agree:**
+`enum PickupStatus` (`schema.prisma`) · `LIFECYCLE_STAGES` + `STAGE_LABELS`
+(`packages/ui/src/tokens.ts`) · `pickupstatusSchema` (`packages/core`) ·
+`LIFECYCLE` (`reset-demo.ts`). Screens must **not** re-declare the list — use
+`isLifecycleStage` / `isStageBefore` from `@clbipp/ui`.
 
 ## How to treat the plan in PROJECT_STATE.md
 
@@ -72,6 +120,11 @@ their confirmation; see `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
 | Prisma schema + types, post-signup KYC upload + verification, dashboard, compliance, certificate PDF generation, internal seed/simulation surface | Person B |
 | Component library (from wireframe), the full request → offer → handover flow | Person C |
 
+> **Temporary override (2026-08-09, customer-app revamp):** C is assumed
+> unavailable (Plan v2 D4) and B gave A explicit permission to cover his lane for
+> this revamp — so **A is currently executing all three lanes**. Logged in
+> `docs/LANE_OWNERSHIP.md`. The map above is what ownership reverts to.
+
 **Do not edit another lane's area, even if faster** — unless ownership has been
 shifted by agreement and logged in `docs/LANE_OWNERSHIP.md` (lanes are
 strict-by-default but can move when a task straddles them: flag → agree → log).
@@ -81,20 +134,30 @@ See "Stub-data pattern" below.
 
 ## Commands
 
+All commands run from the **repo root** (turbo fans them out to the workspaces).
+
 ```bash
-npm run dev          # Start Next.js dev server
-npm run build        # Production build
-npm run lint         # ESLint
-npm test             # Run all tests once (Vitest)
-npm run test:watch   # Run tests in watch mode
+npm run dev          # Customer app dev server
+npm run build        # Build every app + package
+npm run lint         # ESLint across the workspace
+npm run test         # All tests (Vitest) — currently 35
 
-# Run a single test file
-npx vitest run src/lib/<path>/<file>.test.ts
+# Run a single test file (from the owning package)
+cd packages/core && npx vitest run src/booking.test.ts
 
-# Database (Person B owns schema.prisma — don't edit it directly)
-npx prisma migrate dev     # Apply schema changes
-npx prisma studio          # Visual DB editor
+# Database
+npm run db:migrate --workspace=@clbipp/database        # Apply schema changes
+npm run reset-demo                                     # Wipe + reseed the demo data
+npm run create-buckets --workspace=@clbipp/database    # Storage buckets (idempotent)
+cd packages/database && npx prisma studio              # Visual DB editor
+
+# Apply hand-written SQL without opening the Supabase dashboard
+cd packages/database
+npx prisma db execute --file ../../supabase/policies.sql --schema prisma/schema.prisma
 ```
+
+**Env files:** `apps/customer/.env.local` (Supabase URL + keys, DB URLs) and
+`packages/database/.env` (DB URLs only). Both gitignored.
 
 ## Stack
 
@@ -108,7 +171,7 @@ no conflict.
 ## Stub-data pattern (use when a dependency isn't ready yet)
 
 If the lane you depend on hasn't shipped its real thing yet, don't guess its
-shape or wait idle — build against an agreed mock in `src/lib/mock-data.ts`
+shape or wait idle — build against an agreed mock in `packages/core/src/mock-data.ts`
 matching the locked contract (offer shape / status lifecycle / schema column
 names), and leave a `// TODO: swap for real <X> once <owner> ships it` comment.
 When the real thing lands, the swap is a search-and-replace on imports. This
@@ -116,7 +179,13 @@ keeps every lane moving in parallel without anyone touching another's files.
 
 ## Key docs (read when relevant — don't load all of these by default)
 
-- `docs/PROJECT_STATE.md` — live status, current phase, open questions. Check first.
+- `docs/REVAMP_BATCHES_2026-08-09.md` — **live status + resume point.** Batch
+  tracker for the customer-app revamp, demo accounts, commands, known gaps.
+  **Read this first.**
+- `docs/PLAN_V2_CUSTOMER_APP.md` — the operative plan (decisions D1–D7, screen
+  map, batch definitions).
+- `docs/PROJECT_STATE.md` — historical status. Its top section is current; most
+  of the detail below that predates the monorepo migration and schema v2.
 - `docs/CONTEXT.md` — decisions made and why, conventions, deferred items.
 - `docs/LANE_OWNERSHIP.md` — lane-shift policy (strict-by-default, flexible-with-flagging) + the log of ownership changes.
 - `docs/markdown-preview.pdf` — **the company's flow document** (sent by HR after
@@ -130,7 +199,9 @@ keeps every lane moving in parallel without anyone touching another's files.
 - `docs/CLBIPP_Vendor_Wireframes_1.html` — UI source of truth for this sprint.
   Note it predates the company flow document; where the two disagree, the flow
   document wins (once confirmed).
-- `prisma/schema.prisma` — the real vendor schema (Profile, Pickup, Offer,
+- `docs/BATCH_0B_SCHEMA.md` — reference for what every schema-v2 model means.
+  **Already executed** (2026-08-09) — read it, don't run it.
+- `packages/database/prisma/schema.prisma` — the real schema (Profile, Pickup,
   StatusEvent, Certificate). Read before writing any RLS policy or auth code
   that touches these tables. Owned by Person B — don't edit directly.
 - `docs/DecisionSystemBreakdown.pdf` — engine spec. For the LATER Field Agent
@@ -153,15 +224,48 @@ explicitly asked to.
 
 ## Conventions
 
-- App Router structure: pages at `src/app/[route]/page.tsx`, API routes at
-  `src/app/api/[route]/route.ts`, pure logic in `src/lib/`.
-- Tests co-located as `*.test.ts` next to source files.
+- App Router structure: pages at `apps/<app>/src/app/[route]/page.tsx`, API
+  routes at `apps/<app>/src/app/api/[route]/route.ts`. Pure, shareable logic
+  belongs in a package (`packages/core`), not in an app.
+- Tests co-located as `*.test.ts` next to source files, inside the owning
+  package. Apps hold no tests.
 - TypeScript strict mode — no `any`; use `unknown` then narrow.
 - RLS policies and other hand-written SQL live in a versioned file under
   `supabase/` (e.g. `supabase/policies.sql`). Prototyping a policy in the
   Supabase dashboard is fine; the final version must land in a repo file.
-- Wrap Supabase calls (Storage, Realtime, auth) in helpers under
-  `src/lib/supabase-*.ts` rather than scattering client calls across pages.
+- Wrap Supabase calls (Storage, Realtime, auth) in helpers inside
+  `packages/auth` rather than scattering client calls across pages.
+- All money is **integer paise** — never a float, never rupees, anywhere. Format
+  it with `formatPaise` from `@clbipp/core`, never a local `/100`. From a
+  **client** component import it from **`@clbipp/core/format`** instead: the
+  package barrel re-exports `booking-actions` / `payment-actions`, so a value
+  import from `@clbipp/core` would pull Prisma into the browser bundle. The
+  subpath resolves to `documents.ts`, which imports nothing.
+- **The two tracking screens share one implementation.** `/track/[id]` and
+  `/t/[token]` both render `packages/ui/src/components/ui/lifecycle-view.tsx`
+  (`buildStages`, `LifecycleHeader`, `RecoverySummary`, `CancelledTimeline`).
+  Change the lifecycle presentation there, not in a screen.
+  ⚠ **Sharing the layout does not share the data.** The public page
+  deliberately gets no photos (`includePhotos: false` skips *minting* the signed
+  URLs), no partner card, no realtime and no auth-only CTA — the token is a
+  forwardable bearer capability. The reasoning is at the top of
+  `t/[token]/page.tsx`; read it before passing that page anything new.
+- **Pickup row routing lives in `apps/customer/src/lib/pickup-nav.ts`**
+  (`pickupHref`, `pickupSubtitle`). The dashboard and `/history` both import it —
+  don't re-derive a row's destination inside a screen.
+- **Profile writes go through the server Supabase client, not Prisma**, so
+  `supabase/grants.sql`'s column allowlist applies (Prisma bypasses it).
+  `updatePhone` in `profile/actions.ts` is the pattern. Use Prisma for profile
+  data only when you genuinely need a transaction, and then re-enforce ownership
+  in code.
+- **CO₂e factors live only in `packages/core/src/impact.ts`** — never write CO₂
+  arithmetic in a screen or a seed. ⚠ **The values there are a placeholder and
+  the citations are unverified** (only the relative ordering is defensible) —
+  read the file header before quoting a number anywhere. Awaiting the company's
+  CPCB-accepted set, open question 7 in `COMPANY_FLOW_REVIEW_2026-08-07.md`;
+  their answer is a value change in that one file. `packages/database` restates
+  the table (it must not import `packages/core` — the cycle breaks the generated
+  client), and Batch 9's verification asserts the two agree.
 - Branch naming: `feat/<scope>`. No direct pushes to `main` — branch → PR →
   1 review → merge.
 - Inline error handling at API route / async boundaries; let internal pure
@@ -173,7 +277,8 @@ explicitly asked to.
 
 ## Path alias
 
-`@/*` maps to the project root.
+`@/*` maps to `./src/*` **within each app** (e.g. `apps/customer/src`). Shared
+code is never reached with `@/` — it comes from `@clbipp/{ui,auth,core,database}`.
 
 ## When stuck
 
@@ -181,6 +286,9 @@ explicitly asked to.
 - Migration question → read `docs/ai-prompts/database-create-migration.md` first.
 - UI/UX question → check `docs/CLBIPP_Vendor_Wireframes_1.html` — navigation
   between screens is built into it (each button's `data-go` shows the target).
-- Status / "what's done, what's next" → check `docs/PROJECT_STATE.md` first.
-- Stack question → Next.js + Supabase + Prisma, deployed to Vercel. Don't
-  introduce new frameworks.
+- Status / "what's done, what's next" → `docs/REVAMP_BATCHES_2026-08-09.md`.
+- Stack question → Next.js + Supabase + Prisma in a Turborepo monorepo, deployed
+  to Vercel. Don't introduce new frameworks.
+- "Where does this file live now?" → the 2026-08-09 migration moved everything.
+  App code is under `apps/customer/`, shared code under `packages/`. Search the
+  repo rather than trusting a path written in an older doc.

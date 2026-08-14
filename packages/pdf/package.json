@@ -1,0 +1,21 @@
+{
+  "name": "@clbipp/pdf",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@clbipp/core": "*",
+    "@react-pdf/renderer": "^4.6.0",
+    "server-only": "^0.0.1"
+  },
+  "peerDependencies": {
+    "react": "*"
+  },
+  "devDependencies": {
+    "@clbipp/tsconfig": "*",
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

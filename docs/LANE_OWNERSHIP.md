@@ -31,6 +31,56 @@ reality doesn't match the original split — not free-for-all editing.
 
 ## Change log
 
+### 2026-08-09 — Lifecycle enum change (Batch 7A) executed by A under the revamp cover
+
+- **Whose lane it is normally:** B's. `packages/database/prisma/schema.prisma`
+  and its migrations are the schema owner's, and `CLAUDE.md` says not to edit
+  that file directly.
+- **What A did:** added `arrived` and `offered` to `enum PickupStatus`, wrote the
+  migration `20260809124400_lifecycle_arrived_offered` by hand, and reshaped the
+  seed from 8 pickups to 10.
+- **Why it's covered:** the 2026-08-09 entry below already assigns B's whole lane
+  to A for the duration of this revamp, with B's explicit permission. No new
+  agreement needed — logged separately because it changes a **contract recorded
+  as LOCKED** in three docs, which is worth its own line in the record.
+- **Khalid needs to know two things when he's back:**
+  1. The status lifecycle is now **nine stages**, and `/offer` guards on
+     `status === 'offered'` exactly. Anything he writes against the old
+     seven-stage list is stale.
+  2. Demo pickup ids were **renumbered** — the certified pickup is now
+     `PKP-2026-000109` (was `…107`) and the offer pickup is `PKP-2026-000104`
+     (was `…102`).
+- **Reverts with the rest of the temporary override.**
+
+### 2026-08-09 — Customer-app revamp: B's entire lane → A (temporary, for this revamp)
+- **Moved to A (Aamir):** all of B's (Khalid's) lane for the customer-app
+  revamp — the Batch 0B schema migration + Storage buckets + seed rewrite, the
+  pricing engine and `createPickupWithItems`, PDF generation (certificate,
+  receipt, invoice), the impact dashboard, compliance CSV export, payments +
+  wallet, and the notification-copy fix. In practice: `packages/database/*`,
+  `packages/core/*`, and B's screens.
+- **Why:** B was unavailable on 2026-08-09 and the goal was to finish the
+  customer-app revamp in one day. B's work sits at the *front* of the dependency
+  chain — the schema blocks the booking flow, and the pricing engine blocks the
+  quote step — so waiting would have stalled A's lane entirely.
+- **Agreed by:** Khalid, verbally, in advance — explicit permission to do "his
+  side of the work if it blocks me, or his whole side if that's what it takes".
+- **Scope + duration:** this revamp only. Ownership reverts to the map in
+  `CLAUDE.md` once Khalid is back. Nothing here changes the permanent lane map.
+- **What Khalid should know on return** (nothing is blocked on him):
+  1. `BATCH_0B_SCHEMA.md` §2 had a real defect — `Pickup.batteryType` was
+     missing `@map("battery_type")`, which would have renamed a live column with
+     10 rows and broken the raw-PostgREST insert path. Fixed in the repo *and*
+     in the runbook. Don't re-paste an older copy of §2 over it.
+  2. The seed is a full rewrite (`prisma/reset-demo.ts`); the old
+     `prisma/seed.ts` is deleted. Every row now belongs to a real auth user.
+  3. Live status + resume point: `docs/REVAMP_BATCHES_2026-08-09.md`.
+  4. The Batch 3 A↔B contract (`BATCH_0B_SCHEMA.md` §7) shipped with two
+     deliberate divergences — `CreatePickupInput` gains `vendorId` (core does
+     not read the session), and weightless lines are still quoted from a typical
+     unit weight. Both are written up in `REVAMP_BATCHES_2026-08-09.md`
+     → "Batch 3".
+
 ### 2026-07-10 — Netting-up: seam + flow/component crash-fixes + PWA/deploy → A
 - **Moved to A (Aamir):** the cross-lane navigation seam (dashboard↔flow↔track
   routing), the flow-screen + component-library crash-fixes (`badge.tsx`,

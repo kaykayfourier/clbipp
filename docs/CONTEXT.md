@@ -46,10 +46,16 @@ One repo, three apps separated by route folders. Shared code at root.
 - **No recovered value shown to the vendor — a default, not a hard rule**
   (corrected 2026-08-07; it had been recorded here as "ever"). Offer carries price
   + qualitative rationale only; material weights appear on the EPR certificate (a
-  compliance doc), not on offer/tracking. **Build to this today**, but it follows
-  the company's ask and can change: the company flow document asks for an
-  indicative quote, an invoice and a wallet, all value-facing. Pending their
-  answer — see `COMPANY_FLOW_REVIEW_2026-08-07.md`.
+  compliance doc), not on offer/tracking.
+  **Scoped, not lifted, in Batch 8 (2026-08-09):** Plan v2 **D6** relaxes the rule
+  for the money surfaces the company explicitly asks for, and those now exist —
+  `/payment/[id]`, `/wallet`, `/receipt/[id]` and the invoice PDF all show ₹,
+  because a payout you cannot see the amount of is not a payout. **`/offer`,
+  `/offer-breakdown` and `/track` are untouched and stay weight-only**, and the
+  separate **no recovery-rate %** rule is unaffected everywhere. What is still
+  withheld is the *material-by-material valuation* (`Offer.materialBreakdown`'s
+  `value_paise` / `Offer.deductions`) — that is the internal pricing mechanics,
+  and it is a different question from "what were you paid".
 - **Battery *category* is the customer's question; *chemistry* is the field
   agent's** (from the company flow document, 2026-08-07 — proposed, not yet
   built). The doc's §3.A gives the customer a category (portable / automotive /
@@ -112,6 +118,18 @@ One repo, three apps separated by route folders. Shared code at root.
   not configured via dashboard clicks (reproducible + reviewable).
 - Wrap Supabase calls in helpers in `src/lib/supabase-*.ts` rather than scattering
   client calls across pages.
+- **Bottom-nav clearance belongs to `(app)/layout.tsx`, never to a page** (Batch
+  6.5). That layout renders the fixed `BottomTabBar`, so it also owns the padding
+  that keeps content clear of it. A new authenticated screen passes `hideNav` to
+  `AppShell` (so a second bar isn't rendered) and adds **no bottom padding of its
+  own** — adding some double-pads. This was previously each page's job and four
+  screens forgot, which put their bottom-most control underneath the bar where it
+  was only reachable by over-scrolling. `npm run smoke` asserts exactly one
+  `aria-label="Main navigation"` per authenticated page.
+- **Don't mutate on a GET render.** A server component that performs a write when
+  the page loads (as `handover/page.tsx` still does) can't be smoke-tested,
+  double-fires on refresh, and can be triggered by a link prefetch. Writes go in
+  a `"use server"` action invoked by a form or a POST.
 
 ## Git workflow (learned 2026-07-06 — do not repeat these mistakes)
 
@@ -133,8 +151,29 @@ conflict, always resolve by keeping `main`'s version:
 
 ## Status lifecycle (locked contract)
 
-`requested → scheduled → collected → tested → processed → recovered → certified`
-(plus `cancelled`). This is the shared state machine the whole app codes against.
+`requested → scheduled → arrived → offered → collected → tested → processed →
+recovered → certified` (plus `cancelled`). This is the shared state machine the
+whole app codes against.
+
+**Changed 2026-08-09 (Batch 7A) — `arrived` and `offered` added.** Agreed,
+migrated (`20260809124400_lifecycle_arrived_offered`), and locked again at nine
+stages.
+
+- **Why:** the company flow document has the agent assess and quote *on site*,
+  which is two events, not one. And before this, "an offer exists" was an
+  implicit sub-state of `scheduled` (an `Offer` row existing) rather than a
+  status — the mismatch between that and the `/offer` status guard is exactly
+  what made both offer screens unreachable in the demo until Batch 6.5 patched
+  the seed. `offered` makes an offer addressable instead of inferred.
+- **Why `arrived` before `offered`:** assessment precedes quoting. The indicative
+  quote the customer sees at booking is a different thing — it lives on
+  `Pickup.indicativeQuotePaise`, not on an `Offer` row — so the two coexist.
+- **Enum order is explicit in the migration** (`ADD VALUE … AFTER …`, not a plain
+  append), so the Postgres sort order matches the logical order.
+- **Adding a stage later touches four lists, not fourteen screens.** Screens ask
+  `isLifecycleStage` / `isStageBefore` from `@clbipp/ui` instead of re-declaring
+  the array — `track/[id]` and `t/[token]` each carried a private duplicate
+  before 7A, and those were the drift risk.
 
 ---
 

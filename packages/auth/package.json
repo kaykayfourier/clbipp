@@ -1,0 +1,31 @@
+{
+  "name": "@clbipp/auth",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/supabase/auth.ts",
+    "./server": "./src/supabase/server.ts",
+    "./client": "./src/supabase/client.ts",
+    "./admin": "./src/supabase/admin.ts",
+    "./realtime": "./src/realtime.ts",
+    "./middleware": "./src/middleware.ts",
+    "./storage": "./src/storage.ts",
+    "./storage-server": "./src/storage-server.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.106.1",
+    "server-only": "^0.0.1"
+  },
+  "peerDependencies": {
+    "next": "*"
+  },
+  "devDependencies": {
+    "@clbipp/tsconfig": "*",
+    "typescript": "^5",
+    "vitest": "^4.1.7"
+  }
+}

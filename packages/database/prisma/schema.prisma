@@ -1,0 +1,675 @@
+generator client {
+  provider = "prisma-client-js"
+  // Explicit output (gitignored): resolves correctly regardless of npm
+  // hoisting in the workspace; Prisma 6 deprecates the default path anyway.
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model BatteryPack {
+  id                 String              @id @default(uuid())
+  packAadhaar        String              @unique @map("pack_aadhaar")
+  weightKg           Decimal?            @map("weight_kg") @db.Decimal(8, 2)
+  chemistry          Chemistry
+  manufacturer       String?
+  modelNumber        String?             @map("model_number")
+  nominalCapacityKwh Decimal?            @map("nominal_capacity_kwh") @db.Decimal(8, 2)
+  nominalVoltage     Decimal?            @map("nominal_voltage") @db.Decimal(8, 2)
+  manufactureDate    DateTime?           @map("manufacture_date")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  inspections        BatteryInspection[]
+  decisions          PathwayDecision[]
+
+  @@map("battery_packs")
+}
+
+model BatteryInspection {
+  id                    String              @id @default(uuid())
+  packId                String              @map("pack_id")
+  inspectionTimestamp   DateTime            @default(now()) @map("inspection_timestamp")
+  inspectorId           String?             @map("inspector_id")
+  visualScore           Int?                @map("visual_score")
+  leakageScore          Int?                @map("leakage_score")
+  thermalScore          Int?                @map("thermal_score")
+  damageScore           Decimal?            @map("damage_score") @db.Decimal(4, 2)
+  sohPct                Decimal?            @map("soh_pct") @db.Decimal(5, 2)
+  socPct                Decimal?            @map("soc_pct") @db.Decimal(5, 2)
+  entropyValue          Decimal?            @map("entropy_value") @db.Decimal(8, 4)
+  entropyAnomaliesCount Int                 @default(0) @map("entropy_anomalies_count")
+  irImbalanceRatio      Decimal?            @map("ir_imbalance_ratio") @db.Decimal(6, 3)
+  voltageImbalanceMv    Decimal?            @map("voltage_imbalance_mv") @db.Decimal(6, 1)
+  tempMaxC              Decimal?            @map("temp_max_c") @db.Decimal(5, 2)
+  cycleCount            Int?                @map("cycle_count")
+  rulMonths             Int?                @map("rul_months")
+  notes                 String?
+  diagnostics           BatteryDiagnostic[]
+  pack                  BatteryPack         @relation(fields: [packId], references: [id], onDelete: Cascade)
+  decisions             PathwayDecision[]
+
+  @@map("battery_inspections")
+}
+
+model BatteryDiagnostic {
+  id               String            @id @default(uuid())
+  inspectionId     String            @map("inspection_id")
+  cellDataSnapshot Json?             @map("cell_data_snapshot")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  inspection       BatteryInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@map("battery_diagnostics")
+}
+
+model MarketPrices {
+  id        String   @id @default(uuid())
+  Li        Decimal  @map("Li_price")
+  Co        Decimal  @map("Co_price")
+  Ni        Decimal  @map("Ni_price")
+  Mn        Decimal  @map("Mn_price")
+  Cu        Decimal  @map("Cu_price")
+  Al        Decimal  @map("Al_price")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("market_prices")
+}
+
+model PathwayFactor {
+  id                   String            @id @default(uuid())
+  configVersion        String            @map("config_version")
+  processingRatePerKg  Decimal?          @map("processing_rate_per_kg")
+  refurbLaborRatePerKg Decimal?          @map("refurb_labor_rate_per_kg")
+  cellReplacementRate  Decimal?          @map("cell_replacement_rate")
+  ageCap               Int?              @map("age_cap")
+  cycleCap             Int?              @map("cycle_cap")
+  testingRatePerKg     Decimal?          @map("testing_rate_per_kg")
+  hydrometRatePerKg    Decimal?          @map("hydromet_rate_per_kg")
+  chemistryComposition Json?             @map("chemistry_composition")
+  isActive             Boolean           @default(true) @map("is_active")
+  effectiveFrom        DateTime?         @map("effective_from")
+  effectiveTo          DateTime?         @map("effective_to")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  decisions            PathwayDecision[]
+
+  @@map("pathway_factors")
+}
+
+model PathwayDecision {
+  id                String            @id @default(uuid())
+  packId            String            @map("pack_id")
+  inspectionId      String            @map("inspection_id")
+  factorConfigId    String            @map("factor_config_id")
+  pathway           Pathway
+  costBreakdown     Json?             @map("cost_breakdown")
+  revenueBreakdown  Json?             @map("revenue_breakdown")
+  netRevenue        Decimal?          @map("net_revenue") @db.Decimal(12, 2)
+  costsTotal        Decimal?          @map("costs_total") @db.Decimal(12, 2)
+  pMin              Decimal?          @map("p_min") @db.Decimal(12, 2)
+  pRecommended      Decimal?          @map("p_recommended") @db.Decimal(12, 2)
+  pMax              Decimal?          @map("p_max") @db.Decimal(12, 2)
+  confidenceScore   Decimal?          @map("confidence_score") @db.Decimal(4, 3)
+  decisionRationale String?           @map("decision_rationale")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  factorConfig      PathwayFactor     @relation(fields: [factorConfigId], references: [id])
+  inspection        BatteryInspection @relation(fields: [inspectionId], references: [id])
+  pack              BatteryPack       @relation(fields: [packId], references: [id])
+
+  @@map("pathway_decisions")
+}
+
+enum Chemistry {
+  LFP
+  NMC622
+  NMC811
+  LCO
+}
+
+enum Pathway {
+  REUSE
+  REFURBISH
+  RECYCLE
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum VendorType {
+  individual
+  fleet
+}
+
+enum KycStatus {
+  pending
+  submitted
+  verified
+  rejected
+}
+
+// Ordered lifecycle + the terminal `cancelled` side-state. `arrived` and
+// `offered` were added 2026-08-09 (Batch 7A): the company flow document puts
+// assessment and quoting ON SITE, and until this change "an offer exists" was an
+// implicit sub-state of `scheduled` rather than a status — which is what made
+// the offer screens unreachable in Batch 6.5.
+//
+// The customer-facing display order lives in `LIFECYCLE_STAGES`
+// (packages/ui/src/tokens.ts) and must match this list.
+enum PickupStatus {
+  requested
+  scheduled
+  arrived
+  offered
+  collected
+  tested
+  processed
+  recovered
+  certified
+  cancelled
+}
+
+enum BatteryType {
+  li_ion_nmc
+  li_ion_lfp
+  li_ion_nca
+  lead_acid
+  nimh
+  other
+}
+
+enum RecoveryPathway {
+  recycle
+  refurbish
+  reuse
+  dispose
+}
+
+enum UserRole {
+  customer
+  agent
+  admin
+}
+
+enum BatteryCategory {
+  portable
+  automotive
+  industrial
+  ev
+}
+
+enum BatteryCondition {
+  healthy
+  swollen
+  leaking
+  dead
+}
+
+enum AddressStatus {
+  operational
+  not_operational
+}
+
+enum PaymentStatus {
+  pending
+  processing
+  paid
+  failed
+}
+
+enum PaymentMethod {
+  upi
+  bank_transfer
+  wallet
+  cash
+}
+
+enum WalletTxnKind {
+  payout
+  redemption
+  adjustment
+}
+
+enum ManifestStatus {
+  draft
+  dispatched
+  received
+  reconciled
+}
+
+// ── Models ───────────────────────────────────────────────────────────────────
+
+model Profile {
+  id         String     @id @db.Uuid
+  vendorType VendorType @map("vendor_type")
+  // Drives which app a session may enter. Middleware reads this.
+  role       UserRole   @default(customer)
+
+  fullName      String  @map("full_name")
+  email         String
+  phone         String?
+  // Collected at signup now; flipped true when we add SMS OTP later.
+  phoneVerified Boolean @default(false) @map("phone_verified")
+
+  companyName     String? @map("company_name")
+  gstNumber       String? @map("gst_number")
+  panNumber       String? @map("pan_number")
+  businessAddress String? @map("business_address")
+  eprRegId        String? @map("epr_reg_id")
+
+  kycStatus  KycStatus @default(pending) @map("kyc_status")
+  kycDocUrls String[]  @map("kyc_doc_urls")
+
+  // Denormalised cache of sum(wallet_txns.delta_paise). WalletTxn is the source
+  // of truth; always write both in one transaction (same pattern as
+  // pickups.status vs status_events).
+  walletBalancePaise Int @default(0) @map("wallet_balance_paise")
+
+  // agent-only (null for customer/admin) — used by the Agent app
+  agentZone       String?   @map("agent_zone")
+  agentVehicle    String?   @map("agent_vehicle")
+  safetyTrainedAt DateTime? @map("safety_trained_at")
+  agentRating     Decimal?  @map("agent_rating") @db.Decimal(3, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Two relations to Pickup (as vendor, as assigned agent) so both MUST be
+  // named — Prisma cannot disambiguate them otherwise.
+  pickups         Pickup[]      @relation("VendorPickups")
+  assignedPickups Pickup[]      @relation("AgentPickups")
+  addresses       Address[]
+  offers          Offer[]
+  certificates    Certificate[]
+  payments        Payment[]
+  walletTxns      WalletTxn[]
+  invoices        Invoice[]
+
+  @@index([role])
+  @@map("profiles")
+}
+
+model Address {
+  id        String @id @default(uuid())
+  profileId String @map("profile_id") @db.Uuid
+
+  label   String // "Warehouse", "Home", "Depot 2"
+  line1   String
+  line2   String?
+  city    String
+  state   String
+  pincode String
+
+  // Captured from navigator.geolocation at add-time. Nullable: manual entry
+  // must stay possible when the user denies location permission.
+  lat Decimal? @db.Decimal(10, 7)
+  lng Decimal? @db.Decimal(10, 7)
+
+  status    AddressStatus @default(operational)
+  isDefault Boolean       @default(false) @map("is_default")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  pickups Pickup[]
+
+  @@index([profileId])
+  @@map("addresses")
+}
+
+// A Pickup is now a HEADER row: who, where, when, which category, which agent.
+// The battery detail lives in BatteryItem (company build doc §6).
+model Pickup {
+  id       String  @id
+  vendorId String  @map("vendor_id") @db.Uuid
+  agentId  String? @map("agent_id") @db.Uuid
+
+  // Customer picks category at booking; the agent tags chemistry per item
+  // on-site. Two different questions — see COMPANY_FLOW_REVIEW.
+  category  BatteryCategory @default(portable)
+  addressId String?         @map("address_id")
+
+  // ── Superseded by BatteryItem. Nullable now, kept so existing rows and the
+  // old request form don't break during the transition. Do not build new
+  // reads against these three. ──
+  // @map kept deliberately: BATCH_0B_SCHEMA.md §2 omits it, which would rename
+  // the live `battery_type` column (dropping 10 rows) and break the raw
+  // PostgREST insert in the old request form. Flagged to B.
+  batteryType    BatteryType? @map("battery_type")
+  approxQuantity String?      @map("approx_quantity")
+  approxWeightKg Decimal?     @map("approx_weight_kg")
+
+  // Free-text address. Still required; backfilled into Address by the seed.
+  location String
+
+  preferredDate DateTime? @map("preferred_date") @db.Date
+  scheduledSlot DateTime? @map("scheduled_slot")
+  etaMinutes    Int?      @map("eta_minutes")
+
+  // Shown to the customer at booking, before any agent sees the request.
+  indicativeQuotePaise Int?               @map("indicative_quote_paise")
+  // Customer's own self-report. The agent's assessment is per-item.
+  conditionFlags       BatteryCondition[] @map("condition_flags")
+
+  notes       String?
+  photoUrls   String[] @map("photo_urls")
+  publicToken String   @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
+
+  status PickupStatus @default(requested)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  vendor          Profile          @relation("VendorPickups", fields: [vendorId], references: [id])
+  agent           Profile?         @relation("AgentPickups", fields: [agentId], references: [id])
+  address         Address?         @relation(fields: [addressId], references: [id])
+  items           BatteryItem[]
+  statusEvents    StatusEvent[]
+  offer           Offer?
+  certificate     Certificate?
+  payment         Payment?
+  receipt         PickupReceipt?
+  invoice         Invoice?
+  safetyChecklist SafetyChecklist?
+
+  @@index([vendorId])
+  @@index([agentId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("pickups")
+}
+
+// THE centre of this rework. One row per battery line in a request.
+// Two halves: what the customer declared, and what the agent confirmed on site.
+model BatteryItem {
+  id       String @id @default(uuid())
+  pickupId String @map("pickup_id")
+
+  // ── Customer-declared at booking ──
+  category  BatteryCategory
+  quantity  Int              @default(1)
+  weightKg  Decimal?         @map("weight_kg") @db.Decimal(8, 2)
+  condition BatteryCondition @default(healthy)
+  photoUrls String[]         @map("photo_urls")
+
+  // ── Agent-confirmed on site (all null until collection) ──
+  chemistry          BatteryType?
+  confirmedWeightKg  Decimal?          @map("confirmed_weight_kg") @db.Decimal(8, 2)
+  confirmedCondition BatteryCondition? @map("confirmed_condition")
+  agentPhotoUrls     String[]          @map("agent_photo_urls")
+  recordedBy         String?           @map("recorded_by") @db.Uuid
+  recordedAt         DateTime?         @map("recorded_at")
+
+  // ── Pricing (paise, integers only — never floats for money) ──
+  unitPricePaise Int? @map("unit_price_paise")
+  linePricePaise Int? @map("line_price_paise")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  pickup Pickup @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+
+  @@index([pickupId])
+  @@map("battery_items")
+}
+
+// Drives both the customer's indicative quote and the agent's payout.
+// A row with null chemistry/condition is the category-wide fallback.
+model PricingRate {
+  id String @id @default(uuid())
+
+  category  BatteryCategory
+  chemistry BatteryType?
+  condition BatteryCondition?
+
+  ratePerKgPaise   Int  @map("rate_per_kg_paise")
+  ratePerUnitPaise Int? @map("rate_per_unit_paise")
+  // Basis points, 10000 = 1.00x. Integer so money math never touches a float.
+  conditionMultiplierBp Int @default(10000) @map("condition_multiplier_bp")
+
+  isActive      Boolean   @default(true) @map("is_active")
+  effectiveFrom DateTime  @default(now()) @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([category, isActive])
+  @@map("pricing_rates")
+}
+
+// Append-only event log. NEVER update a row here — insert a new one.
+// pickups.status is the denormalised fast-read cache of the latest event.
+model StatusEvent {
+  id         BigInt       @id @default(autoincrement())
+  pickupId   String       @map("pickup_id")
+  status     PickupStatus
+  actorId    String?      @map("actor_id") @db.Uuid
+  actorRole  String?      @map("actor_role")
+  notes      String?
+  // Chain-of-custody (company doc §5.3): where + photo proof per transition.
+  lat        Decimal?     @db.Decimal(10, 7)
+  lng        Decimal?     @db.Decimal(10, 7)
+  photoUrls  String[]     @map("photo_urls")
+  occurredAt DateTime     @default(now()) @map("occurred_at")
+
+  pickup Pickup @relation(fields: [pickupId], references: [id])
+
+  @@index([pickupId])
+  @@index([occurredAt])
+  @@map("status_events")
+}
+
+model Offer {
+  id       BigInt @id @default(autoincrement())
+  pickupId String @unique @map("pickup_id")
+  vendorId String @map("vendor_id") @db.Uuid
+
+  pathway           RecoveryPathway
+  // PAISE. 18450000 = ₹1,84,500. See packages/core formatOfferPrice().
+  estimatedPrice    Int             @map("estimated_price")
+  rationale         String
+  materialBreakdown Json            @default("[]") @map("material_breakdown")
+  deductions        Json            @default("[]")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pickup Pickup  @relation(fields: [pickupId], references: [id])
+  vendor Profile @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("offers")
+}
+
+model Payment {
+  id       String @id @default(uuid())
+  pickupId String @unique @map("pickup_id")
+  vendorId String @map("vendor_id") @db.Uuid
+
+  amountPaise Int           @map("amount_paise")
+  method      PaymentMethod @default(upi)
+  status      PaymentStatus @default(pending)
+
+  // Populated only when PAYMENTS_MODE=razorpay. Null in simulated mode.
+  gatewayRef   String?   @map("gateway_ref")
+  gatewayOrder String?   @map("gateway_order")
+  paidAt       DateTime? @map("paid_at")
+  failureNote  String?   @map("failure_note")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  pickup Pickup  @relation(fields: [pickupId], references: [id])
+  vendor Profile @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("payments")
+}
+
+// Append-only ledger. profiles.wallet_balance_paise is the cache.
+model WalletTxn {
+  id        String @id @default(uuid())
+  profileId String @map("profile_id") @db.Uuid
+
+  deltaPaise        Int           @map("delta_paise") // signed: +credit / -debit
+  kind              WalletTxnKind
+  balanceAfterPaise Int           @map("balance_after_paise")
+  pickupId          String?       @map("pickup_id")
+  note              String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profile Profile @relation(fields: [profileId], references: [id])
+
+  @@index([profileId, createdAt(sort: Desc)])
+  @@map("wallet_txns")
+}
+
+// Company doc §4 step 4: the receipt handed over AT COLLECTION.
+// This is NOT the EPR certificate — that comes at step 8, after recycling.
+model PickupReceipt {
+  id       String @id @default(uuid())
+  pickupId String @unique @map("pickup_id")
+
+  receiptNo   String  @unique @map("receipt_no")
+  pdfUrl      String? @map("pdf_url")
+  publicToken String  @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
+
+  totalWeightKg Decimal @map("total_weight_kg") @db.Decimal(10, 2)
+  itemCount     Int     @map("item_count")
+  amountPaise   Int?    @map("amount_paise")
+
+  agentId     String?  @map("agent_id") @db.Uuid
+  capturedLat Decimal? @map("captured_lat") @db.Decimal(10, 7)
+  capturedLng Decimal? @map("captured_lng") @db.Decimal(10, 7)
+
+  collectedAt DateTime @default(now()) @map("collected_at")
+
+  pickup Pickup @relation(fields: [pickupId], references: [id])
+
+  @@map("pickup_receipts")
+}
+
+model Certificate {
+  id       BigInt @id @default(autoincrement())
+  pickupId String @unique @map("pickup_id")
+  vendorId String @map("vendor_id") @db.Uuid
+
+  pdfUrl      String @map("pdf_url")
+  publicToken String @unique @default(dbgenerated("gen_random_uuid()")) @map("public_token") @db.Uuid
+
+  totalWeightKg   Decimal  @map("total_weight_kg")
+  materialSummary Json     @default("[]") @map("material_summary")
+  // Impact dashboard. See §6 — this number needs a cited source before demo.
+  co2AvoidedKg    Decimal? @map("co2_avoided_kg") @db.Decimal(10, 2)
+
+  certifiedAt DateTime @default(now()) @map("certified_at")
+
+  pickup Pickup  @relation(fields: [pickupId], references: [id])
+  vendor Profile @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("certificates")
+}
+
+// pickupId null = a consolidated invoice covering a period (fleet accounts).
+model Invoice {
+  id       String  @id @default(uuid())
+  vendorId String  @map("vendor_id") @db.Uuid
+  pickupId String? @unique @map("pickup_id")
+
+  number String @unique
+
+  periodStart DateTime? @map("period_start") @db.Date
+  periodEnd   DateTime? @map("period_end") @db.Date
+
+  subtotalPaise Int @map("subtotal_paise")
+  taxPaise      Int @default(0) @map("tax_paise")
+  totalPaise    Int @map("total_paise")
+
+  pdfUrl   String?  @map("pdf_url")
+  issuedAt DateTime @default(now()) @map("issued_at")
+
+  vendor Profile @relation(fields: [vendorId], references: [id])
+  pickup Pickup? @relation(fields: [pickupId], references: [id])
+
+  @@index([vendorId])
+  @@map("invoices")
+}
+
+// ── Below: scaffolded for the Agent + Admin apps so neither needs a second
+// migration. No customer-app screen reads these. Seed one row each and move on.
+
+model Facility {
+  id       String   @id @default(uuid())
+  name     String
+  location String
+  lat      Decimal? @db.Decimal(10, 7)
+  lng      Decimal? @db.Decimal(10, 7)
+
+  capacityKg Decimal? @map("capacity_kg") @db.Decimal(10, 2)
+  isActive   Boolean  @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  manifests DispatchManifest[]
+
+  @@map("facilities")
+}
+
+model Recycler {
+  id        String @id @default(uuid())
+  name      String
+  cpcbRegNo String @unique @map("cpcb_reg_no")
+
+  acceptedChemistries BatteryType[] @map("accepted_chemistries")
+  capacityKg          Decimal?      @map("capacity_kg") @db.Decimal(10, 2)
+  isActive            Boolean       @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  manifests DispatchManifest[]
+
+  @@map("recyclers")
+}
+
+model DispatchManifest {
+  id         String @id @default(uuid())
+  facilityId String @map("facility_id")
+  recyclerId String @map("recycler_id")
+
+  manifestNo String         @unique @map("manifest_no")
+  status     ManifestStatus @default(draft)
+
+  // BatteryItem ids in this dispatch. Json rather than a join table because a
+  // manifest is an immutable snapshot once dispatched — it must not change when
+  // the underlying items do.
+  itemIds Json @default("[]") @map("item_ids")
+
+  totalWeightKg Decimal?  @map("total_weight_kg") @db.Decimal(10, 2)
+  dispatchedAt  DateTime? @map("dispatched_at")
+  confirmedAt   DateTime? @map("confirmed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  facility Facility @relation(fields: [facilityId], references: [id])
+  recycler Recycler @relation(fields: [recyclerId], references: [id])
+
+  @@index([status])
+  @@map("dispatch_manifests")
+}
+
+model SafetyChecklist {
+  id       String @id @default(uuid())
+  pickupId String @unique @map("pickup_id")
+  agentId  String @map("agent_id") @db.Uuid
+
+  // { terminalsInsulated: bool, fireSafeCrate: bool, noMixedChemistry: bool, ... }
+  items  Json    @default("{}")
+  passed Boolean @default(false)
+
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  pickup Pickup @relation(fields: [pickupId], references: [id])
+
+  @@map("safety_checklists")
+}

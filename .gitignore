@@ -1,24 +1,22 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
 
 # testing
-/coverage
+coverage/
 
-# next.js
-/.next/
-/out/
+# next.js (any app in the workspace)
+.next/
+out/
+
+# turborepo
+.turbo/
 
 # production
-/build
+build/
 
 # misc
 .DS_Store
@@ -40,7 +38,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-src/app/generated/
+# prisma generated client (explicit generator output)
+packages/database/src/generated/
 
 CLAUDE.local.md
 post-review.md
+
+# Superseded working docs — kept locally, out of the repo (2026-08-12).
+# All four describe the PRE-monorepo app and were replaced by
+# REVAMP_BATCHES_2026-08-09.md and HANDOVER_KHALID_2026-08-12.md.
+docs/BATCH_A_FLAGS.md
+docs/REMEDIATION_PLAN.md
+docs/REVIEW_findings_2026-07-10.md
+docs/schema-contract-verify.txt
