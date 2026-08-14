@@ -34,7 +34,7 @@ export const colors = {
   hazardBg: "#FFF3EE",
 
   // Semantic — text-on-coloured-bg shades (darker for WCAG contrast)
-  successText: "#15803D",
+  successText: "#0cb349",
   errorText: "#B91C1C",
   warningText: "#C2410C",
   infoText: "#1D4ED8",
