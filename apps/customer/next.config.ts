@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   // Workspace packages ship raw TypeScript (just-in-time packages) — Next
@@ -10,6 +11,11 @@ const nextConfig: NextConfig = {
   // breaks or drags a shim in for. It only ever runs in the Node route handler
   // at /api/documents, so externalising it costs nothing.
   serverExternalPackages: ["@react-pdf/renderer"],
+
+  // Pin the tracing root at the monorepo root. Next already infers this from
+  // the root lockfile, so it changes nothing today — it's here to stop the
+  // inference drifting if a second lockfile ever appears under apps/.
+  outputFileTracingRoot: path.join(__dirname, "../../"),
 
   // Prisma's query engine is a native binary loaded by a path Prisma computes
   // at runtime, so the tracer never follows it and it must be forced in.
