@@ -198,30 +198,46 @@ anything in the app.
 
 ---
 
-## 7. Known pre-deploy flag: `middleware` → `proxy`
+## 7. `middleware` → `proxy` — DONE (2026-08-14, PR #18)
 
-Next 16.2.6 prints on every dev and build run:
+Next 16.2.6 used to print on every dev and build run:
 
 ```
 ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
 ```
 
-**Read and reported here; deliberately NOT changed in Batch 10.** Reasons:
+**This is resolved and on `main`.** `apps/customer/src/middleware.ts` is now
+`apps/customer/src/proxy.ts`, exporting `proxy` instead of `middleware`. Nothing
+here is outstanding — the warning is gone from the dev and build output.
 
-- It is a rename of `src/middleware.ts` → `src/proxy.ts` plus the exported
-  symbol, and `src/middleware.ts` is the file that enforces the role gate and
-  every route guard in the app. Deploy day is the worst possible moment to
-  discover that a renamed auth boundary behaves differently.
-- It is a deprecation warning, not a break — the current file still runs, and
-  the build output confirms it (`ƒ Proxy (Middleware)`).
-- ⚠ The repo has a standing rule that this file **must live under `src/`** —
-  Next's dev bundler silently never registers it at the project root when
-  `src/app` is in use. Whatever it ends up called, that constraint holds, and a
-  silently-unregistered auth middleware fails **open**.
+Verified either side of the rename:
 
-Suggested handling: do the rename as its own small change with a full
-`npm run smoke` **and** `npm run smoke -- agent@test demo1234 --blocked` either
-side of it, before or after deploy — not bundled into either.
+| Check | Result |
+|---|---|
+| `npm run build` | green, `ƒ Proxy (Middleware)` present |
+| deprecation warning | gone |
+| `npm run smoke` | 44/44 |
+| `npm run smoke -- agent@test demo1234 --blocked` | 44/44, role gate holds |
+
+Two constraints that still apply to that file:
+
+- **It must stay under `src/`.** Next's dev bundler silently never registers it
+  at the project root when `src/app` is in use, and a silently-unregistered auth
+  guard fails **open**. This holds whatever the file is called.
+- **`packages/auth/src/middleware.ts` is NOT renamed and must not be.** That is
+  the `createAuthMiddleware` factory — an ordinary module, not a Next convention
+  file. Only the app-level file is a convention.
+
+> **How this got messy, recorded so it isn't repeated.** Khalid did this rename
+> on `main` (`21cd3bd`, `28a7cca`) against the *pre-monorepo* layout, while the
+> revamp branch had moved the same file to `apps/customer/src/`. Git could not
+> reconcile the two renames and the PR would not auto-merge. The fix was small —
+> merge `main` into the branch, delete the stray `apps/customer/src/proxy.ts`
+> that rename detection dragged in, then redo the rename on the revamp's file —
+> **but it had to be done by whoever knew which of the two files was correct.**
+> Khalid's `proxy.ts` was the old middleware body and would have silently
+> reverted the role gate. Assign a conflict like this to the branch author, not
+> to the repo owner.
 
 ---
 
@@ -232,7 +248,7 @@ SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke
 SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke -- agent@test demo1234 --blocked
 ```
 
-`scripts/smoke.mjs` already reads `SMOKE_BASE_URL`, so the same **42** assertions
+`scripts/smoke.mjs` already reads `SMOKE_BASE_URL`, so the same **44** assertions
 run against production with no change.
 
 One thing that needs **no** change: the compliance CSV's `verification_link`

@@ -1,101 +1,65 @@
 # Handover to Khalid — deploy + outstanding work
 
-**From:** Aamir · **Date:** 2026-08-12 · **Branch:** `feat/customer-v2` (16 commits)
+**From:** Aamir · **Date:** 2026-08-12 · **Updated:** 2026-08-14
+**Branch:** merged — everything below is on `origin/main`
 
-The customer-app revamp is code-complete. Batches 0A–12 are done. What's left is
-the **deploy** (§2), a **prioritised backlog** (§3), and **one product decision**
-(§4). Everything here has been verified against the running app and the live
-database, not read off older docs.
+The customer-app revamp is code-complete and **merged**. Batches 0A–12 are done.
+What's left is the **deploy** (§2), a **prioritised backlog** (§3), and **one
+product decision** (§4). Everything here has been verified against the running
+app and the live database, not read off older docs.
 
-**Read in this order:** §1 before you merge anything. §2 to get it live. §3 after.
+**Read in this order:** §2 to get it live. §3 after. §1 is history now — skip it
+unless you want the record.
+
+## Who does what — read this first
+
+The remaining deploy work splits cleanly, and the split matters because the two
+halves need different access:
+
+| Task | Owner | Why them |
+|---|---|---|
+| **Vercel project, build settings, GitHub sync** (§2.2) | **Khalid** | Repo owner. Proper GitHub-integrated deploys instead of Aamir's manual CLI pushes — this is the whole reason it moved to you |
+| **Vercel env vars** (§2.3) | **Khalid pastes, Aamir supplies** | Values live only in Aamir's gitignored `.env.local`. Hand them over out-of-band |
+| **GCP OAuth consent + credentials** (§2.1 steps 1–2) | **Either** | Standalone. Whoever has a Google account free for 10 minutes |
+| **Supabase provider + redirect URLs** (§2.1 steps 3–4, §4 of DEPLOY.md) | **Whoever owns the Supabase project** | One dashboard pass. Don't split it across two people — the redirect-URL list is per-origin and easy to half-do |
+| **Post-deploy smoke against the live URL** (§2.5) | **Khalid** | He'll have the URL first |
+
+**Anything that needs judgement about *which* version of a file is correct goes
+to the branch author, not the repo owner.** That was the lesson of §1.
 
 ---
 
-## 1. ⚠ Before you merge: `origin/main` has moved, and it collides
+## 1. The middleware/proxy collision — RESOLVED 2026-08-14
 
-On 2026-08-10 you pushed two commits to `origin/main` that this branch has never
-seen:
+Kept as a record. Nothing here is outstanding.
 
-```
-21cd3bd  changed naming convention for middleware   src/{middleware.ts => proxy.ts}, src/lib/tokens.ts
-28a7cca  fixed middleware to proxy function name    src/proxy.ts
-```
+Your two commits on `main` (`21cd3bd`, `28a7cca`) renamed `src/middleware.ts` →
+`src/proxy.ts` in the **pre-monorepo** layout, while the revamp had moved that
+file to `apps/customer/src/middleware.ts`. Two histories renaming the same file
+in different directions — git could not auto-merge it, which is why PR #17 was
+blocked.
 
-Those touch `src/middleware.ts` and `src/lib/tokens.ts` — **the pre-monorepo
-layout**. The revamp moved those files to `apps/customer/src/middleware.ts` and
-`packages/ui/src/tokens.ts`. So the two histories renamed and moved the same
-files in different directions.
+**Resolved in two PRs, both merged:**
 
-I ran a **non-destructive** merge test (`git merge-tree`, nothing written):
+- **PR #17** — merged `main` into `feat/customer-v2`, deleted the stray
+  `apps/customer/src/proxy.ts` that rename detection dragged in (it was the old
+  middleware body), kept the revamp's file. `packages/ui/src/tokens.ts`
+  auto-merged and carried your colour change through silently — see §1b.
+- **PR #18** — redid the rename properly on the revamp's file:
+  `apps/customer/src/proxy.ts`, exporting `proxy`. Build green with
+  `ƒ Proxy (Middleware)`, deprecation warning gone, smoke 44/44 and `--blocked`
+  44/44 either side.
 
-```
-CONFLICT (file location): src/middleware.ts renamed to src/proxy.ts in origin/main,
-  inside a directory that was renamed in feat/customer-v2, suggesting it should
-  perhaps be moved to apps/customer/src/proxy.ts.
-CONFLICT (rename/delete)
-CONFLICT (modify/delete)
-Auto-merging packages/ui/src/tokens.ts
-```
+**Why it mattered who resolved it:** the obvious resolution — keep `proxy.ts`,
+delete `middleware.ts` — was the wrong one. Your `proxy.ts` was the old
+pre-monorepo middleware, missing `allowRoles: ['customer']` (the role gate),
+`onboardingPath: '/onboarding'` (Google sign-in), `/verify` in `publicPaths`
+(email OTP), and the matcher exclusions for `manifest.webmanifest` / `sw.js` /
+`offline.html` / `icons/` (PWA install + offline page). Choosing correctly
+required knowing what the revamp had put in that file — so it belonged to the
+branch author. **Route file-version conflicts to whoever wrote the branch.**
 
-### 1a. The merge leaves TWO middleware files
-
-The merged tree contains **both**:
-
-```
-apps/customer/src/middleware.ts    ← the revamp's (role gate, /onboarding, PWA matcher)
-apps/customer/src/proxy.ts         ← yours, carried over by rename detection
-```
-
-**Good news: this fails loudly, not silently.** Next 16.2.6 hard-errors when both
-exist — verified in `node_modules/next/dist/build/index.js:645`:
-
-> `Both middleware file "./…" and proxy file "./…" are detected. Please use "./…" only.`
-
-So a bad merge cannot quietly ship. The build breaks on Vercel with a clear
-message.
-
-**The dangerous part is how you resolve it.** The obvious resolution — "keep
-`proxy.ts`, delete `middleware.ts`" — is the wrong one. Your `proxy.ts` is the
-**old pre-monorepo middleware**, and compared to the revamp's it is missing:
-
-| Missing from your `proxy.ts` | What breaks |
-|---|---|
-| `allowRoles: ['customer']` | **The role gate.** `agent@test` and `admin@test` could enter the customer app — the Batch 6 fix silently reverted |
-| `onboardingPath: '/onboarding'` | **Google sign-in.** A first-time Google user has a session and no `profiles` row; without this they never reach the form that creates one |
-| `/verify` in `publicPaths` | **Email OTP login** — the code screen becomes unreachable logged out |
-| matcher exclusions for `manifest.webmanifest`, `sw.js`, `offline.html`, `icons/` | **PWA install and the offline page**, both of which must load logged out |
-
-**Correct resolution — keep the revamp's *content*, adopt your *name*:**
-
-```bash
-git checkout main && git pull
-git merge feat/customer-v2
-
-# Discard the old file that rename detection dragged in:
-rm -f apps/customer/src/proxy.ts
-git add -A apps/customer/src/
-
-# Now do the rename properly, on the revamp's file:
-git mv apps/customer/src/middleware.ts apps/customer/src/proxy.ts
-#   then edit that file: `export const middleware = …` → `export const proxy = …`
-```
-
-Three things to know while doing it:
-
-- **`packages/auth/src/middleware.ts` must NOT be renamed.** That's the
-  `createAuthMiddleware` factory — an ordinary module, not a Next convention
-  file. Only the app-level file is a convention.
-- **The file must stay under `src/`.** Next's dev bundler silently never
-  registers it at the project root when `src/app` is in use, and an unregistered
-  auth middleware fails **open**. This holds whatever it's called.
-- **Verify with the smoke test either side of the rename** (see §2.5). The
-  `--blocked` run is the one that proves the role gate survived:
-  ```bash
-  npm run smoke                                      # 44/44
-  npm run smoke -- agent@test demo1234 --blocked     # 44/44, all must bounce
-  ```
-
-### 1b. A colour change auto-merges silently — check it
+### 1b. A colour change auto-merged silently — STILL OPEN
 
 `packages/ui/src/tokens.ts` **auto-merges with no conflict**, so nothing will
 warn you. Commit `21cd3bd` bundled an unrelated design-token change in with the
@@ -117,8 +81,18 @@ It's used on success banners, status badges, and the wallet credit amounts. The
 comment directly above it in the file says *"darker for WCAG contrast"* — so the
 original value was chosen deliberately.
 
-If the lighter green was intentional, fine — but it needs a different approach
-than swapping the text shade. If it wasn't, revert that one line after merging.
+**It merged. `#0cb349` is live on `main` right now** — the auto-merge was not
+caught before PR #17 went in. If the lighter green was intentional, fine, but it
+needs a different approach than swapping the text shade. If it wasn't, it's a
+one-line revert:
+
+```bash
+# packages/ui/src/tokens.ts:37
+-  successText: "#0cb349",
++  successText: "#15803D",
+```
+
+**Khalid's call — it's his change.** Decide before showing anyone (§3, P1 #5).
 
 > **Related, and worth knowing either way:** the palette is duplicated. Every hex
 > lives in **both** `packages/ui/src/tokens.ts` (TS object) and
@@ -127,15 +101,14 @@ than swapping the text shade. If it wasn't, revert that one line after merging.
 > Tailwind class read the second. **Changing one alone gives you a half-applied
 > colour** — which is exactly what commit `21cd3bd` would have done. See §3, P2.
 
-### 1c. So: is it safe for Aamir to push now?
+### 1c. Current state of `main`
 
-**Yes — pushing the branch is completely safe.** `git push -u origin
-feat/customer-v2` creates a new remote branch and touches `main` not at all. The
-working tree is clean, all 16 commits are in, and nothing above is a reason to
-delay.
+```
+5b73954  Merge pull request #18 (middleware → proxy rename)
+c240186  Merge pull request #17 (the customer-app revamp)
+```
 
-The collision only matters at **merge time**, which is yours. Open the PR, expect
-the conflict, resolve it per §1a.
+Both merged. `main` builds green, smoke 44/44 both runs. Clone it and start at §2.
 
 ---
 
@@ -268,12 +241,12 @@ several batches old.
 
 ### P0 — blocks the deploy
 
-| # | Item | Notes |
-|---|---|---|
-| 1 | **Resolve the middleware/proxy collision correctly** | §1a. Wrong resolution silently removes the role gate |
-| 2 | **Enable Google OAuth** (GCP + Supabase) | §2.1. Nothing works on any origin until this is done |
-| 3 | **Vercel project + env vars** | §2.2–2.3. The turbo build command is the one that matters |
-| 4 | **Supabase redirect URLs** | §2.1 step 4. Do it in the same pass as OAuth |
+| # | Item | Owner | Notes |
+|---|---|---|---|
+| ~~1~~ | ~~Resolve the middleware/proxy collision~~ | — | **Done 2026-08-14**, PRs #17 + #18. §1 |
+| 2 | **Enable Google OAuth** (GCP + Supabase) | GCP: either · Supabase: project owner | §2.1. Nothing works on any origin until this is done |
+| 3 | **Vercel project + env vars** | Khalid (values from Aamir) | §2.2–2.3. The turbo build command is the one that matters |
+| 4 | **Supabase redirect URLs** | same person as #2 | §2.1 step 4. Do it in the same pass as OAuth |
 
 ### P1 — before showing anyone
 
@@ -410,8 +383,8 @@ chosen rather than after.
 
 ## 5. Repo facts worth having
 
-- **Branch:** `feat/customer-v2`, 16 commits, not yet merged. The PR is the end
-  of Batch 13, not of Batch 12.
+- **Branch:** merged. `feat/customer-v2` → PR #17, then the rename → PR #18. Work
+  from `main`; both feature branches can be deleted.
 - **Baseline:** `npm run build` green (34 routes) · `npm run lint --force` clean ·
   142 tests · `npm run smoke` 44/44 · `--blocked` 44/44.
 - **Accounts:** `business@test` / `businesstest` (customer, owns everything) ·
