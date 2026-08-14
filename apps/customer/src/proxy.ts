@@ -1,9 +1,7 @@
 import { createAuthMiddleware } from '@clbipp/auth/middleware'
-=======
 // Must live at src/proxy.ts (not the app root) — Next's dev bundler silently
 // ignores a root-level proxy/middleware file when src/app is in use, and an
 // unregistered auth guard fails OPEN.
->>>>>>> 7afbd4b30f92ca62fd039a9d124fbcee19d05709
 export const proxy = createAuthMiddleware({
   publicPaths: ['/login', '/signup', '/auth', '/t', '/verify'],
   homePath: '/dashboard',
