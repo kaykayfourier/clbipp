@@ -12,15 +12,29 @@ deploy · **§4** verify · **§5** demo · **§6** backlog after it's live.
 
 ---
 
-## 0. Who does what
+## 0. Read this first — the Vercel project already exists
+
+**Those failed-deployment emails you're getting are this project.** A Vercel
+project called **`clbipp`** is already created and **already connected to
+GitHub** — it builds every push to `main` automatically. The GitHub sync is
+working fine. **The builds are failing on configuration**, and until someone
+fixes the settings, every push to `main` sends you another failure email.
+
+So the job is **not "set up a deploy"** — it's **"fix four settings and add five
+env vars on a project that already exists"**. §3 is written as the correct target
+state; open the dashboard and check each row against what's actually there.
+
+**Whoever gets to the Vercel dashboard first should just do it.** Aamir has the
+project linked in his working copy (`.vercel/project.json`) and has the env
+values on disk, so he is genuinely the faster path to a URL. This is not a
+handover blocker — it's ten minutes of dashboard work for either of you.
 
 | Task | Owner |
 |---|---|
-| Vercel project + GitHub sync + env vars (§3) | **you** — repo owner, and the reason this moved to you |
-| The env *values* | **Aamir** hands them over; you paste them |
-| Google Cloud OAuth setup (§3.3) | **either** — standalone, ~10 min |
+| **Fix the failing Vercel build** (§3.1–3.2) | **whoever opens the dashboard first** — Aamir has the env values already |
+| Google Cloud OAuth setup (§3.3) | **either** — standalone, ~10 min, not needed for a working URL |
 | Supabase dashboard config (§3.4) | **whoever owns the Supabase project** — one pass, don't split it |
-| Post-deploy verification (§4) | **you** — you'll have the URL first |
+| Post-deploy verification (§4) | **either** |
 
 > **The merge conflict is done.** PRs #17 and #18 resolved it on 2026-08-14 —
 > details in §7 if you want the record. You don't need to do anything about it.
@@ -106,10 +120,15 @@ The `.env.example` files list every key with a comment explaining what it is.
 
 ## 3. Deploy
 
-### 3.1 Vercel project
+### 3.1 Vercel project settings — this is what's failing
 
-One project, for `apps/customer` only. `apps/agent` and `apps/admin` are empty
-scaffolds — don't deploy them.
+**First, read the actual error.** Don't guess: Vercel dashboard → project
+`clbipp` → **Deployments** → click the most recent failed one → **Build Logs**.
+The last ~20 lines name the cause. Everything below is the likely fix, ranked —
+but the log tells you which one it is in ten seconds.
+
+Target state. Project **Settings → Build & Deployment**, one project for
+`apps/customer` only (`apps/agent` and `apps/admin` are empty scaffolds):
 
 | Setting | Value |
 |---|---|
@@ -121,11 +140,26 @@ scaffolds — don't deploy them.
 | Output Directory | leave default (`.next`) |
 | Node version | 20.x or later |
 
-⚠ **The build command must go through turbo.** The generated Prisma client is
-gitignored, and `turbo.json`'s build task declares `dependsOn: ["^db:generate"]`
-— that's what generates it. A bare `next build` fails with missing types and the
-error does not obviously point at Prisma. Vercel usually auto-detects the
-Turborepo and proposes most of this; verify the build command explicitly anyway.
+**Most likely causes of the failures, in order:**
+
+1. **Build Command isn't the turbo one.** The generated Prisma client is
+   gitignored and therefore absent from the fresh clone Vercel builds from.
+   `turbo.json`'s build task declares `dependsOn: ["^db:generate"]` — that's what
+   generates it. A bare `next build` dies on missing `@prisma/client` types, and
+   **the error does not mention Prisma**, so it reads as a random type error.
+   This is the single most likely cause.
+2. **Root Directory isn't `apps/customer`**, or **"Include source files outside
+   the Root Directory" is OFF** — either breaks every `@clbipp/*` import.
+3. **Env vars missing.** `DATABASE_URL` / `DIRECT_URL` are read by Prisma from
+   the schema's `env()` calls, not via `process.env` in any TS file, so they
+   don't show up in a grep and are the easiest to forget. See §3.2.
+4. **Region rejected.** `apps/customer/vercel.json` pins `regions: ["syd1"]` to
+   match the Supabase pooler in `aws-1-ap-southeast-2`. If the plan rejects it,
+   **delete the `regions` key** rather than fighting it — it's latency, not
+   correctness.
+
+After changing settings, **Deployments → ⋯ → Redeploy** (settings changes don't
+retrigger a build on their own), and uncheck "use existing build cache".
 
 `apps/customer/vercel.json` pins `regions: ["syd1"]` — deliberate, the Supabase
 pooler is in `aws-1-ap-southeast-2` (Sydney). If your plan rejects the region,

@@ -4,20 +4,21 @@
 > self-contained runbook — it covers everything here plus local setup, the
 > backlog and the demo. This file is the longer reference behind it.
 
-**Written:** 2026-08-10, Batch 10 (A6).
-**Status: PREPARED, NOT EXECUTED.** No Vercel project exists yet, no env vars
-are set, and there is no live URL.
+**Written:** 2026-08-10, Batch 10 (A6). **Updated 2026-08-14.**
 
-That was deliberate (decision taken 2026-08-10). OAuth redirect URLs are
-**per-origin**, so standing the site up *before* Batch 11 meant registering
-callback URLs with the providers twice.
+> ⚠ **Correction (2026-08-14).** This file used to say "no Vercel project exists
+> yet". **A project already exists** — `clbipp`, linked via
+> `.vercel/project.json` (gitignored, so it's only in Aamir's working copy), and
+> **already connected to GitHub**: it auto-builds every push to `main` and has
+> been emailing failure notices to the repo owner. So the remaining work is
+> **fixing project settings, not creating a project**. §2 is still the correct
+> target state — verify each row against what the dashboard currently has.
 
-**Batch 11 has now shipped** (Google sign-in + `/onboarding`), so this runbook is
-the next batch. §6 is no longer an addendum — it is a required step, and it is
-Google-only: Apple was dropped.
+Google sign-in (Batch 11) shipped, so §6 is a required step, not an addendum —
+and it is Google-only: Apple was dropped.
 
 Everything in this file is repo-side work that is already done, plus the
-dashboard clicks that are not. Nothing here needs another code change.
+dashboard settings that are not. Nothing here needs another code change.
 
 ---
 
