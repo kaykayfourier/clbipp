@@ -1,5 +1,9 @@
 # Deploying the customer app (Vercel)
 
+> **Not the doc to follow.** `docs/HANDOVER_KHALID_2026-08-12.md` is the single
+> self-contained runbook — it covers everything here plus local setup, the
+> backlog and the demo. This file is the longer reference behind it.
+
 **Written:** 2026-08-10, Batch 10 (A6).
 **Status: PREPARED, NOT EXECUTED.** No Vercel project exists yet, no env vars
 are set, and there is no live URL.
@@ -200,44 +204,20 @@ anything in the app.
 
 ## 7. `middleware` → `proxy` — DONE (2026-08-14, PR #18)
 
-Next 16.2.6 used to print on every dev and build run:
+Next 16.2.6 used to print `⚠ The "middleware" file convention is deprecated` on
+every dev and build run. **Resolved and merged.** The file is now
+`apps/customer/src/proxy.ts`, exporting `proxy`; the warning is gone. Build green
+with `ƒ Proxy (Middleware)`, smoke 44/44 and `--blocked` 44/44 either side.
 
-```
-⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
-```
+Two constraints still hold on that file:
 
-**This is resolved and on `main`.** `apps/customer/src/middleware.ts` is now
-`apps/customer/src/proxy.ts`, exporting `proxy` instead of `middleware`. Nothing
-here is outstanding — the warning is gone from the dev and build output.
+- **It must stay under `src/`** — Next's dev bundler silently never registers it
+  at the project root when `src/app` is in use, and an unregistered auth guard
+  fails **open**. True whatever it's called.
+- **`packages/auth/src/middleware.ts` is NOT renamed and must not be** — that's
+  the `createAuthMiddleware` factory, an ordinary module, not a convention file.
 
-Verified either side of the rename:
-
-| Check | Result |
-|---|---|
-| `npm run build` | green, `ƒ Proxy (Middleware)` present |
-| deprecation warning | gone |
-| `npm run smoke` | 44/44 |
-| `npm run smoke -- agent@test demo1234 --blocked` | 44/44, role gate holds |
-
-Two constraints that still apply to that file:
-
-- **It must stay under `src/`.** Next's dev bundler silently never registers it
-  at the project root when `src/app` is in use, and a silently-unregistered auth
-  guard fails **open**. This holds whatever the file is called.
-- **`packages/auth/src/middleware.ts` is NOT renamed and must not be.** That is
-  the `createAuthMiddleware` factory — an ordinary module, not a Next convention
-  file. Only the app-level file is a convention.
-
-> **How this got messy, recorded so it isn't repeated.** Khalid did this rename
-> on `main` (`21cd3bd`, `28a7cca`) against the *pre-monorepo* layout, while the
-> revamp branch had moved the same file to `apps/customer/src/`. Git could not
-> reconcile the two renames and the PR would not auto-merge. The fix was small —
-> merge `main` into the branch, delete the stray `apps/customer/src/proxy.ts`
-> that rename detection dragged in, then redo the rename on the revamp's file —
-> **but it had to be done by whoever knew which of the two files was correct.**
-> Khalid's `proxy.ts` was the old middleware body and would have silently
-> reverted the role gate. Assign a conflict like this to the branch author, not
-> to the repo owner.
+Background on the cross-branch conflict this caused: handover §7.
 
 ---
 
