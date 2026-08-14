@@ -7,12 +7,19 @@
 **Written:** 2026-08-10, Batch 10 (A6). **Updated 2026-08-14.**
 
 > ⚠ **Correction (2026-08-14).** This file used to say "no Vercel project exists
-> yet". **A project already exists** — `clbipp`, linked via
-> `.vercel/project.json` (gitignored, so it's only in Aamir's working copy), and
-> **already connected to GitHub**: it auto-builds every push to `main` and has
-> been emailing failure notices to the repo owner. So the remaining work is
-> **fixing project settings, not creating a project**. §2 is still the correct
-> target state — verify each row against what the dashboard currently has.
+> yet". That is wrong, and so is the assumption that someone needs to create one.
+>
+> **Khalid's Vercel project is the canonical deploy** — already created, already
+> connected to GitHub, already auto-building every push to `main`. It has been
+> **failing on build configuration**, which is what the failure emails are. The
+> remaining work is **fixing settings, not creating a project**.
+>
+> Aamir had a second project (`clbipp`, deployed manually from his laptop). It
+> was **unlinked on 2026-08-14 and is being deleted** — one project only, and it
+> is Khalid's. Don't recreate a local link.
+>
+> §2 below is still the correct target state; check each row against what
+> Khalid's dashboard actually has.
 
 Google sign-in (Batch 11) shipped, so §6 is a required step, not an addendum —
 and it is Google-only: Apple was dropped.

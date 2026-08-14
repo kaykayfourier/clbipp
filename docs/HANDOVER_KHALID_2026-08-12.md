@@ -1,45 +1,61 @@
 # Handover to Khalid — deploy + outstanding work
 
 **From:** Aamir · **Written:** 2026-08-12 · **Updated:** 2026-08-14
-**State:** everything is merged to `main`. Nothing is blocked.
+**State:** everything is merged to `main` and builds green. Nothing is blocked.
 
-**This is the only document you need.** It is self-contained — follow it top to
-bottom. (`docs/DEPLOY.md` is the longer reference behind §3; you shouldn't need
-to open it.)
-
-Order: **§1** get it running locally · **§2** what you need from Aamir · **§3**
-deploy · **§4** verify · **§5** demo · **§6** backlog after it's live.
+**This is the only document you need** — self-contained, follow it top to bottom.
+(`docs/DEPLOY.md` is the longer reference behind §3; you shouldn't need it.)
 
 ---
 
-## 0. Read this first — the Vercel project already exists
+## 0. The deploy is yours. Read this before anything else.
 
-**Those failed-deployment emails you're getting are this project.** A Vercel
-project called **`clbipp`** is already created and **already connected to
-GitHub** — it builds every push to `main` automatically. The GitHub sync is
-working fine. **The builds are failing on configuration**, and until someone
-fixes the settings, every push to `main` sends you another failure email.
+**Decision taken 2026-08-14: your Vercel project is the only one.** Aamir had a
+second project (`clbipp`) that he deployed to manually from his laptop. He has
+**unlinked it and is deleting it.** Don't recreate that setup — one project,
+yours, GitHub-synced, auto-deploying on every merge to `main`. That's the whole
+reason this moved to you: you own the repo, so only you can authorise the Vercel
+GitHub App on it.
 
-So the job is **not "set up a deploy"** — it's **"fix four settings and add five
-env vars on a project that already exists"**. §3 is written as the correct target
-state; open the dashboard and check each row against what's actually there.
+**Those failed-deployment emails are your project.** The GitHub↔Vercel sync is
+already working — the emails prove it. **The builds are failing on
+configuration**, and every push to `main` sends you another one until it's fixed.
 
-**Whoever gets to the Vercel dashboard first should just do it.** Aamir has the
-project linked in his working copy (`.vercel/project.json`) and has the env
-values on disk, so he is genuinely the faster path to a URL. This is not a
-handover blocker — it's ten minutes of dashboard work for either of you.
+**So this is not "set up a deploy". It is "fix four settings and paste five env
+vars on a project that already exists."** Realistically 15 minutes.
+
+**Aamir has already sent you the env values.** You are not waiting on him for
+anything.
+
+### The fast path to a URL — do only this first
+
+1. §3.1 — fix the four build settings. **The build command is the one that
+   matters.**
+2. §3.2 — paste the five env vars Aamir sent.
+3. Redeploy. **You now have a working URL.**
+
+**Stop there and send Aamir the URL.** Password login (`business@test` /
+`businesstest`) works immediately with no further config — that's enough to prove
+the deploy and enough to demo.
+
+§3.3 (Google Cloud) and §3.4 (Supabase) are **not required for a working URL**.
+Google sign-in fails soft with readable copy pointing users at password and OTP
+login, both of which work. Do them after, unhurried.
 
 | Task | Owner |
 |---|---|
-| **Fix the failing Vercel build** (§3.1–3.2) | **whoever opens the dashboard first** — Aamir has the env values already |
-| Google Cloud OAuth setup (§3.3) | **either** — standalone, ~10 min, not needed for a working URL |
-| Supabase dashboard config (§3.4) | **whoever owns the Supabase project** — one pass, don't split it |
-| Post-deploy verification (§4) | **either** |
+| **Vercel build settings + env vars** (§3.1–3.2) | **you** |
+| Google Cloud OAuth (§3.3) | **you** — after the URL exists |
+| Supabase provider + redirect URLs (§3.4) | **whoever owns the Supabase project** — one pass, don't split it |
+| Verification (§4) | **you** |
 
 > **The merge conflict is done.** PRs #17 and #18 resolved it on 2026-08-14 —
-> details in §7 if you want the record. You don't need to do anything about it.
-> Rule going forward: **conflicts about which version of a file is right go to
-> whoever wrote the branch**; infrastructure goes to the repo owner.
+> record in §7. Nothing for you to do. Rule going forward: **conflicts about
+> which version of a file is right go to whoever wrote the branch**;
+> infrastructure goes to the repo owner.
+
+> **§1 (local setup) is optional.** If the deploy just works, skip it. It's there
+> for when you need to reproduce something locally.
 
 ---
 
@@ -96,39 +112,43 @@ be locked out of the customer app. That's not a broken account.
 
 ---
 
-## 2. What you need from Aamir
+## 2. The credentials — you already have these
 
-`.env*` is gitignored, so a fresh clone has no credentials. Get these
-**out-of-band — not in a PR, not in a channel that logs**:
+Aamir has sent you the values. `.env*` is gitignored, so they're not in the repo
+and never will be. The `.env.example` files list every key with a comment
+explaining what it is:
 
-- The 5 values for `apps/customer/.env.local`
-- The 2 values for `packages/database/.env` (same `DATABASE_URL` / `DIRECT_URL`)
-- Supabase dashboard access for project **`xlssgnnrtautldouirkt`**
+- `apps/customer/.env.example` → 5 keys
+- `packages/database/.env.example` → 2 keys (the same `DATABASE_URL` /
+  `DIRECT_URL`; Prisma needs them here too, for migrations and the seed)
 
-The `.env.example` files list every key with a comment explaining what it is.
+You'll also want **Supabase dashboard access** for project
+**`xlssgnnrtautldouirkt`** — needed for §3.4, not for the URL.
 
-> ⚠ **In Aamir's `.env.local`, three keys are written `KEY = value` with spaces
-> around the `=`.** dotenv trims them so it works locally. **Vercel's UI does
-> not** — a trailing space in the *name* field creates a variable nothing reads,
-> and the app boots with an undefined Supabase URL and no obvious error. Paste
-> name and value separately, and check both for stray whitespace.
+> ⚠ **Three of the values are written `KEY = value`, with spaces around the
+> `=`.** dotenv trims them so they work locally. **Vercel's UI does not** — a
+> trailing space in the *name* field silently creates a variable nothing reads,
+> and the app boots with an undefined Supabase URL and no useful error. Paste
+> name and value separately and check both for stray whitespace. **If the deploy
+> builds but the site 500s, look here first.**
 
 🔴 `SUPABASE_SERVICE_ROLE_KEY` **bypasses RLS entirely.** Never prefix it with
-`NEXT_PUBLIC_`, never use it client-side, never paste it into a chat.
+`NEXT_PUBLIC_`, never use it client-side, never paste it into a chat or a PR.
 
 ---
 
 ## 3. Deploy
 
-### 3.1 Vercel project settings — this is what's failing
+### 3.1 Vercel build settings — this is what's failing
 
-**First, read the actual error.** Don't guess: Vercel dashboard → project
-`clbipp` → **Deployments** → click the most recent failed one → **Build Logs**.
-The last ~20 lines name the cause. Everything below is the likely fix, ranked —
-but the log tells you which one it is in ten seconds.
+**First, read the actual error.** Don't guess: **your** Vercel dashboard →
+your project → **Deployments** → newest failed one → **Build Logs**. The last
+~20 lines name the cause. Everything below is the likely fix, ranked — but the
+log tells you which one in ten seconds. (Aamir cannot see these logs; the project
+is in your account, not his.)
 
-Target state. Project **Settings → Build & Deployment**, one project for
-`apps/customer` only (`apps/agent` and `apps/admin` are empty scaffolds):
+Target state. **Settings → Build & Deployment**, one project for `apps/customer`
+only (`apps/agent` and `apps/admin` are empty scaffolds — don't deploy them):
 
 | Setting | Value |
 |---|---|
@@ -217,6 +237,11 @@ password and OTP login, both of which work. That's deliberate, not a bug.
    This list is **per-origin** and governs both Google and the email-OTP magic
    link. A missing entry is why a login redirect silently lands on the wrong
    site. Don't half-do it.
+
+   > Since your project is now the only one, there is exactly **one** production
+   > origin to register. If Aamir's old project URL is still in this list,
+   > remove it once his project is deleted — a stale origin in the allowlist is
+   > how someone ends up demoing a dead URL.
 
 **Test Google on localhost first** — steps 1–3 make it work there immediately,
 so any later failure is step 4 rather than the app. A first Google sign-in must
