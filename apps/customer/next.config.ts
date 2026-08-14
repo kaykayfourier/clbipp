@@ -11,12 +11,16 @@ const nextConfig: NextConfig = {
   // at /api/documents, so externalising it costs nothing.
   serverExternalPackages: ["@react-pdf/renderer"],
 
-  // Prisma's query engine binary lives in the workspace package, outside
-  // apps/customer — Next's file tracer doesn't follow the dynamic require
-  // Prisma uses to load it, so it gets silently dropped from the deployed
-  // function bundle. Force it in explicitly.
+  // Prisma's query engine is a native binary loaded by a path Prisma computes
+  // at runtime, so the tracer never follows it and it must be forced in.
+  //
+  // It has to be traced from INSIDE the app: `scripts/copy-prisma-engine.mjs`
+  // (npm prebuild) copies it here from packages/database first. Tracing it at
+  // its real path instead ships the file but to a directory Prisma does not
+  // search once the client is bundled — the build goes green and every query
+  // 500s. See the script's header for the full reasoning.
   outputFileTracingIncludes: {
-    "/**": ["../../packages/database/src/generated/client/**/*"],
+    "/**": ["./src/generated/client/**/*"],
   },
 };
 
