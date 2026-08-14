@@ -2,7 +2,7 @@
 // Shared by /offer and /offer-breakdown so the paise→₹ conversion and pathway
 // labels live in one place.
 
-import type { RecoveryPathway } from "@prisma/client";
+import type { RecoveryPathway } from "@clbipp/database";
 
 import { formatPaise } from "./documents";
 
