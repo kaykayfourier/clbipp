@@ -1,5 +1,20 @@
 # Batch 0B — the one schema migration (B's runbook)
 
+> ## ✅ EXECUTED 2026-08-09 by A — do not run this again.
+>
+> B was unavailable and gave A permission to cover his lane (see
+> `LANE_OWNERSHIP.md`). The migration
+> **`20260809072925_schema_v2_battery_items`** is applied, the five Storage
+> buckets exist, the seed is rewritten, and RLS for the new tables is in
+> `supabase/policies.sql` + `supabase/storage-policies.sql`.
+>
+> **One correction was needed to §2 below** — `Pickup.batteryType` had lost its
+> `@map("battery_type")`, which would have renamed a live column holding 10
+> rows. It is fixed inline. See `REVAMP_BATCHES_2026-08-09.md` for the detail.
+>
+> Read this file now as the *reference* for what the schema means; the runbook
+> checkboxes in §8 are history. Live status: `REVAMP_BATCHES_2026-08-09.md`.
+
 **Owner:** B (Khalid) · **Budget:** ~half a day · **Blocks:** A's booking flow
 (A4) and RLS (A3). Nothing else in the project.
 
@@ -235,7 +250,12 @@ model Pickup {
   // ── Superseded by BatteryItem. Nullable now, kept so existing rows and the
   // old request form don't break during the transition. Do not build new
   // reads against these three. ──
-  batteryType    BatteryType?
+  // CORRECTED 2026-08-09: this line originally omitted @map("battery_type").
+  // Prisma names a column after the field unless told otherwise, so pasting it
+  // without the @map asks Postgres to RENAME the live `battery_type` column
+  // (10 non-null rows) — and breaks the old request form, which inserts
+  // `battery_type` through raw PostgREST. Keep the @map.
+  batteryType    BatteryType? @map("battery_type")
   approxQuantity String?      @map("approx_quantity")
   approxWeightKg Decimal?     @map("approx_weight_kg")
 

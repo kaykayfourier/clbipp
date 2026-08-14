@@ -5,19 +5,231 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-07 (all source documents now read; **Plan v2 written —
-see `docs/PLAN_V2_CUSTOMER_APP.md`, which is the operative plan**. Prior same-day:
-company flow gap review. Prior: 2026-07-28 lane map sync)
+**Last updated:** 2026-08-10 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
++ 8 + 9 + 10 + 11 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
+booking quote engine + `createPickupWithItems` shipped in `packages/core`, the
+address book + Storage upload helper landed, **the 4-step booking wizard at
+`/book` is done** — the centrepiece of the revamp — **email OTP + `/verify` + the
+role gate are live**, **Batch 6.5 cleared the first manual test pass**, **Batch 7A
+added the `arrived` + `offered` lifecycle stages** (the locked contract is now
+nine stages), **Batch 7B shipped the tracking upgrade** — assigned-partner card,
+ETA, and a chain-of-custody log rendering real per-event GPS and real photos out
+of the private bucket — **Batch 8 shipped the three PDF documents, payouts and
+the wallet**, which makes the P0 demo path run end to end for the first time, and
+**Batch 9 shipped the cited per-chemistry CO₂ table, the dashboard impact card
+and the working CPCB CSV export**, and **Batch 10 shipped the P2 tier —
+invoices, history + repeat booking, the profile phone edit, and `/t/[token]`
+parity delivered as a real de-duplication into `@clbipp/ui` rather than a second
+copy of the layout — plus deploy PREP (`docs/DEPLOY.md`), with the deploy itself
+deliberately held until after Batch 11 so OAuth redirect URLs are registered
+once**, and **Batch 11 shipped Google sign-in plus the `/onboarding` step that
+makes it possible — the profile-less-session branch went into the shared
+middleware rather than `/auth/callback`, and Apple was dropped (it needs a paid
+developer account)**.
+Next: **Batch 12, the actual deploy**.
+Prior: 2026-08-07 Plan v2 written)
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
 ---
 
-## READ FIRST — Plan v2 (2026-08-07)
+## READ FIRST — resume point (2026-08-10)
 
-**Start here:** A → `docs/PLAN_V2_CUSTOMER_APP.md` §3A (Turborepo migration).
-**B → `docs/BATCH_0B_SCHEMA.md`** — self-contained runbook, validated schema,
-nothing to design.
+**→ `docs/REVAMP_BATCHES_2026-08-09.md` is the live status file and the place to
+resume.** It has the batch tracker, what batches 1–2 delivered, the demo
+accounts + passwords, the commands, and the known gaps. Start at its
+**"▶ Resume here"** section.
+
+> **🔀 The revamp's build phase is over (2026-08-10).** Batches 0A–11 are all
+> applied on `feat/customer-v2`. Two things remain, each its own chat:
+> **Batch 12 — deploy** (`docs/DEPLOY.md` is the runbook) and **Batch 13 — a
+> full-app scan**, the first pass that looks across batch seams rather than
+> inside one batch. The **consolidated outstanding list** — every known gap from
+> all eleven batches, plus the manual checks owed on a real handset — is in
+> `REVAMP_BATCHES_2026-08-09.md` under that heading. Don't rebuild that list
+> from the per-batch sections; it's already been done.
+
+`docs/PLAN_V2_CUSTOMER_APP.md` remains the operative *plan* (the why, and
+decisions D1–D7). This file (`PROJECT_STATE.md`) is now largely **historical
+below this section** — it describes the pre-monorepo, pre-schema-v2 app.
+
+### The structural facts that invalidate most of the detail below
+
+1. **The repo is a Turborepo monorepo** (Batch 0A, commit `a5c15e2`). Every path
+   written below as `src/...` now lives at `apps/customer/src/...`, and shared
+   code moved into `packages/{ui,auth,core,database,decision-engine}`. Imports
+   are `@clbipp/*`, not `@/lib/*` or `@/components/*`. `prisma/` is now
+   `packages/database/prisma/`.
+2. **Schema v2 is applied** (Batch 0B, migration
+   `20260809072925_schema_v2_battery_items`). `Pickup` is a header row and
+   battery detail lives in the new `BatteryItem`. `Address`, `PricingRate`,
+   `Payment`, `WalletTxn`, `PickupReceipt`, `Invoice` exist, plus agent/admin
+   scaffolding tables. The seed is fully rewritten — **10 pickups since Batch 7A**
+   (was 8), one per lifecycle stage, all owned by real auth users, and each
+   carrying real photo objects in the private `pickup-photos` bucket since 7B.
+3. **The booking write path now lives in `packages/core`** (Batch 3):
+   `booking.ts` (`estimateQuote` / `getQuote`) and `booking-actions.ts`
+   (`createPickupWithItems`). Anything below describing a pickup being inserted
+   from a page via raw PostgREST is the *old* request form — new booking code
+   goes through these two.
+4. **There is now a logged-in smoke test** (Batch 4): `npm run smoke` logs in as
+   a real seeded user, forges the `@supabase/ssr` session cookie and fetches
+   every screen. `npm run build` type-checks but never renders a page with a
+   session, so this is the check that catches a server component throwing at
+   request time. Run it after every batch; add new routes to `ROUTES` in
+   `scripts/smoke.mjs` as they land.
+5. **Auth is role-gated and OTP-capable** (Batch 6). `apps/customer/src/middleware.ts`
+   now passes `allowRoles: ['customer']`, so **only `business@test` can enter the
+   customer app** — `agent@test` and `admin@test` are signed out to `/login`.
+   Email OTP (`/verify`) sits alongside password login, which stays primary
+   because Supabase's built-in SMTP allows only ~2–4 mails/hour. Anything below
+   describing login as password-only, or the post-login landing as `/profile`,
+   is historical — it now lands on `/dashboard`.
+   ⚠ **`supabase/grants.sql` gained a profiles column-level lockdown** in the
+   same batch: `authenticated` previously had UPDATE on every column, so a
+   customer could PATCH their own `role` to `admin`, self-clear `kyc_status`, or
+   invent a `wallet_balance_paise`. Applied to the live database. Read it before
+   touching profile writes — an insert or update naming a column outside the
+   allowlist now fails with a 403 rather than an RLS error.
+6. **Bottom-nav clearance and the offer seed changed in Batch 6.5.** Two things
+   below are now stale: (a) any instruction to give a screen its own
+   `NAV_PADDING` / bottom padding — `(app)/layout.tsx` owns clearance for the
+   fixed `BottomTabBar` and per-page padding now double-pads; new `(app)` screens
+   pass `hideNav` to `AppShell` and nothing else. (b) The seed creates an Offer
+   from **`scheduled`** onward, not `recovered` — before this, no seeded pickup
+   could satisfy the `/offer` status guard, so both offer screens redirected for
+   every id. (⚠ Superseded by Batch 7A: offers now seed from **`offered`**
+   onward and the offer demo pickup is **`PKP-2026-000104`**, not `…000102`.)
+   ⚠ Also flagged, not fixed: **`/handover` calls `acceptOffer()` during a GET
+   render**, so it mutates on page load. It is excluded from `npm run smoke` for
+   that reason. Should become a POST before launch.
+7. **Booking now happens at `/book`, not `/request-pickup`** (Batch 5). The
+   4-step wizard is the only way a customer creates a pickup, and it goes through
+   the `"use server"` actions in `apps/customer/src/app/(app)/book/actions.ts` →
+   `getQuote` + `createPickupWithItems`. `/request-pickup` is a redirect; the old
+   raw-PostgREST insert it used to do is gone. Anything below describing that
+   form is historical. The schema-v1 columns (`batteryType`, `approxQuantity`,
+   `approxWeightKg`) are **null on every new pickup** — read `category` and the
+   `BatteryItem` rows instead.
+8. **Documents and money exist as of Batch 8.** Three PDF templates live in a new
+   `packages/pdf` (`@clbipp/pdf`), rendered server-side and handed out by
+   `GET /api/documents/{certificate|receipt|invoice}/{pickupId}`, which
+   **streams the bytes** after an ownership-scoped read — it does not mint a
+   signed URL (that stays the mechanism for photos, which need a URL for `<img>`).
+   PDFs are generated lazily on first download and cached; **`pdf_url` holds a
+   storage PATH, not a URL.** Certificate and invoice numbers are **derived**
+   (`certificateNumber` / `invoiceNumber` in `packages/core/src/documents.ts`),
+   so neither needed a column or a migration.
+   Payouts settle through `settlePayment` in `packages/core/src/payment-actions.ts`
+   — idempotent, atomic, ownership-scoped, behind `PAYMENTS_MODE` (defaults to
+   `simulated`; an unrecognised value falls back to simulated, never to live).
+   New screens: `/payment/[id]`, `/receipt/[id]`, `/wallet`.
+   ⚠ **All money is formatted by `formatPaise` from `@clbipp/core`** — don't
+   write a local `/100` anywhere. And ⚠ the "no recovered value to the vendor"
+   default is now **scoped, not lifted**: those money surfaces show ₹ per Plan v2
+   D6, while `/offer`, `/offer-breakdown` and `/track` stay weight-only. Anything
+   below describing the vendor app as showing no ₹ at all is stale.
+9. **Impact numbers have one source as of Batch 9**:
+   `packages/core/src/impact.ts`. `CO2E_AVOIDED_KG_PER_KG` (per `BatteryType`)
+   plus a deliberately conservative `…_BY_CATEGORY` fallback for pre-collection
+   loads, where `BatteryItem.chemistry` is still null. It replaced a flat
+   `weight * 8` in the seed that overstated lead-acid by ~4×.
+   **Never write CO₂ arithmetic in a screen.**
+   🔴 **The factor VALUES are a placeholder and the citations are unverified.**
+   Only the relative ordering (Li-ion NMC ≫ LFP > lead-acid) is defensible; the
+   absolute numbers were not read off any source. **Waiting on the company —
+   open question 7 in `COMPANY_FLOW_REVIEW_2026-08-07.md`** — because EPR
+   compliance may mandate a CPCB-accepted set, which would make anything we
+   source ourselves moot. Their answer is a value change in that one file, plus
+   the copy restated in the seed. Read the file header before quoting a number.
+   `packages/database` restates the table (it must not import `packages/core` —
+   the cycle breaks the generated client), and the Batch 9 verification asserts
+   the two agree.
+   The **dashboard impact card counts `certified` pickups only**, from the stored
+   `Certificate.co2AvoidedKg` / `materialSummary` — the same figure is printed on
+   the EPR certificate, so claiming it for batteries still in a truck would claim
+   an outcome that hasn't happened.
+   Also new: **`GET /api/exports/compliance[?year=]`** streams the CPCB CSV,
+   following the Batch 8 document route (ownership-scoped read, stream the bytes,
+   no signed URL, no cache). The column set lives in `COLUMNS` in
+   `apps/customer/src/lib/compliance-export.ts` and is an open question for the
+   company.
+10. **The P2 screens exist and the two tracking pages share one implementation
+   (Batch 10).** New routes: `(app)/invoices`, `(app)/invoices/[id]`,
+   `(app)/history`, and `/book?from=<pickupId>` for repeat booking. The build is
+   **34 routes** and `npm run smoke` covers **40**.
+   - **`/invoices/[id]` renders from `getInvoiceDoc`**, the same mapper
+     `@clbipp/pdf` uses — so the screen and its PDF cannot disagree. Keyed by
+     pickup id, like every other detail screen.
+   - **`apps/customer/src/lib/pickup-nav.ts` owns pickup row routing**
+     (`pickupHref`, `pickupSubtitle`). The dashboard and `/history` both import
+     it; don't re-derive a row's destination in a screen. The dashboard now caps
+     "Recent Pickups" at 5 with "View all" → `/history`.
+   - **`packages/ui/src/components/ui/lifecycle-view.tsx` is the shared
+     lifecycle presentation** — `buildStages`, `LifecycleHeader`,
+     `RecoverySummary`, `CancelledTimeline`. `/track/[id]` and `/t/[token]` both
+     render it instead of carrying ~120 duplicated lines each. Both now use
+     `parseMaterialWeights` from `@clbipp/core`; the private `MaterialItem`
+     types that named `value_paise` are gone.
+     ⚠ **Sharing the layout does NOT share the data.** `/t` still gets no
+     photos, no partner card, no realtime and no auth-only CTA — deliberate, and
+     now asserted by the smoke test rather than merely intended.
+   - **Repeat booking never copies photos** — `draftFromPickup` in
+     `book/types.ts`. A photo is evidence of one consignment.
+   - **`updatePhone` writes through the SERVER SUPABASE CLIENT, not Prisma**, so
+     `grants.sql`'s column allowlist applies. That is the pattern any future
+     profile write (including Batch 11's `/onboarding` insert) should follow.
+   - **Demo pickups have derived `publicToken`s** (`00000000-0000-4000-8000-
+     0000000001NN`) so `/t` is smoke-testable. **Real pickups keep the random
+     column default** — a guessable bearer token would be a leak.
+   - **`@clbipp/core/format` is a new subpath export** → `documents.ts`, which
+     imports nothing, so client components can value-import `formatPaise`
+     without dragging Prisma into the browser bundle. The last local `/100` is
+     gone.
+   - **The app is NOT deployed.** `docs/DEPLOY.md` is the runbook; it runs after
+     Batch 11. The Vercel build command must go through turbo — the generated
+     Prisma client is gitignored.
+11. **OAuth exists and it brought a new session state with it (Batch 11).**
+   `signInWithOAuth` + `createProfileForCurrentUser` in `@clbipp/auth`, one
+   Google button shared by `/login` and `/signup`, and a new `/onboarding`
+   screen. The build is **34 routes** and `npm run smoke` covers **42**.
+   - **Google creates an `auth.users` row and NO `profiles` row**, which the
+     Batch 6 role gate reads as a half-created account and signs out. The fix is
+     a new `onboardingPath` option on `createAuthMiddleware`: a profile-less
+     session is redirected to `/onboarding` instead of being signed out, and a
+     session that *has* a profile is redirected **off** `/onboarding` so the
+     form's INSERT can't be posted twice.
+     ⚠ **It lives in the middleware, not `/auth/callback`, deliberately.** The
+     callback is one way in; a refresh or a bookmark carries the same
+     profile-less cookie and never passes through it. `/auth/callback` is
+     unchanged.
+     ⚠ **`/onboarding` is NOT a public path.** It needs a session, just not a
+     role. There is a smoke assertion standing on that.
+   - **`signUpWithProfile` and `createProfileForCurrentUser` share one
+     `profileInsertPayload`** — both are constrained by `grants.sql`'s INSERT
+     allowlist, and `role` is in neither. **No `grants.sql` change was needed**;
+     its allowlist already matched, verified live.
+   - **The uid and email come from the session, never the form.** Same posture
+     as everything else that touches identity.
+   - The origin for the OAuth `redirectTo` is read from the **request headers**,
+     not an env var, so localhost, production and previews all work unchanged.
+   - **Apple was dropped** (needs a paid Apple Developer account) — the helper
+     is provider-typed so it stays a one-form addition.
+   - **`packages/auth/src/middleware.test.ts` is new** because the profile-less
+     session is the one state `npm run smoke` cannot construct.
+
+**Lane note:** B (Khalid) was unavailable on 2026-08-09 and gave A permission to
+cover his lane for this revamp. Logged in `LANE_OWNERSHIP.md`. Ownership reverts
+to the `CLAUDE.md` map when he is back.
+
+### Blockers list below is fully resolved
+
+Every item in "Blocked on B" and the P0/P1 lists further down is done: the
+dashboard is on real Prisma, the seed provides an Offer + Certificate for the
+real login, `updated_at` has its default, and the certificate page reads by id.
+Do not treat that table as live.
+
+### Plan v2 summary (2026-08-07 — still the operative plan)
 
 **`docs/PLAN_V2_CUSTOMER_APP.md` is the operative plan.** It supersedes the
 "Batch A" plan below for anything not already merged, and records seven decisions
@@ -548,7 +760,10 @@ A can assign or absorb any of these solo once ahead.
       certified RecoverySummary and profile recycled stats show real data.
 
 **P2 — validation + verify A's untested states against real data**
-- [ ] P5-B: GST/PAN/EPR validation (B, `validation.ts`) — pairs with P5-A.
+- [x] P5-A: email + password (+ phone) validation on signup — **done in Batch 6**
+      via `signupIndividualSchema` / `signupFleetSchema` in `packages/core`.
+- [ ] P5-B: GST/PAN/EPR **format** validation (B, `validation.ts`) — pairs with
+      P5-A, which deliberately stopped at presence-only for those three fields.
 - [ ] Verify with real data: cancelled state, timeline timestamps, public
       `/t/[token]` across status buckets, profile cert/recycled stats, signup
       fleet fields (re-verify after recent changes).
@@ -595,7 +810,13 @@ To test recovery summary, B needs to seed an offer with `materialBreakdown` for 
 
 **Locked (do not revisit):**
 
-- Status lifecycle: `requested → scheduled → collected → tested → processed → recovered → certified` (+ `cancelled`)
+- Status lifecycle: `requested → scheduled → arrived → offered → collected →
+  tested → processed → recovered → certified` (+ `cancelled`)
+  **Changed 2026-08-09 in Batch 7A** — `arrived` and `offered` added, agreed and
+  migrated (`20260809124400_lifecycle_arrived_offered`). Locked again at nine
+  stages. Rationale and the reuse rule (never re-declare the stage array in a
+  screen — use `isLifecycleStage` / `isStageBefore` from `@clbipp/ui`) are in
+  `CONTEXT.md`.
 - `src/middleware.ts` must stay under `src/` — not project root.
 - **No recovery rate % shown to vendor anywhere.** The company flow document does
   not ask for it, so this one stands.
@@ -605,10 +826,20 @@ To test recovery summary, B needs to seed an offer with `materialBreakdown` for 
 - **Don't render `Offer.materialBreakdown` / `Offer.deductions` as ₹ values on
   vendor-facing screens** — weight (kg) only. Applies to A, B, and C.
   **This is a light rule, not a hard one** (it was previously mis-recorded here as
-  locked). The company flow document asks for an indicative quote, an invoice and a
-  wallet, all value-facing — so it may be relaxed. **Nothing changes until the
-  company answers open question 2** in `COMPANY_FLOW_REVIEW_2026-08-07.md`; until
-  then, keep building to the rule as written above.
+  locked).
+
+  **Scoped in Batch 8 (2026-08-09), not lifted.** Plan v2 D6 relaxes it for the
+  money surfaces the company's flow document explicitly asks for, and those are
+  now built: **`/payment/[id]`, `/wallet`, `/receipt/[id]` and the invoice PDF
+  show ₹** — a payout screen that hides the amount isn't a payout screen.
+  **`/offer`, `/offer-breakdown` and `/track` are untouched and stay
+  weight-only**, and the material-by-material valuation (`value_paise`,
+  `deductions`) is still not rendered anywhere on a vendor screen.
+
+  The line is: **what the customer was paid is visible; how we valued it
+  material-by-material is not.** Open question 2 in
+  `COMPANY_FLOW_REVIEW_2026-08-07.md` is still unanswered — this is our reading
+  of the flow document, not their confirmation.
 
 ---
 
