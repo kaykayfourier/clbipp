@@ -1,0 +1,32 @@
+{
+  // This is a Turborepo monorepo: node_modules (~800MB), .next (~1.2GB) and the
+  // generated Prisma client are large, churn constantly, and are never edited by
+  // hand. Watching and indexing them costs real memory — enough to matter on a
+  // machine with 8GB. Excluding them does not affect builds or type-checking.
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/.turbo/**": true,
+    "**/dist/**": true,
+    "**/packages/database/src/generated/**": true,
+    "**/.git/objects/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.turbo": true,
+    "**/dist": true,
+    "**/packages/database/src/generated": true,
+    "**/package-lock.json": true
+  },
+
+  // Cap the TypeScript server. It indexes every package in the workspace and
+  // will otherwise grow until the machine swaps. 3GB is generous for this repo.
+  "typescript.tsserver.maxTsServerMemory": 3072,
+  // Use the repo's TypeScript, not the one bundled with VS Code.
+  "typescript.tsdk": "node_modules/typescript/lib",
+
+  "files.exclude": {
+    "**/.turbo": true
+  }
+}

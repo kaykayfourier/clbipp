@@ -1,19 +1,31 @@
 # Deploying the customer app (Vercel)
 
-**Written:** 2026-08-10, Batch 10 (A6).
-**Status: PREPARED, NOT EXECUTED.** No Vercel project exists yet, no env vars
-are set, and there is no live URL.
+> **Not the doc to follow.** `docs/HANDOVER_KHALID_2026-08-12.md` is the single
+> self-contained runbook — it covers everything here plus local setup, the
+> backlog and the demo. This file is the longer reference behind it.
 
-That was deliberate (decision taken 2026-08-10). OAuth redirect URLs are
-**per-origin**, so standing the site up *before* Batch 11 meant registering
-callback URLs with the providers twice.
+**Written:** 2026-08-10, Batch 10 (A6). **Updated 2026-08-14.**
 
-**Batch 11 has now shipped** (Google sign-in + `/onboarding`), so this runbook is
-the next batch. §6 is no longer an addendum — it is a required step, and it is
-Google-only: Apple was dropped.
+> ⚠ **Correction (2026-08-14).** This file used to say "no Vercel project exists
+> yet". That is wrong, and so is the assumption that someone needs to create one.
+>
+> **Khalid's Vercel project is the canonical deploy** — already created, already
+> connected to GitHub, already auto-building every push to `main`. It has been
+> **failing on build configuration**, which is what the failure emails are. The
+> remaining work is **fixing settings, not creating a project**.
+>
+> Aamir had a second project (`clbipp`, deployed manually from his laptop). It
+> was **unlinked on 2026-08-14 and is being deleted** — one project only, and it
+> is Khalid's. Don't recreate a local link.
+>
+> §2 below is still the correct target state; check each row against what
+> Khalid's dashboard actually has.
+
+Google sign-in (Batch 11) shipped, so §6 is a required step, not an addendum —
+and it is Google-only: Apple was dropped.
 
 Everything in this file is repo-side work that is already done, plus the
-dashboard clicks that are not. Nothing here needs another code change.
+dashboard settings that are not. Nothing here needs another code change.
 
 ---
 
@@ -198,30 +210,22 @@ anything in the app.
 
 ---
 
-## 7. Known pre-deploy flag: `middleware` → `proxy`
+## 7. `middleware` → `proxy` — DONE (2026-08-14, PR #18)
 
-Next 16.2.6 prints on every dev and build run:
+Next 16.2.6 used to print `⚠ The "middleware" file convention is deprecated` on
+every dev and build run. **Resolved and merged.** The file is now
+`apps/customer/src/proxy.ts`, exporting `proxy`; the warning is gone. Build green
+with `ƒ Proxy (Middleware)`, smoke 44/44 and `--blocked` 44/44 either side.
 
-```
-⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
-```
+Two constraints still hold on that file:
 
-**Read and reported here; deliberately NOT changed in Batch 10.** Reasons:
+- **It must stay under `src/`** — Next's dev bundler silently never registers it
+  at the project root when `src/app` is in use, and an unregistered auth guard
+  fails **open**. True whatever it's called.
+- **`packages/auth/src/middleware.ts` is NOT renamed and must not be** — that's
+  the `createAuthMiddleware` factory, an ordinary module, not a convention file.
 
-- It is a rename of `src/middleware.ts` → `src/proxy.ts` plus the exported
-  symbol, and `src/middleware.ts` is the file that enforces the role gate and
-  every route guard in the app. Deploy day is the worst possible moment to
-  discover that a renamed auth boundary behaves differently.
-- It is a deprecation warning, not a break — the current file still runs, and
-  the build output confirms it (`ƒ Proxy (Middleware)`).
-- ⚠ The repo has a standing rule that this file **must live under `src/`** —
-  Next's dev bundler silently never registers it at the project root when
-  `src/app` is in use. Whatever it ends up called, that constraint holds, and a
-  silently-unregistered auth middleware fails **open**.
-
-Suggested handling: do the rename as its own small change with a full
-`npm run smoke` **and** `npm run smoke -- agent@test demo1234 --blocked` either
-side of it, before or after deploy — not bundled into either.
+Background on the cross-branch conflict this caused: handover §7.
 
 ---
 
@@ -232,7 +236,7 @@ SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke
 SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke -- agent@test demo1234 --blocked
 ```
 
-`scripts/smoke.mjs` already reads `SMOKE_BASE_URL`, so the same **42** assertions
+`scripts/smoke.mjs` already reads `SMOKE_BASE_URL`, so the same **44** assertions
 run against production with no change.
 
 One thing that needs **no** change: the compliance CSV's `verification_link`
