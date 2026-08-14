@@ -1,8 +1,9 @@
 import { createAuthMiddleware } from '@clbipp/auth/middleware'
 
-// Must live at src/middleware.ts (not the app root) — Next's dev bundler
-// silently ignores root-level middleware when src/app is in use.
-export const middleware = createAuthMiddleware({
+// Must live at src/proxy.ts (not the app root) — Next's dev bundler silently
+// ignores a root-level proxy/middleware file when src/app is in use, and an
+// unregistered auth guard fails OPEN.
+export const proxy = createAuthMiddleware({
   publicPaths: ['/login', '/signup', '/auth', '/t', '/verify'],
   homePath: '/dashboard',
   // Enabled in Batch 6. An agent or admin session reaching the customer app is
