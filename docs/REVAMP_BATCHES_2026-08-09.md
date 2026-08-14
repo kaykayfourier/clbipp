@@ -126,11 +126,11 @@ receipt PDF (keep the screen) → address GPS.
 > Fixed by deleting and re-adding `DATABASE_URL` so the value's first character
 > is `p`.
 >
-> **Bug 3 — `SUPABASE_SERVICE_ROLE_KEY` looks malformed too. OPEN, and it is the
-> only thing left.** The 2 remaining smoke failures are both `/track/[id]`
-> missing `token=` — which is the **Supabase Storage signed-URL token** on the
-> chain-of-custody photos, not a share link. Production renders those two screens
-> fine but with **no custody photos**.
+> **Bug 3 — `SUPABASE_SERVICE_ROLE_KEY` malformed. FIXED 2026-08-15** by
+> re-pasting it. The 2 remaining smoke failures had been `/track/[id]` missing
+> `token=` — which is the **Supabase Storage signed-URL token** on the
+> chain-of-custody photos, not a share link. Production rendered those two
+> screens fine but with **no custody photos**.
 >
 > Signed URLs are minted by `createSignedUrls` (`packages/auth/src/storage-server.ts`)
 > via `createAdminClient()`, which reads **`SUPABASE_SERVICE_ROLE_KEY`**. That
@@ -139,16 +139,36 @@ receipt PDF (keep the screen) → address GPS.
 > error. Same whitespace/quotes trap as bug 2, on the third of the three
 > `KEY = value` entries.
 >
-> **Fix (Khalid, dashboard): delete and re-add `SUPABASE_SERVICE_ROLE_KEY` with
-> no leading space and no quotes, redeploy.** Confirm first, if you like, by
-> opening Runtime Logs (live only) and loading `/track/PKP-2026-000109` — look for
-> `[createSignedUrls] failed`.
+> Fixed by deleting and re-adding it with no leading space and no quotes.
 > 🔴 That key bypasses RLS entirely. Never `NEXT_PUBLIC_`, never client-side,
 > never pasted into a chat or PR.
 >
-> **This does not block the demo.** All 9 lifecycle stages, both offer screens,
-> payouts, wallet, all three PDFs, the CPCB export and the role gate work in
-> production right now. Only the custody photo thumbnails are missing.
+> #### ✅ Batch 12 is DONE (2026-08-15)
+>
+> **https://clbipp-customer.vercel.app** — verified against production, not
+> locally:
+>
+> | Check | Result |
+> |---|---|
+> | `npm run smoke` as `business@test` | **44/44** |
+> | `--blocked` as `agent@test` | **44/44** (all bounce to `/login`) |
+> | `--blocked` as `admin@test` | **44/44** |
+>
+> **Only Batch 13 (the full-app scan) remains.**
+>
+> #### The lesson worth keeping from Batch 12
+>
+> All three bugs **built green**. `npm run build` type-checks but never renders a
+> page with a session, and two of the three were pasted env values that no
+> compiler can see. The deploy went from "looks fine" to demonstrably 44/44 only
+> because the smoke suite runs against a real URL with a real session. **Treat a
+> green build as evidence of nothing about production.**
+>
+> Also: bugs stack and mask each other. The engine error hid the bad
+> `DATABASE_URL`, which in turn hid the bad service-role key. Each fix revealed
+> the next — so "the fix didn't work" and "the fix worked and exposed the next
+> failure" look identical from outside. Re-read the actual error every round
+> rather than assuming the previous diagnosis still holds.
 >
 > #### How to verify the deploy — do not eyeball it
 >
@@ -157,8 +177,8 @@ receipt PDF (keep the screen) → address GPS.
 > ```
 >
 > Read-only, can't mutate demo data, and it caught all three bugs when the site
-> *looked* fine. **Currently 42/44** (the 2 are bug 3). Done = 44/44.
-> `--blocked` for the role gate already passes 44/44.
+> *looked* fine. **Currently 44/44**, and `--blocked` passes 44/44 for both
+> `agent@test` and `admin@test`. Re-run it after any deploy or env-var change.
 >
 > Two traps that cost hours here, worth knowing:
 > - **`npm run build` proves nothing about runtime.** Both bugs built green.

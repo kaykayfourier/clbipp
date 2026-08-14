@@ -27,31 +27,27 @@ vars on a project that already exists."** Realistically 15 minutes.
 **Aamir has already sent you the env values.** You are not waiting on him for
 anything.
 
-> ## ⚡ STATUS 2026-08-15 04:10 IST — read this before §3
+> ## ✅ DONE 2026-08-15 — the deploy is live. §1–§3 below are historical.
 >
-> **§3.1 and §3.2 are DONE.** Build settings and env vars are set, builds go
-> green, and `cd43c5d` is live in Production. Everything below about *fixing the
-> build* is historical — don't redo it.
+> **https://clbipp-customer.vercel.app** is up and fully verified against
+> production: `npm run smoke` **44/44**, and `--blocked` **44/44** for both
+> `agent@test` and `admin@test`. Nothing in §3 needs doing again — build
+> settings, env vars, and the database are all correct. Read §3 only if you're
+> reconstructing why something is set the way it is.
 >
-> **`DATABASE_URL` is fixed** — re-pasting it took production from 17/44 to
-> **42/44** on the smoke suite, and the role gate is a clean **44/44**. The app
-> works: all 9 lifecycle stages, both offer screens, payouts, wallet, all three
-> PDFs and the CPCB export are live.
+> Getting here took three fixes, all of which **built green**: the Prisma engine
+> path (code — PR #20), then `DATABASE_URL`, then `SUPABASE_SERVICE_ROLE_KEY`
+> (both env-var paste errors — the §2 whitespace trap, twice). Each masked the
+> next.
 >
-> **One thing is left, and it is the same trap one more time:**
-> **`SUPABASE_SERVICE_ROLE_KEY`.** The 2 remaining failures are both
-> `/track/[id]` rendering with **no chain-of-custody photos**. Those photos are
-> signed by `createAdminClient()`, which reads that key — and the helper logs the
-> error then drops the URLs silently, so you get a 200 page with missing images
-> rather than a crash.
+> **What's left is §3.3 + §3.4 (Google sign-in), which are still optional** —
+> Google fails soft with readable copy pointing at password and OTP login, both
+> of which work in production today.
 >
-> **Delete `SUPABASE_SERVICE_ROLE_KEY`, re-add it with no leading space and no
-> quotes, redeploy.** It's the third of the three `KEY = value` entries in §2.
-> 🔴 It bypasses RLS — never `NEXT_PUBLIC_`, never client-side, never in a chat.
->
-> Then Aamir runs `SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke`
-> — 44/44 means Batch 12 is done. Full trail in
-> `REVAMP_BATCHES_2026-08-09.md` → "Batch 12 — where the deploy actually stands".
+> After any deploy or env-var change, re-verify with:
+> `SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke`
+> Full trail: `REVAMP_BATCHES_2026-08-09.md` → "Batch 12 — where the deploy
+> actually stands".
 
 ### The fast path to a URL — do only this first
 
