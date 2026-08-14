@@ -3,6 +3,7 @@ generator client {
   // Explicit output (gitignored): resolves correctly regardless of npm
   // hoisting in the workspace; Prisma 6 deprecates the default path anyway.
   output   = "../src/generated/client"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
