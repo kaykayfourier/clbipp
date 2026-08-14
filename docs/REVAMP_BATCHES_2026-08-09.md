@@ -109,8 +109,9 @@ receipt PDF (keep the screen) → address GPS.
 > `outputFileTracingIncludes` traces it from inside the app.
 > **Confirmed fixed:** the runtime error moved past engine loading entirely.
 >
-> **Bug 2 — `DATABASE_URL` is malformed in Vercel. OPEN, and it is the only
-> thing left.** The current error is:
+> **Bug 2 — `DATABASE_URL` malformed in Vercel. FIXED 2026-08-15** by re-pasting
+> it in the dashboard. Smoke against production went **17/44 → 42/44**, and
+> `--blocked` (the role gate) is a clean **44/44**. The error was:
 >
 > ```
 > Error validating datasource `db`: the URL must start with the protocol
@@ -122,9 +123,32 @@ receipt PDF (keep the screen) → address GPS.
 > in `HANDOVER_KHALID_2026-08-12.md` §2 — three env values are written
 > `KEY = value` with spaces around the `=`; dotenv trims them, **Vercel's UI does
 > not**. Also check for wrapping quotes or a pasted `DATABASE_URL=` prefix.
-> **Fix: delete and re-add `DATABASE_URL` (and check `DIRECT_URL`) so the first
-> character of the value is `p`, then redeploy. Khalid owns this — the project is
-> in his Vercel account.**
+> Fixed by deleting and re-adding `DATABASE_URL` so the value's first character
+> is `p`.
+>
+> **Bug 3 — `SUPABASE_SERVICE_ROLE_KEY` looks malformed too. OPEN, and it is the
+> only thing left.** The 2 remaining smoke failures are both `/track/[id]`
+> missing `token=` — which is the **Supabase Storage signed-URL token** on the
+> chain-of-custody photos, not a share link. Production renders those two screens
+> fine but with **no custody photos**.
+>
+> Signed URLs are minted by `createSignedUrls` (`packages/auth/src/storage-server.ts`)
+> via `createAdminClient()`, which reads **`SUPABASE_SERVICE_ROLE_KEY`**. That
+> helper logs `[createSignedUrls] failed:` and then **drops the URLs silently**,
+> so the page still returns 200 and the photos just vanish — no 500, no visible
+> error. Same whitespace/quotes trap as bug 2, on the third of the three
+> `KEY = value` entries.
+>
+> **Fix (Khalid, dashboard): delete and re-add `SUPABASE_SERVICE_ROLE_KEY` with
+> no leading space and no quotes, redeploy.** Confirm first, if you like, by
+> opening Runtime Logs (live only) and loading `/track/PKP-2026-000109` — look for
+> `[createSignedUrls] failed`.
+> 🔴 That key bypasses RLS entirely. Never `NEXT_PUBLIC_`, never client-side,
+> never pasted into a chat or PR.
+>
+> **This does not block the demo.** All 9 lifecycle stages, both offer screens,
+> payouts, wallet, all three PDFs, the CPCB export and the role gate work in
+> production right now. Only the custody photo thumbnails are missing.
 >
 > #### How to verify the deploy — do not eyeball it
 >
@@ -132,9 +156,9 @@ receipt PDF (keep the screen) → address GPS.
 > SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke
 > ```
 >
-> Read-only, can't mutate demo data, and it caught both bugs when the site
-> *looked* fine. Baseline when this was written: **17/44 passing**. Done = 44/44.
-> Then `--blocked` for the role gate.
+> Read-only, can't mutate demo data, and it caught all three bugs when the site
+> *looked* fine. **Currently 42/44** (the 2 are bug 3). Done = 44/44.
+> `--blocked` for the role gate already passes 44/44.
 >
 > Two traps that cost hours here, worth knowing:
 > - **`npm run build` proves nothing about runtime.** Both bugs built green.
