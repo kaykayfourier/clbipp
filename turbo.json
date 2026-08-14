@@ -4,7 +4,12 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build", "^db:generate"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      // src/generated/** is the Prisma engine copied in by apps/customer's
+      // prebuild step. It must be a declared output: on a cache hit turbo
+      // restores .next/** — including traces that reference the engine —
+      // and without this it would not restore the engine itself, silently
+      // reproducing the "Query Engine could not be found" production 500.
+      "outputs": [".next/**", "!.next/cache/**", "src/generated/**"]
     },
     "db:generate": {
       "cache": false

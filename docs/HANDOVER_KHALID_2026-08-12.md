@@ -27,6 +27,29 @@ vars on a project that already exists."** Realistically 15 minutes.
 **Aamir has already sent you the env values.** You are not waiting on him for
 anything.
 
+> ## ⚡ STATUS 2026-08-15 04:10 IST — read this before §3
+>
+> **§3.1 and §3.2 are DONE.** Build settings and env vars are set, builds go
+> green, and `cd43c5d` is live in Production. Everything below about *fixing the
+> build* is historical — don't redo it.
+>
+> **One thing is left, and it is yours:** `DATABASE_URL` in Vercel is malformed.
+> The deployed app fails every database call with
+>
+> ```
+> Error validating datasource `db`: the URL must start with the protocol
+> `postgresql://` or `postgres://`.
+> ```
+>
+> Present but wrong, not missing. **This is the §2 whitespace trap below.**
+> Delete `DATABASE_URL`, re-add it so the value's first character is `p` (no
+> leading space, no quotes, no `DATABASE_URL=` prefix), check `DIRECT_URL` the
+> same way, redeploy.
+>
+> Then Aamir runs `SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke`
+> — 44/44 means done. Full trail in
+> `REVAMP_BATCHES_2026-08-09.md` → "Batch 12 — where the deploy actually stands".
+
 ### The fast path to a URL — do only this first
 
 1. §3.1 — fix the four build settings. **The build command is the one that

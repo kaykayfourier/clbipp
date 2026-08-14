@@ -85,9 +85,66 @@ receipt PDF (keep the screen) → address GPS.
 > | `e2df7b1` | `binaryTargets = ["native", "rhel-openssl-3.0.x"]` in `schema.prisma` | Vercel's runtime is Linux; the native-only engine binary won't run there |
 > | `bb072c5` | `outputFileTracingIncludes` in `apps/customer/next.config.ts` | Prisma loads its query engine by dynamic require, which Next's file tracer doesn't follow — the binary was silently dropped from the deployed bundle |
 > | `f51e891` | removed committed **git conflict markers** from `proxy.ts` | A bad merge (`da1fbe3`) committed `=======` / `>>>>>>>` into the auth guard. Fixed. Repo scanned 2026-08-15 — **no markers remain anywhere** |
+> | `5c5d280` | `outputFileTracingRoot` in `next.config.ts` | **A no-op** — Next already infers the repo root from the lockfile (checked in `.next/required-server-files.json`). Kept as a pin, not a fix |
+> | `d8ecab3` (PR #20) | **prebuild copies the query engine to `apps/customer/src/generated/client`** | The real fix for the engine. See below |
 >
 > **Verified on `main` at `bb072c5` (2026-08-15):** `npm run build` green with
 > `ƒ Proxy (Middleware)` · **142 tests** passing.
+>
+> #### ⚠ Batch 12 — where the deploy actually stands (2026-08-15, 04:10 IST)
+>
+> **The build, install, turbo, region, auth guard, role gate and Supabase auth
+> all work.** Two *stacked* runtime bugs broke every Prisma-backed screen while
+> the build stayed green. The first is fixed; the second is a dashboard edit.
+>
+> **Bug 1 — query engine not found. FIXED in PR #20 (`d8ecab3`), deployed as
+> `cd43c5d`.** `@clbipp/database` is in `transpilePackages`, so Turbopack
+> compiles the generated client into `.next/server/chunks/ssr/`. That moves
+> Prisma's `__dirname` off `packages/database`, and at runtime the only place it
+> still searches is `<cwd>/src/generated/client` →
+> `/var/task/apps/customer/src/generated/client`. `bb072c5` shipped the engine to
+> its *real* path, which Prisma never searches — so the file was in the
+> deployment and still "not found". `apps/customer/scripts/copy-prisma-engine.mjs`
+> now copies it to the searched path as an npm `prebuild`, and
+> `outputFileTracingIncludes` traces it from inside the app.
+> **Confirmed fixed:** the runtime error moved past engine loading entirely.
+>
+> **Bug 2 — `DATABASE_URL` is malformed in Vercel. OPEN, and it is the only
+> thing left.** The current error is:
+>
+> ```
+> Error validating datasource `db`: the URL must start with the protocol
+> `postgresql://` or `postgres://`.
+> ```
+>
+> That is *present but wrong*, not missing (missing reads `Environment variable
+> not found`). Cause is almost certainly the whitespace trap already documented
+> in `HANDOVER_KHALID_2026-08-12.md` §2 — three env values are written
+> `KEY = value` with spaces around the `=`; dotenv trims them, **Vercel's UI does
+> not**. Also check for wrapping quotes or a pasted `DATABASE_URL=` prefix.
+> **Fix: delete and re-add `DATABASE_URL` (and check `DIRECT_URL`) so the first
+> character of the value is `p`, then redeploy. Khalid owns this — the project is
+> in his Vercel account.**
+>
+> #### How to verify the deploy — do not eyeball it
+>
+> ```bash
+> SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke
+> ```
+>
+> Read-only, can't mutate demo data, and it caught both bugs when the site
+> *looked* fine. Baseline when this was written: **17/44 passing**. Done = 44/44.
+> Then `--blocked` for the role gate.
+>
+> Two traps that cost hours here, worth knowing:
+> - **`npm run build` proves nothing about runtime.** Both bugs built green.
+> - **Use `https://clbipp-customer.vercel.app`.** The per-deployment
+>   `clbipp-customer-<hash>-…` URLs sit behind Vercel Deployment Protection and
+>   302 everyone outside Khalid's team to a Vercel login — that is not the app
+>   failing.
+> - **Runtime Logs are live-only.** Searching a digest after the fact finds
+>   nothing; open the tab, *then* trigger the request. `/t/<uuid>` is the best
+>   trigger — public, no session, one Prisma call.
 
 ### Where the code is
 
