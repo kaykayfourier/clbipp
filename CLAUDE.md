@@ -79,6 +79,16 @@ So the line is: **what the customer was paid is visible; how we valued it
 material-by-material is not.** The separate **no recovery-rate %** rule is
 untouched. See `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
 
+**The customer app's auth guard is `apps/customer/src/proxy.ts`**, exporting
+`proxy` — renamed from `middleware.ts` on 2026-08-14 (PR #18) for the Next 16
+convention change. **It must stay under `src/`**: Next's dev bundler silently
+never registers it at the project root when `src/app` is in use, and an
+unregistered auth guard fails **OPEN**. ⚠ `packages/auth/src/middleware.ts` is
+**not** renamed and must not be — that's the `createAuthMiddleware` factory, an
+ordinary module, not a Next convention file. After touching it, verify with
+`npm run build` (expect `ƒ Proxy (Middleware)`), `npm run smoke`, and
+`npm run smoke -- agent@test demo1234 --blocked`.
+
 **Status lifecycle (locked contract):**
 `requested → scheduled → arrived → offered → collected → tested → processed →
 recovered → certified` (plus `cancelled`).
@@ -140,7 +150,7 @@ All commands run from the **repo root** (turbo fans them out to the workspaces).
 npm run dev          # Customer app dev server
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 35
+npm run test         # All tests (Vitest) — currently 142
 
 # Run a single test file (from the owning package)
 cd packages/core && npx vitest run src/booking.test.ts

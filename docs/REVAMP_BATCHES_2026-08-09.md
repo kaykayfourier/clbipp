@@ -50,14 +50,50 @@ receipt PDF (keep the screen) → address GPS.
 
 ---
 
-## ▶ Resume here (2026-08-10, after Batch 11)
+## ▶ Resume here (updated 2026-08-15)
+
+> ### What changed on 2026-08-14/15 — read this before the section below
+>
+> **The revamp is MERGED to `main`.** PR #17. The "one branch until Batch 13"
+> plan below was overtaken by events — the `middleware` → `proxy` collision with
+> Khalid's commits on `main` forced the merge early, and it went in cleanly.
+>
+> 1. **`middleware.ts` → `proxy.ts` is done** (PR #18). The customer app's auth
+>    guard is now **`apps/customer/src/proxy.ts`**, exporting `proxy`. The Next
+>    16 deprecation warning is gone. Every path written as
+>    `apps/customer/src/middleware.ts` anywhere in this file is historical.
+>    ⚠ `packages/auth/src/middleware.ts` is **NOT** renamed — that's the
+>    `createAuthMiddleware` factory, an ordinary module.
+> 2. **Batch 12 (deploy) is IN PROGRESS and it is Khalid's**, on his
+>    GitHub-synced Vercel project. Aamir's manual-deploy project was unlinked and
+>    is being deleted — **one project only, Khalid's**. Runbook:
+>    `HANDOVER_KHALID_2026-08-12.md` (self-contained; `DEPLOY.md` is reference).
+> 3. **Three real Vercel/Prisma fixes landed** from Khalid — see
+>    "Deploy fixes" below. They are correct; don't revert them.
+> 4. **A WCAG regression is live on `main`:** `successText` is `#0cb349`
+>    (2.78:1 on white, fails AA; was `#15803D`, 5.02:1). It rode in on Khalid's
+>    `21cd3bd` and auto-merged with no conflict. His call to keep or revert —
+>    one line in `packages/ui/src/tokens.ts`.
+> 5. **Batch 13 (full-app scan) is still not done.** It's now Khalid's, after
+>    the deploy.
+>
+> #### Deploy fixes (2026-08-15, Khalid) — required for Vercel, keep them
+>
+> | Commit | Change | Why |
+> |---|---|---|
+> | `306a3c0` | `packages/core/src/offer.ts` imported `RecoveryPathway` from `@prisma/client` → now `@clbipp/database` | It was a standing CLAUDE.md violation; the direct import doesn't resolve in Vercel's build |
+> | `e2df7b1` | `binaryTargets = ["native", "rhel-openssl-3.0.x"]` in `schema.prisma` | Vercel's runtime is Linux; the native-only engine binary won't run there |
+> | `bb072c5` | `outputFileTracingIncludes` in `apps/customer/next.config.ts` | Prisma loads its query engine by dynamic require, which Next's file tracer doesn't follow — the binary was silently dropped from the deployed bundle |
+> | `f51e891` | removed committed **git conflict markers** from `proxy.ts` | A bad merge (`da1fbe3`) committed `=======` / `>>>>>>>` into the auth guard. Fixed. Repo scanned 2026-08-15 — **no markers remain anywhere** |
+>
+> **Verified on `main` at `bb072c5` (2026-08-15):** `npm run build` green with
+> `ƒ Proxy (Middleware)` · **142 tests** passing.
 
 ### Where the code is
 
-- **Branch `feat/customer-v2`**, batches 0A–11 all applied and committed. Batch
-  11 is `de602fa` (*feat(customer): Google sign-in + /onboarding for OAuth
-  accounts*). The branch has **not** been merged to `main` — the revamp is still
-  one branch, and the PR is the end of Batch 13.
+- ~~**Branch `feat/customer-v2`**~~ — **merged to `main`** (PR #17), then the
+  proxy rename (PR #18), then Khalid's deploy fixes. Work from `main`; both
+  feature branches can be deleted. Batch 11 was `de602fa`.
 - `npm run build` green (**34 routes**) · `npm run lint --force` clean ·
   **142 tests** · `npm run smoke` **44/44** ·
   `npm run smoke -- agent@test demo1234 --blocked` 44/44.

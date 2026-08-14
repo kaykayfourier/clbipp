@@ -28,6 +28,16 @@ middleware rather than `/auth/callback`, and Apple was dropped (it needs a paid
 developer account)**.
 Next: **Batch 12, the actual deploy**.
 Prior: 2026-08-07 Plan v2 written)
+
+> **⚡ Superseded on 2026-08-14/15 — read this before the paragraph above.**
+> The revamp is **merged to `main`** (PR #17). The customer app's auth guard is
+> now **`apps/customer/src/proxy.ts`** exporting `proxy`, not `middleware.ts`
+> (PR #18) — every `src/middleware.ts` path below is historical.
+> **Batch 12 (deploy) is in progress and belongs to Khalid**, on his
+> GitHub-synced Vercel project; Aamir's manual-deploy project was unlinked and is
+> being deleted. Live detail and the deploy fixes are in
+> `REVAMP_BATCHES_2026-08-09.md` → "▶ Resume here", and the runbook Khalid
+> follows is `HANDOVER_KHALID_2026-08-12.md`.
 **Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
 **Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
 
@@ -78,7 +88,8 @@ below this section** — it describes the pre-monorepo, pre-schema-v2 app.
    session, so this is the check that catches a server component throwing at
    request time. Run it after every batch; add new routes to `ROUTES` in
    `scripts/smoke.mjs` as they land.
-5. **Auth is role-gated and OTP-capable** (Batch 6). `apps/customer/src/middleware.ts`
+5. **Auth is role-gated and OTP-capable** (Batch 6). `apps/customer/src/proxy.ts`
+   (was `middleware.ts` until PR #18)
    now passes `allowRoles: ['customer']`, so **only `business@test` can enter the
    customer app** — `agent@test` and `admin@test` are signed out to `/login`.
    Email OTP (`/verify`) sits alongside password login, which stays primary
@@ -817,7 +828,14 @@ To test recovery summary, B needs to seed an offer with `materialBreakdown` for 
   stages. Rationale and the reuse rule (never re-declare the stage array in a
   screen — use `isLifecycleStage` / `isStageBefore` from `@clbipp/ui`) are in
   `CONTEXT.md`.
-- `src/middleware.ts` must stay under `src/` — not project root.
+- The customer app's auth guard must stay under `src/` — not project root.
+  **The file is `apps/customer/src/proxy.ts` since 2026-08-14 (PR #18)**, renamed
+  from `middleware.ts` for the Next 16 convention change; it exports `proxy`.
+  The location rule is what's locked, not the name: Next's dev bundler silently
+  never registers it at the project root when `src/app` is in use, and an
+  unregistered auth guard fails **OPEN**.
+  ⚠ `packages/auth/src/middleware.ts` is **not** renamed and must not be — it is
+  the `createAuthMiddleware` factory, an ordinary module, not a convention file.
 - **No recovery rate % shown to vendor anywhere.** The company flow document does
   not ask for it, so this one stands.
 
