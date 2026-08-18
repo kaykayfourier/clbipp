@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLBIPP — Field Agent Side · Wireframes v2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F2EDE2; --paper-2:#E8E1D2; --paper-3:#DDD5C2;
+  --ink:#0E120E; --ink-2:#1F231F; --ink-3:#3B3F3B; --ink-4:#6B6F6B; --ink-5:#9CA09C;
+  --signal:#C5F050; --signal-deep:#8FB832;
+  --hazard:#FF5A1F; --charge:#1FA8FF; --amber:#F5B82E; --plum:#6B3FB8;
+  --line:rgba(14,18,14,.10);
+  --app-bg:#FBFAF6; --card:#FFFFFF;
+  --ok:#3FA45B; --recovered:#5E9E3F;
+  --shadow-sm:0 1px 2px rgba(14,18,14,.06);
+  --shadow-md:0 6px 18px -4px rgba(14,18,14,.12),0 2px 4px rgba(14,18,14,.05);
+  --shadow-lg:0 24px 48px -12px rgba(14,18,14,.18),0 4px 8px rgba(14,18,14,.06);
+  --r-sm:6px; --r-md:10px; --r-lg:16px; --r-xl:22px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Manrope',system-ui,sans-serif; background:var(--paper); color:var(--ink);
+  line-height:1.5; -webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(circle at 1px 1px,rgba(14,18,14,.045) 1px,transparent 0);
+  background-size:24px 24px;
+}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.mono{font-family:'JetBrains Mono',monospace}
+
+/* ===== PAGE FRAME ===== */
+.wrap{max-width:1280px;margin:0 auto;padding:56px 32px 96px}
+.masthead{border-bottom:2px solid var(--ink);padding-bottom:24px;margin-bottom:14px}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-4);font-weight:500}
+.eyebrow::before{content:'';display:inline-block;width:24px;height:1px;background:var(--ink-3);vertical-align:middle;margin-right:12px}
+h1.title{font-family:'Fraunces',serif;font-weight:500;font-size:46px;line-height:1.02;letter-spacing:-.01em;margin:14px 0 10px}
+.sub{color:var(--ink-3);font-size:15px;max-width:680px}
+.journey{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.journey .step{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:12px;font-weight:600;box-shadow:var(--shadow-sm)}
+.journey .step .n{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-4)}
+.journey .arrow{align-self:center;color:var(--ink-5);font-size:13px}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:26px;padding:16px 20px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-sm)}
+.legend .lg{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-3);font-weight:600}
+.legend .dot{width:9px;height:9px;border-radius:50%}
+
+/* callout: the one rule */
+.rule-callout{display:flex;gap:16px;align-items:flex-start;margin-top:26px;padding:18px 20px;background:var(--ink);color:var(--paper);border-radius:var(--r-md)}
+.rule-callout .rk{width:30px;height:30px;border-radius:8px;background:var(--signal);color:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:800;font-size:13px}
+.rule-callout .rt{font-size:13px;line-height:1.55;color:rgba(242,237,226,.88)}
+.rule-callout .rt b{color:var(--signal)}
+
+/* interactive */
+.proto-band{margin:42px 0 12px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.proto-band .lead{max-width:560px}
+.proto-band h2{font-family:'Fraunces',serif;font-weight:500;font-size:26px;margin-bottom:4px}
+.proto-band p{font-size:13px;color:var(--ink-3)}
+.proto-hint{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-4);background:var(--paper-2);border:1px solid var(--line);border-radius:999px;padding:8px 14px}
+.proto-stage{display:flex;justify-content:center;padding:36px 0 8px}
+
+/* gallery */
+.section-tag{display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:var(--paper);padding:9px 18px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:500;margin:64px 0 8px}
+.section-tag .d{width:8px;height:8px;border-radius:50%;background:var(--signal)}
+.section-desc{font-size:13px;color:var(--ink-3);margin-bottom:30px;max-width:680px}
+.grid{display:flex;flex-wrap:wrap;gap:46px 40px}
+.cell{width:300px}
+.cell .clabel{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-4);letter-spacing:.14em;text-transform:uppercase;margin-bottom:7px}
+.cell .ctitle{font-family:'Fraunces',serif;font-size:17px;font-weight:500;margin-bottom:3px}
+.cell .ccap{font-size:12px;color:var(--ink-3);margin-bottom:16px;min-height:32px;line-height:1.45}
+.cell.edge .clabel{color:var(--hazard)}
+
+/* ===== PHONE ===== */
+.phone{width:300px;height:632px;background:#0a0a0a;border-radius:40px;padding:7px;box-shadow:var(--shadow-lg);position:relative;flex-shrink:0}
+.phone.big{width:320px;height:674px;border-radius:44px;padding:8px}
+.phone-screen{width:100%;height:100%;background:var(--app-bg);border-radius:34px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.phone.big .phone-screen{border-radius:38px}
+.notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:84px;height:20px;background:#0a0a0a;border-radius:12px;z-index:30}
+.statusbar{display:flex;justify-content:space-between;align-items:center;padding:12px 20px 2px;font-size:10.5px;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--ink);flex-shrink:0}
+.statusbar .r{display:flex;gap:5px;align-items:center}
+
+/* app shell inside phone */
+.app{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.tbar{display:flex;align-items:center;gap:10px;padding:10px 16px 10px;flex-shrink:0}
+.tbar .ttl{font-weight:700;font-size:15px;letter-spacing:-.01em}
+.tbar .back,.tbar .ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--line);flex-shrink:0;cursor:pointer}
+.tbar .sp{flex:1}
+.body{flex:1;overflow:hidden;padding:4px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.body.scroll{overflow:auto}
+.body::-webkit-scrollbar{width:0}
+
+/* typography in app */
+.h-display{font-family:'Fraunces',serif;font-weight:500;font-size:22px;line-height:1.1;letter-spacing:-.01em}
+.h-sec{font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-4);font-weight:600}
+.muted{color:var(--ink-3);font-size:12.5px}
+.tiny{font-size:11px;color:var(--ink-4)}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:14px;box-shadow:var(--shadow-sm)}
+.card.flush{padding:0;overflow:hidden}
+
+/* buttons */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-radius:999px;font-size:13px;font-weight:700;font-family:'Manrope';border:none;cursor:pointer;width:100%;transition:transform .08s}
+.btn:active{transform:scale(.985)}
+.btn-signal{background:var(--signal);color:var(--ink)}
+.btn-ink{background:var(--ink);color:var(--paper)}
+.btn-ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
+.btn-sm{padding:9px 14px;font-size:12px;width:auto}
+.btn-text{background:none;border:none;font-weight:700;font-size:12.5px;color:var(--ink-4);cursor:pointer;padding:8px}
+.btn-text.danger{color:var(--hazard)}
+.row-btns{display:flex;gap:8px}
+.row-btns .btn{width:auto;flex:1}
+
+/* form fields */
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;font-weight:700;color:var(--ink-3);letter-spacing:.01em;display:flex;align-items:center;gap:5px}
+.field label .tip{width:13px;height:13px;border-radius:50%;background:var(--paper-2);color:var(--ink-4);display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;font-family:'JetBrains Mono',monospace;cursor:default}
+.input{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 12px;font-size:13px;color:var(--ink);font-family:'Manrope';display:flex;align-items:center;justify-content:space-between}
+.input .ph{color:var(--ink-5)}
+.input.sel::after{content:'⌄';color:var(--ink-4);font-size:14px;margin-top:-4px}
+.upload{border:1.5px dashed var(--line);border-radius:var(--r-sm);padding:16px;text-align:center;font-size:12px;color:var(--ink-4);background:rgba(0,0,0,.012)}
+
+/* chips / status */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+.chip::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.draft{background:rgba(107,111,107,.14);color:#52564F}
+.chip.requested{background:rgba(107,111,107,.14);color:#52564F}
+.chip.scheduled{background:rgba(31,168,255,.14);color:#0E6CA8}
+.chip.quoted{background:rgba(31,168,255,.14);color:#0E6CA8}
+.chip.collected{background:rgba(14,18,14,.10);color:#1F231F}
+.chip.tested,.chip.processed{background:rgba(245,184,46,.20);color:#8A5A06}
+.chip.recovered{background:rgba(94,158,63,.18);color:#3F6E26}
+.chip.certified{background:rgba(143,184,50,.24);color:#4F6B16}
+.chip.cancelled{background:rgba(255,90,31,.14);color:#9A3412}
+.chip.hold{background:rgba(255,90,31,.15);color:#9A3412}
+.chip.review{background:rgba(107,63,184,.14);color:#6B3FB8}
+.chip.declined{background:rgba(255,90,31,.14);color:#9A3412}
+.chip.pending-dropoff{background:rgba(107,63,184,.14);color:#6B3FB8}
+
+/* stat cards */
+.stats{display:flex;gap:8px}
+.stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:11px 12px;box-shadow:var(--shadow-sm)}
+.stat .v{font-family:'Fraunces',serif;font-size:21px;font-weight:600;line-height:1}
+.stat .k{font-size:9.5px;color:var(--ink-4);font-family:'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-top:5px}
+
+/* list rows */
+.lrow{display:flex;align-items:center;gap:11px;padding:12px 13px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);cursor:pointer;box-shadow:var(--shadow-sm)}
+.lrow:active{background:var(--paper)}
+.lrow .ico{width:34px;height:34px;border-radius:9px;background:var(--paper-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ink-3)}
+.lrow .mid{flex:1;min-width:0}
+.lrow .t1{font-size:13px;font-weight:700;line-height:1.2}
+.lrow .t2{font-size:11px;color:var(--ink-4);margin-top:2px}
+.lrow .chev{color:var(--ink-5);flex-shrink:0}
+.list{display:flex;flex-direction:column;gap:8px}
+
+/* timeline */
+.tl{display:flex;flex-direction:column}
+.tl .node{display:flex;gap:12px;position:relative;padding-bottom:16px}
+.tl .node:last-child{padding-bottom:0}
+.tl .mark{width:18px;display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.tl .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--ink-5);background:var(--card);z-index:2;margin-top:1px}
+.tl .line{flex:1;width:2px;background:var(--line);margin:2px 0 -2px}
+.tl .node:last-child .line{display:none}
+.tl .node.done .dot{background:var(--signal-deep);border-color:var(--signal-deep)}
+.tl .node.done .line{background:var(--signal-deep)}
+.tl .node.active .dot{background:var(--signal);border-color:var(--signal-deep);box-shadow:0 0 0 4px rgba(197,240,80,.30)}
+.tl .meta{flex:1;padding-bottom:2px}
+.tl .meta .s1{font-size:13px;font-weight:700;line-height:1.2}
+.tl .node.todo .meta .s1{color:var(--ink-5)}
+.tl .meta .s2{font-size:10.5px;color:var(--ink-4);font-family:'JetBrains Mono',monospace;margin-top:2px}
+
+/* breakdown rows */
+.brk{display:flex;flex-direction:column;gap:0}
+.brk .r{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.brk .r:last-child{border-bottom:none}
+.brk .r.total{font-weight:800;border-top:1.5px solid var(--ink);border-bottom:none;margin-top:2px;padding-top:11px}
+.brk .r .lab{color:var(--ink-3)}
+.brk .r .val{font-weight:700;font-family:'JetBrains Mono',monospace}
+.brk .r .val.neg{color:var(--hazard)}
+
+/* toggle */
+.toggle-head{display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ink-2);padding:2px 0}
+.toggle-head .cv{transition:transform .2s;color:var(--ink-4)}
+.toggle-target{display:none;margin-top:10px}
+.toggle.open .toggle-target{display:block}
+.toggle.open .toggle-head .cv{transform:rotate(180deg)}
+
+/* banners / notes */
+.banner{display:flex;gap:10px;align-items:flex-start;padding:12px 13px;border-radius:var(--r-md);font-size:12px;line-height:1.45}
+.banner.info{background:rgba(31,168,255,.08);border:1px solid rgba(31,168,255,.22);color:#0E5C90}
+.banner.ok{background:rgba(143,184,50,.12);border:1px solid rgba(143,184,50,.32);color:#46600F}
+.banner.lock{background:var(--paper-2);border:1px solid var(--line);color:var(--ink-3)}
+.banner.warn{background:rgba(255,90,31,.09);border:1px solid rgba(255,90,31,.28);color:#9A3412}
+.banner.caution{background:rgba(245,184,46,.15);border:1px solid rgba(245,184,46,.38);color:#8A5A06}
+.banner .bi{flex-shrink:0;margin-top:1px}
+
+/* big confirm */
+.confirm{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:20px 22px}
+.confirm .seal{width:72px;height:72px;border-radius:50%;background:var(--signal);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px -6px rgba(143,184,50,.55)}
+.confirm .seal.neutral{background:var(--paper-2)}
+.confirm h3{font-family:'Fraunces',serif;font-weight:600;font-size:23px}
+.confirm p{font-size:13px;color:var(--ink-3);max-width:230px;line-height:1.5}
+
+/* secure link row */
+.seclink{display:flex;align-items:center;gap:11px;padding:12px 13px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-sm)}
+.seclink .lk{width:32px;height:32px;border-radius:8px;background:rgba(143,184,50,.16);color:#4F6B16;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.seclink .mid{flex:1;min-width:0}
+.seclink .t1{font-size:12.5px;font-weight:700}
+.seclink .t2{font-size:10px;color:var(--ink-4);font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* filter chips */
+.filters{display:flex;gap:7px;flex-wrap:wrap}
+.fchip{font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-3);cursor:pointer}
+.fchip.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+/* tabbar */
+.tabbar{display:flex;border-top:1px solid var(--line);background:var(--card);flex-shrink:0;padding:7px 6px 9px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--ink-5);font-size:9px;font-weight:700;letter-spacing:.02em}
+.tab svg{width:21px;height:21px}
+.tab.on{color:var(--ink)}
+.tab.on svg{color:var(--signal-deep)}
+
+/* annotation under gallery phones */
+.anno{margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-4);line-height:1.5;border-left:2px solid var(--signal-deep);padding-left:11px}
+.anno b{color:var(--ink-2);font-weight:700}
+.cell.edge .anno{border-left-color:var(--hazard)}
+
+/* ===== NEW: field-agent-only components ===== */
+
+/* QR scan viewport */
+.scanwrap{flex:1;display:flex;flex-direction:column}
+.scanbox{position:relative;flex:1;background:#0a0a0a;border-radius:var(--r-lg);overflow:hidden;min-height:220px;display:flex;align-items:center;justify-content:center}
+.scanbox .frame{width:150px;height:150px;position:relative}
+.scanbox .frame::before,.scanbox .frame::after,.scanbox .cA,.scanbox .cB{content:'';position:absolute;width:26px;height:26px;border-color:var(--signal)}
+.scanbox .cTL{position:absolute;top:0;left:0;width:26px;height:26px;border-top:3px solid var(--signal);border-left:3px solid var(--signal);border-radius:6px 0 0 0}
+.scanbox .cTR{position:absolute;top:0;right:0;width:26px;height:26px;border-top:3px solid var(--signal);border-right:3px solid var(--signal);border-radius:0 6px 0 0}
+.scanbox .cBL{position:absolute;bottom:0;left:0;width:26px;height:26px;border-bottom:3px solid var(--signal);border-left:3px solid var(--signal);border-radius:0 0 0 6px}
+.scanbox .cBR{position:absolute;bottom:0;right:0;width:26px;height:26px;border-bottom:3px solid var(--signal);border-right:3px solid var(--signal);border-radius:0 0 6px 0}
+.scanbox .sline{position:absolute;left:8%;right:8%;height:2px;background:var(--signal);top:50%;box-shadow:0 0 8px 1px rgba(197,240,80,.7)}
+.scanbox .hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:rgba(242,237,226,.6);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+
+/* damage rubric */
+.dtest{display:flex;flex-direction:column;gap:9px}
+.dtest .dh{display:flex;justify-content:space-between;align-items:baseline}
+.dtest .dh .dt1{font-size:13px;font-weight:700}
+.dtest .dh .dw{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-4)}
+.seg{display:flex;gap:6px}
+.seg .so{flex:1;text-align:center;padding:8px 0;border:1px solid var(--line);border-radius:var(--r-sm);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ink-4);background:var(--card);cursor:pointer}
+.seg .so.sel{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.uphoto{border:1.5px dashed var(--line);border-radius:var(--r-sm);padding:9px;text-align:center;font-size:10.5px;color:var(--ink-4);background:rgba(0,0,0,.012);display:flex;align-items:center;justify-content:center;gap:6px}
+.dscore{display:flex;align-items:center;justify-content:space-between;background:var(--ink);color:var(--paper);border-radius:var(--r-md);padding:14px 16px}
+.dscore .dk{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(242,237,226,.6)}
+.dscore .dv{font-family:'Fraunces',serif;font-size:26px;font-weight:600}
+.dscore .dv.amber{color:var(--amber)}
+.dscore .dv.hazard{color:#FF8A5C}
+.dscore .dv.ok{color:var(--signal)}
+
+/* computing layers */
+.layers{display:flex;flex-direction:column;gap:0}
+.layer{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+.layer:last-child{border-bottom:none}
+.layer .lmark{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.layer.done .lmark{background:var(--signal-deep);color:var(--ink)}
+.layer.active .lmark{background:var(--signal);color:var(--ink);box-shadow:0 0 0 4px rgba(197,240,80,.30)}
+.layer.todo .lmark{background:var(--paper-2);color:var(--ink-5)}
+.layer .lt{flex:1}
+.layer .l1{font-size:12.5px;font-weight:700}
+.layer.todo .l1{color:var(--ink-5)}
+.layer .l2{font-size:10.5px;color:var(--ink-4);margin-top:1px}
+
+/* price band */
+.pband{display:flex;gap:6px}
+.pband .pb{flex:1;text-align:center;padding:11px 6px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--card)}
+.pband .pb.rec{background:var(--ink);border-color:var(--ink);padding-top:13px;padding-bottom:13px}
+.pband .pb .pk{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4)}
+.pband .pb.rec .pk{color:rgba(242,237,226,.55)}
+.pband .pb .pv{font-family:'Fraunces',serif;font-size:15px;font-weight:600;margin-top:5px}
+.pband .pb.rec .pv{color:var(--signal);font-size:18px}
+
+/* verdict hero */
+.vhero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:6px 0 2px}
+.vhero .vicon{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vhero .vpath{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-4)}
+.vhero .vnet{font-family:'Fraunces',serif;font-size:38px;font-weight:600;letter-spacing:-.02em;line-height:1;margin:5px 0}
+
+/* sensitivity / audit */
+.sens{display:flex;flex-direction:column;gap:7px}
+.sens .sr{font-size:11.5px;color:var(--ink-3);padding:8px 10px;background:var(--paper-2);border-radius:var(--r-sm);line-height:1.4}
+.audit{display:flex;flex-direction:column;gap:0;padding-top:2px}
+.audit .ar{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:10.5px}
+.audit .ar:last-child{border-bottom:none}
+.audit .ar .al{color:var(--ink-5);font-family:'JetBrains Mono',monospace}
+.audit .ar .av{color:var(--ink-3);font-family:'JetBrains Mono',monospace;font-weight:600}
+
+/* signature pad */
+.sigpad{border:1.5px dashed var(--line);border-radius:var(--r-md);background:rgba(0,0,0,.012);height:120px;display:flex;align-items:center;justify-content:center;position:relative}
+.sigpad svg{opacity:.85}
+.sigpad .sigline{position:absolute;bottom:22px;left:16px;right:16px;height:1px;background:var(--line)}
+
+/* result sub-nav */
+.subnav{display:flex;gap:6px;background:var(--paper-2);padding:4px;border-radius:999px}
+.subnav .sn{flex:1;text-align:center;padding:7px 0;border-radius:999px;font-size:11.5px;font-weight:700;color:var(--ink-4);cursor:pointer}
+.subnav .sn.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow-sm)}
+
+/* engine-layer eyebrow tag on result screens */
+.elayer{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-5)}
+
+/* job request / accept-reject */
+.reqcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:15px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px}
+.reqcard .rtop{display:flex;justify-content:space-between;align-items:flex-start}
+.badge-new{background:var(--hazard);color:#fff;font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px;font-weight:800}
+.payout{display:flex;justify-content:space-between;align-items:center;background:var(--ink);color:var(--paper);border-radius:var(--r-md);padding:12px 14px}
+.payout .pk{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(242,237,226,.55)}
+.payout .pv{font-family:'Fraunces',serif;font-size:22px;font-weight:600;color:var(--signal)}
+.reqmeta{display:flex;gap:14px}
+.reqmeta .rm{display:flex;flex-direction:column;gap:2px}
+.reqmeta .rm .rk{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em}
+.reqmeta .rm .rv{font-size:12.5px;font-weight:700}
+
+/* turn-by-turn nav */
+.navbox{position:relative;flex:1;background:#0a0a0a;border-radius:var(--r-lg);overflow:hidden;min-height:230px;color:var(--paper)}
+.navbox .turnbar{position:absolute;top:0;left:0;right:0;background:var(--ink);padding:14px 15px;display:flex;align-items:center;gap:12px;z-index:2}
+.navbox .turnbar .arrow{width:36px;height:36px;border-radius:10px;background:var(--signal);color:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.navbox .turnbar .tt1{font-size:13px;font-weight:800}
+.navbox .turnbar .tt2{font-size:10px;color:rgba(242,237,226,.55);font-family:'JetBrains Mono',monospace;margin-top:1px}
+.navbox .routeline{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.5}
+.navbox .etabar{position:absolute;bottom:12px;left:12px;right:12px;background:var(--card);color:var(--ink);border-radius:var(--r-md);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow-md)}
+.navbox .etabar .ev{font-family:'Fraunces',serif;font-size:16px;font-weight:600}
+.navbox .etabar .ek{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em}
+.contactrow{display:flex;gap:8px}
+.contactrow .cbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 6px;border-radius:var(--r-md);background:var(--card);border:1px solid var(--line);font-size:10.5px;font-weight:700;color:var(--ink-2)}
+.contactrow .cbtn svg{color:var(--signal-deep)}
+
+/* chat */
+.chatlist{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;overflow:auto;padding-bottom:4px}
+.bubble{max-width:76%;padding:9px 12px;border-radius:15px;font-size:12.5px;line-height:1.42}
+.bubble.them{align-self:flex-start;background:var(--paper-2);border-bottom-left-radius:4px}
+.bubble.me{align-self:flex-end;background:var(--ink);color:var(--paper);border-bottom-right-radius:4px}
+.bubble .btime{display:block;font-family:'JetBrains Mono',monospace;font-size:8.5px;opacity:.55;margin-top:4px}
+.chatinput{display:flex;gap:8px;align-items:center}
+.chatinput .ci{flex:1;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:10px 14px;font-size:12.5px;color:var(--ink-5)}
+.chatinput .send{width:38px;height:38px;border-radius:50%;background:var(--signal);color:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+/* call */
+.callwrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:70px;padding:26px 20px 10px}
+.callavatar{width:84px;height:84px;border-radius:50%;background:var(--paper-2);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:28px;font-weight:600;color:var(--ink-3)}
+.calltimer{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--ink-4)}
+.callctrls{display:flex;gap:16px}
+.callbtn{width:52px;height:52px;border-radius:50%;background:var(--paper-2);display:flex;align-items:center;justify-content:center;color:var(--ink-2)}
+.callbtn.end{background:var(--hazard);color:#fff}
+
+/* wallet / earnings */
+.walletcard{background:var(--ink);color:var(--paper);border-radius:var(--r-lg);padding:18px}
+.walletcard .wk{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(242,237,226,.55)}
+.walletcard .wv{font-family:'Fraunces',serif;font-size:32px;font-weight:600;color:var(--signal);margin:6px 0 14px}
+.earningsrow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.earningsrow:last-child{border-bottom:none}
+.earningsrow .e1{font-size:12.5px;font-weight:700}
+.earningsrow .e2{font-size:10.5px;color:var(--ink-4);margin-top:1px}
+.earningsrow .ev{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--ok)}
+
+/* bulk drop-off checklist */
+.dcheck{display:flex;align-items:center;gap:11px;padding:12px 13px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-sm)}
+.dcheck .cb{width:21px;height:21px;border-radius:6px;border:1.5px solid var(--ink-4);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--signal)}
+.dcheck .cb.on{background:var(--ink);border-color:var(--ink)}
+.dcheck .mid{flex:1}
+.dcheck .t1{font-size:12.5px;font-weight:700}
+.dcheck .t2{font-size:10.5px;color:var(--ink-4);margin-top:1px}
+.batchbar{display:flex;justify-content:space-between;align-items:center;background:var(--paper-2);border-radius:var(--r-md);padding:11px 13px}
+.batchbar .bv{font-family:'Fraunces',serif;font-size:16px;font-weight:600}
+.batchbar .bk{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em}
+
+footer.foot{margin-top:80px;border-top:2px solid var(--ink);padding-top:20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-4)}
+
+@media(max-width:560px){
+  .wrap{padding:32px 16px 64px}
+  h1.title{font-size:34px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="eyebrow">CLBIPP · Field Agent Side · Wireframes v2.0</div>
+    <h1 class="title serif">The field agent experience,<br>screen by screen.</h1>
+    <p class="sub">Every agent-facing screen rebuilt from the Field Agent Process Map (B01–B07). The agent is an independent partner who chooses jobs, navigates to them, and gets paid per pickup: accept or decline a nearby request, navigate to the customer, identify the battery, assess it, run the decision engine, present the offer, collect with proof, and hand batteries off to the hub in a batch. Same product, same design system as the Vendor app — mirrored economics.</p>
+    <div class="journey" id="journey"></div>
+    <div class="legend" id="legend"></div>
+    <div class="rule-callout">
+      <div class="rk">!</div>
+      <div class="rt"><b>Agent sees all, vendor sees little.</b> The vendor app never shows recovered value, margins, or engine mechanics — only an estimated offer. The Field Agent app is the mirror image: full revenue and cost breakdown, net value, margin %, and the P_min / P_recommended / P_max price band. The one exception — the agent never sees the per-supplier margin <i>override</i>, only the resulting band.</div>
+    </div>
+    <div class="rule-callout">
+      <div class="rk">₹</div>
+      <div class="rt"><b>Independent partner, not salaried staff.</b> The agent accepts or declines each job for a visible pickup fee, paid to an in-app wallet on collection. This payout is separate from the battery's purchase price shown to the vendor — the pricing-engine economics still route through the agent's screens unchanged.</div>
+    </div>
+  </div>
+
+  <div class="proto-band">
+    <div class="lead">
+      <h2 class="serif">Clickable prototype</h2>
+      <p>Tap through the full journey, exactly as the field agent would on site. Buttons, tabs and pickup rows are live. Start at the login screen below.</p>
+    </div>
+    <div class="proto-hint">↳ tap to navigate · resets on reload</div>
+  </div>
+  <div class="proto-stage">
+    <div class="phone big" id="proto">
+      <div class="notch"></div>
+      <div class="phone-screen"><div class="statusbar"><span>9:41</span><span class="r">5G ▮▮▮ 100%</span></div><div class="app" id="proto-stage"></div></div>
+    </div>
+  </div>
+
+  <div id="gallery"></div>
+
+  <footer class="foot">
+    <span>CLBIPP — Field Agent PWA · Android-first · role ends at collected</span>
+    <span>21 screens · B01–B07 · mobile PWA</span>
+  </footer>
+</div>
+
+<script>
+/* ============ ICONS ============ */
+const I = {
+  back:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  chev:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+  chevd:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  check:'<svg viewBox="0 0 24 24" width="30" fill="none" stroke="#0E120E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  batt:'<svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/><path d="M6 10v4"/></svg>',
+  info:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>',
+  doc:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+  dl:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-7 9 7v9a2 2 0 0 1-2 2h-3v-6H8v6H5a2 2 0 0 1-2-2z"/></svg>',
+  track:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>',
+  user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
+  qr:'<svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM19 14h2M14 19h2M19 19h2"/></svg>',
+  camera:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="14" r="3.5"/></svg>',
+  pen:'<svg viewBox="0 0 24 24" width="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" color="#3B3F3B"><path d="M4 18c22-2 30 4 40-8" transform="scale(1.6)"/></svg>',
+  layers:'<svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+  wifioff:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><path d="M12 20h.01"/></svg>',
+  mappin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.5"/><rect x="12" y="8" width="3" height="10" rx="0.5"/><rect x="17" y="5" width="3" height="13" rx="0.5"/></svg>',
+  flag:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 16.5h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L14.71 3.86a2 2 0 0 0-3.42 0z"/></svg>',
+  truck:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="7" width="13" height="10" rx="1"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="6" cy="19" r="1.6"/><circle cx="17.5" cy="19" r="1.6"/></svg>',
+  gauge:'<svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l3-4"/><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none"/><path d="M4 15a8 8 0 1 1 16 0"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  phone:'<svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+  navarrow:'<svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>',
+  checksq:'<svg viewBox="0 0 24 24" width="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 12l3 3 5-6"/></svg>',
+  warehouse:'<svg viewBox="0 0 24 24" width="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V10l9-6 9 6v11"/><path d="M9 21v-6h6v6"/></svg>',
+  wallet:'<svg viewBox="0 0 24 24" width="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>',
+  micoff:'<svg viewBox="0 0 24 24" width="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2M19 10v2a7 7 0 0 1-.11 1.23"/><path d="M12 19v4M8 23h8"/></svg>',
+  volume:'<svg viewBox="0 0 24 24" width="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>',
+  endcall:'<svg viewBox="0 0 24 24" width="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>',
+};
+
+/* ============ COMPONENT HELPERS ============ */
+const chip=(t,k)=>`<span class="chip ${k}">${t}</span>`;
+const tbar=(title,{back,bell}={})=>`<div class="tbar">${back?`<div class="back" data-go="${back}">${I.back}</div>`:''}<div class="ttl">${title}</div><div class="sp"></div>${bell?`<div class="ic">${I.bell}</div>`:''}</div>`;
+const field=(label,val,{ph,sel,tip}={})=>`<div class="field"><label>${label}${tip?`<span class="tip">i</span>`:''}</label><div class="input ${sel?'sel':''}"><span class="${ph?'ph':''}">${val}</span></div></div>`;
+const tab=(icon,label,go,on)=>`<div class="tab ${on?'on':''}" data-go="${go}">${icon}<span>${label}</span></div>`;
+const tabbar=(active)=>`<div class="tabbar">
+  ${tab(I.home,'Home','home',active==='home')}
+  ${tab(I.track,'Pickups','pickups',active==='pickups')}
+  ${tab(I.chart,'History','history',active==='history')}
+  ${tab(I.user,'Profile','profile',active==='profile')}
+</div>`;
+function timeline(stages){
+  return `<div class="tl">`+stages.map(n=>`<div class="node ${n.state}"><div class="mark"><div class="dot"></div><div class="line"></div></div><div class="meta"><div class="s1">${n.s}</div>${n.ts?`<div class="s2">${n.ts}</div>`:''}</div></div>`).join('')+`</div>`;
+}
+function pickupRow(id,type,statusLabel,statusKind,go,sub){
+  return `<div class="lrow" data-go="${go}"><div class="ico">${I.batt}</div><div class="mid"><div class="t1">${id}</div><div class="t2">${sub||type}</div></div>${chip(statusLabel,statusKind)}<div class="chev">${I.chev}</div></div>`;
+}
+function seg(n,sel){ // 0-3 segmented selector
+  let out='<div class="seg">';
+  for(let i=0;i<=3;i++) out+=`<div class="so ${i===sel?'sel':''}">${i}</div>`;
+  return out+'</div>';
+}
+function priceBand(min,rec,max){
+  return `<div class="pband">
+    <div class="pb"><div class="pk">P min</div><div class="pv">${min}</div></div>
+    <div class="pb rec"><div class="pk">P recommended</div><div class="pv">${rec}</div></div>
+    <div class="pb"><div class="pk">P max</div><div class="pv">${max}</div></div>
+  </div>`;
+}
+function layerRow(n,label,sub,state){
+  return `<div class="layer ${state}"><div class="lmark">${state==='done'?I.check.replace('width="30"','width="12"'):(state==='active'?'<span class="mono" style="font-size:9px">'+n+'</span>':'<span class="mono" style="font-size:9px">'+n+'</span>')}</div><div class="lt"><div class="l1">${label}</div><div class="l2">${sub}</div></div></div>`;
+}
+
+/* ============ SCREENS ============ */
+const S = {};
+
+/* ---------- A. ENTRY & DAY VIEW ---------- */
+
+S.login = `
+${tbar('')}
+<div class="body" style="justify-content:center;gap:18px">
+  <div style="text-align:center;margin-bottom:6px">
+    <div style="width:52px;height:52px;border-radius:14px;background:var(--ink);color:var(--signal);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;margin-bottom:12px">B2</div>
+    <div class="h-display serif">Field Agent</div>
+    <div class="muted" style="margin-top:4px">Back2Basics · on-site pickups</div>
+  </div>
+  ${field('Agent ID','FA-1042',{ph:1})}
+  ${field('OTP','• • • • • •',{ph:1})}
+  <button class="btn btn-signal" data-go="home">Log in</button>
+  <div class="tiny" style="text-align:center">OTP sent to your registered mobile</div>
+</div>`;
+
+S['home-empty'] = `
+${tbar('Good morning, Rakesh',{bell:1})}
+<div class="body scroll">
+  <div class="stats">
+    <div class="stat"><div class="v">0</div><div class="k">Quotes today</div></div>
+    <div class="stat"><div class="v">—</div><div class="k">Avg margin</div></div>
+    <div class="stat"><div class="v">0</div><div class="k">Collected</div></div>
+  </div>
+  <div class="card" style="text-align:center;padding:26px 16px;display:flex;flex-direction:column;align-items:center;gap:8px">
+    <div style="width:40px;height:40px;border-radius:11px;background:var(--paper-2);display:flex;align-items:center;justify-content:center;color:var(--ink-4)">${I.batt}</div>
+    <div class="muted" style="font-weight:700;color:var(--ink-2)">Queue's empty</div>
+    <div class="tiny">No pickups assigned right now. New jobs will appear here the moment they're scheduled.</div>
+  </div>
+  <button class="btn btn-signal" data-go="scan">${I.qr} Scan / New Intake</button>
+</div>
+${tabbar('home')}`;
+
+S.home = `
+${tbar('Good morning, Rakesh',{bell:1})}
+<div class="body scroll">
+  <div class="stats">
+    <div class="stat"><div class="v">₹640</div><div class="k">Earned today</div></div>
+    <div class="stat"><div class="v">22%</div><div class="k">Avg margin</div></div>
+    <div class="stat"><div class="v">3</div><div class="k">Collected</div></div>
+  </div>
+  <button class="btn btn-signal" data-go="scan">${I.qr} Scan / New Intake</button>
+  <div class="banner caution"><span class="bi">${I.wifioff}</span><span>Offline earlier — <b>2 items</b> queued, synced when connection returned.</span></div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div class="h-sec">New requests nearby</div>
+    <span class="badge-new">2 new</span>
+  </div>
+  <div class="list">
+    <div class="lrow" data-go="request-detail"><div class="ico">${I.batt}</div><div class="mid"><div class="t1">NMC622 · 1.2 km away</div><div class="t2">Vinod Motors · est. payout ₹140</div></div><div class="chev">${I.chev}</div></div>
+    <div class="lrow" data-go="request-detail"><div class="ico">${I.batt}</div><div class="mid"><div class="t1">LFP fleet pack · 3.8 km away</div><div class="t2">Sanjay Traders · est. payout ₹210</div></div><div class="chev">${I.chev}</div></div>
+  </div>
+
+  <div class="h-sec">My accepted pickups</div>
+  <div class="list">
+    ${pickupRow('PKP-3108','LFP · Fleet pack','Accepted','scheduled','navigate','Sanjay Traders · 11:30 AM')}
+    ${pickupRow('PKP-3107','NMC622','Draft','draft','intake-new','Resume draft · saved 10 min ago')}
+    ${pickupRow('PKP-3105','NMC811','Quoted','quoted','result-verdict','Awaiting vendor decision')}
+  </div>
+</div>
+${tabbar('home')}`;
+
+S['request-detail'] = `
+${tbar('New request',{back:'home'})}
+<div class="body scroll">
+  <div class="reqcard">
+    <div class="rtop">
+      <div>
+        <div style="font-size:15px;font-weight:800">Vinod Motors</div>
+        <div class="tiny">1.2 km away · requested 3 min ago</div>
+      </div>
+      <span class="badge-new">New</span>
+    </div>
+    <div class="reqmeta">
+      <div class="rm"><span class="rk">Battery type</span><span class="rv">NMC622</span></div>
+      <div class="rm"><span class="rk">Est. weight</span><span class="rv">~40 kg</span></div>
+      <div class="rm"><span class="rk">Condition</span><span class="rv">Unknown</span></div>
+    </div>
+    <div class="payout">
+      <div><div class="pk">Your payout for this pickup</div></div>
+      <div class="pv">₹140</div>
+    </div>
+  </div>
+  <div class="tiny">Payout is paid on collection, separate from the battery's purchase price shown to the vendor — that's set later by the pricing engine.</div>
+  <div class="row-btns">
+    <button class="btn btn-ghost" data-go="home">Decline</button>
+    <button class="btn btn-signal" data-go="navigate">Accept · ₹140</button>
+  </div>
+</div>`;
+
+S.navigate = `
+${tbar('Navigate to pickup',{back:'home'})}
+<div class="body" style="gap:12px">
+  <div class="navbox">
+    <div class="turnbar">
+      <div class="arrow">${I.navarrow}</div>
+      <div><div class="tt1">Turn right onto MG Road</div><div class="tt2">then 800 m to destination</div></div>
+    </div>
+    <div class="routeline">${I.mappin.replace('width="24"','width="30"')}</div>
+    <div class="etabar">
+      <div><div class="ev">9 min</div><div class="ek">1.2 km · Vinod Motors</div></div>
+      <div style="text-align:right"><div class="ev">₹140</div><div class="ek">Payout</div></div>
+    </div>
+  </div>
+  <div class="contactrow">
+    <div class="cbtn" data-go="chat">${I.chat}Chat</div>
+    <div class="cbtn" data-go="call">${I.phone}Call</div>
+  </div>
+  <button class="btn btn-signal" data-go="scan">Arrived · Start intake</button>
+</div>`;
+
+S.chat = `
+${tbar('Vinod Motors',{back:'navigate'})}
+<div class="body" style="padding-bottom:12px">
+  <div class="chatlist">
+    <div class="bubble them">Hi, the battery is ready at the back gate.<span class="btime">10:41 AM</span></div>
+    <div class="bubble me">On my way, ETA 9 min.<span class="btime">10:42 AM</span></div>
+    <div class="bubble them">Sure, I'll keep it near the security cabin.<span class="btime">10:42 AM</span></div>
+  </div>
+  <div class="chatinput">
+    <div class="ci">Type a message…</div>
+    <div class="send">${I.chev}</div>
+  </div>
+</div>`;
+
+S.call = `
+${tbar('',{back:'navigate'})}
+<div class="callwrap">
+  <div style="text-align:center">
+    <div class="tiny" style="margin-bottom:4px">Calling</div>
+    <div class="callavatar">VM</div>
+    <div style="font-weight:800;font-size:16px;margin-top:12px">Vinod Motors</div>
+    <div class="calltimer" style="margin-top:4px">00:14</div>
+  </div>
+  <div class="callctrls">
+    <div class="callbtn">${I.micoff}</div>
+    <div class="callbtn end" data-go="navigate">${I.endcall}</div>
+    <div class="callbtn">${I.volume}</div>
+  </div>
+</div>`;
+
+/* ---------- B. IDENTIFY & INTAKE ---------- */
+
+S.scan = `
+${tbar('Scan battery',{back:'home'})}
+<div class="body" style="gap:14px">
+  <div class="scanwrap">
+    <div class="scanbox">
+      <div class="frame">
+        <div class="cTL"></div><div class="cTR"></div><div class="cBL"></div><div class="cBR"></div>
+        <div class="sline"></div>
+      </div>
+      <div class="hint">Align QR within frame</div>
+    </div>
+  </div>
+  <div class="muted" style="text-align:center">Scanning an existing tag routes straight to that transaction. No tag? Generate one below.</div>
+  <div class="row-btns">
+    <button class="btn btn-ghost" data-go="intake-new">Enter manually</button>
+    <button class="btn btn-ink" data-go="intake-new">${I.qr} Generate QR</button>
+  </div>
+</div>`;
+
+S['intake-new'] = `
+${tbar('Manual battery entry',{back:'home'})}
+<div class="body scroll">
+  <div class="banner lock"><span class="bi">${I.info}</span><span>Entroview sync is off for v1 — read specs off the label and enter them here.</span></div>
+  ${field('Battery type','NMC622',{sel:1,tip:1})}
+  ${field('State of health (SoH) %','82',{tip:1})}
+  <div class="row-btns">
+    ${field('Capacity (kWh)','48.5',{tip:1})}
+    ${field('Weight (kg)','312',{tip:1})}
+  </div>
+  <div class="row-btns">
+    ${field('Age','2 yrs 4 mo',{tip:1})}
+    ${field('Cycle count','640',{tip:1})}
+  </div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:8px">BMS read (manual)</div>
+    <div class="muted" style="margin-bottom:8px">Entropy anomalies, IR &amp; voltage imbalance, temp max — from the pack's BMS display.</div>
+    ${field('Temp max (°C)','38',{tip:1})}
+  </div>
+  <button class="btn btn-signal" data-go="damage">Continue to damage rubric</button>
+</div>`;
+
+S.damage = `
+${tbar('Damage rubric · Layer 1',{back:'intake-new'})}
+<div class="body scroll">
+  <div class="elayer">${I.layers} Engine Layer 1 · Physical damage</div>
+  <div class="card">
+    <div class="dtest">
+      <div class="dh"><span class="dt1">Visual integrity</span><span class="dw">weight 0.40</span></div>
+      ${seg(0,0)}
+      <div class="uphoto">${I.camera} Add photo evidence</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="dtest">
+      <div class="dh"><span class="dt1">Leakage</span><span class="dw">weight 0.35</span></div>
+      ${seg(0,1)}
+      <div class="uphoto">${I.camera} Add photo evidence</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="dtest">
+      <div class="dh"><span class="dt1">Thermal</span><span class="dw">weight 0.25</span></div>
+      ${seg(0,0)}
+      <div class="uphoto">${I.camera} Add photo evidence</div>
+    </div>
+  </div>
+  <div class="dscore">
+    <div><div class="dk">Weighted damage score</div><div class="tiny" style="color:rgba(242,237,226,.55);margin-top:2px">≤1.5 all pathways open</div></div>
+    <div class="dv ok">0.35</div>
+  </div>
+  <div class="tiny">Swelling is captured under Visual Integrity. Score routing: ≤1.5 all pathways · 1.6–2.5 Refurbish/Recycle · &gt;2.5 forces Recycle.</div>
+  <button class="btn btn-signal" data-go="computing">Continue</button>
+</div>`;
+
+S['damage-recycle'] = `
+${tbar('Damage rubric · Layer 1',{back:'intake-new'})}
+<div class="body scroll">
+  <div class="elayer">${I.layers} Engine Layer 1 · Physical damage</div>
+  <div class="card">
+    <div class="dtest">
+      <div class="dh"><span class="dt1">Visual integrity</span><span class="dw">weight 0.40</span></div>
+      ${seg(0,3)}
+      <div class="uphoto">${I.camera} 2 photos attached</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="dtest">
+      <div class="dh"><span class="dt1">Leakage</span><span class="dw">weight 0.35</span></div>
+      ${seg(0,2)}
+      <div class="uphoto">${I.camera} 1 photo attached</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="dtest">
+      <div class="dh"><span class="dt1">Thermal</span><span class="dw">weight 0.25</span></div>
+      ${seg(0,2)}
+      <div class="uphoto">${I.camera} Add photo evidence</div>
+    </div>
+  </div>
+  <div class="dscore">
+    <div><div class="dk">Weighted damage score</div><div class="tiny" style="color:rgba(255,138,92,.85);margin-top:2px">&gt;2.5 — Recycle forced</div></div>
+    <div class="dv hazard">2.85</div>
+  </div>
+  <div class="banner warn"><span class="bi">${I.flag}</span><span>Damage score forces <b>Recycle</b>. Reuse and Refurbish are locked for this pack — the engine will only price the recycle pathway.</span></div>
+  <button class="btn btn-signal" data-go="computing">Continue to Recycle pricing</button>
+</div>`;
+
+/* ---------- C. COMPUTE & PRESENT THE QUOTE ---------- */
+
+S.computing = `
+${tbar('Computing',{back:'damage'})}
+<div class="body" style="justify-content:center;gap:18px">
+  <div style="text-align:center">
+    <div class="h-display serif">Running the engine</div>
+    <div class="muted" style="margin-top:4px">Six layers, one pass — hold tight.</div>
+  </div>
+  <div class="card">
+    <div class="layers">
+      ${layerRow(0,'Layer 0 · Intake validated','trace_id assigned · config pinned','done')}
+      ${layerRow(1,'Layer 1 · Damage scored','0.35 weighted','done')}
+      ${layerRow(2,'Layer 2 · BMS safety checked','No anomalies flagged','done')}
+      ${layerRow(3,'Layer 3 · SoH gating','82% → all pathways eligible','done')}
+      ${layerRow(4,'Layer 4 · Pathway economics','Computing revenue &amp; costs…','active')}
+      ${layerRow(5,'Layer 5 · Selection &amp; pricing','Pending','todo')}
+    </div>
+  </div>
+  <div class="tiny" style="text-align:center">POST /api/quote · ~1.5s</div>
+</div>`;
+
+S['result-verdict'] = `
+${tbar('PKP-3106 · Verdict',{back:'home'})}
+<div class="body scroll">
+  <div class="subnav">
+    <div class="sn on" data-go="result-verdict">Verdict</div>
+    <div class="sn" data-go="result-breakdown">Breakdown</div>
+    <div class="sn" data-go="result-why">Why</div>
+  </div>
+  <div class="vhero">
+    <div class="vicon" style="background:rgba(143,184,50,.16);color:var(--signal-deep)">${I.batt}</div>
+    <div class="vpath">Selected pathway</div>
+    <div class="h-display serif" style="font-size:26px">Refurbish</div>
+    <div class="vnet">₹31,400</div>
+    <div class="tiny">Net value · <b>estimated</b> offer</div>
+  </div>
+  ${priceBand('₹27,600','₹29,900','₹32,900')}
+  <div class="tiny" style="text-align:center">Margin tier 20% applied to net value</div>
+  <button class="btn btn-ghost" data-go="result-breakdown">View full breakdown</button>
+  <button class="btn btn-signal" data-go="pickup">Present offer &amp; confirm pickup</button>
+</div>`;
+
+S['result-hold'] = `
+${tbar('PKP-3113 · Verdict',{back:'home'})}
+<div class="body scroll">
+  <div class="subnav">
+    <div class="sn on" data-go="result-hold">Verdict</div>
+    <div class="sn" data-go="result-breakdown">Breakdown</div>
+    <div class="sn" data-go="result-why">Why</div>
+  </div>
+  <div class="vhero">
+    <div class="vicon" style="background:rgba(255,90,31,.14);color:var(--hazard)">${I.flag}</div>
+    <div class="vpath">No profitable pathway</div>
+    <div class="h-display serif" style="font-size:26px">HOLD</div>
+  </div>
+  <div class="banner warn"><span class="bi">${I.flag}</span><span>Every eligible pathway returns a negative net value at current market rates. Do not present an offer — escalate to admin.</span></div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:8px">Pathways checked</div>
+    <div class="brk">
+      <div class="r"><span class="lab">Refurbish</span><span class="val neg">−₹4,200</span></div>
+      <div class="r"><span class="lab">Recycle</span><span class="val neg">−₹1,850</span></div>
+    </div>
+  </div>
+  <button class="btn btn-ghost" data-go="result-why">View rationale</button>
+  <button class="btn btn-ink" data-go="home">Escalate to admin</button>
+</div>`;
+
+S['result-review'] = `
+${tbar('PKP-3114 · Verdict',{back:'home'})}
+<div class="body scroll">
+  <div class="subnav">
+    <div class="sn on" data-go="result-review">Verdict</div>
+    <div class="sn" data-go="result-breakdown">Breakdown</div>
+    <div class="sn" data-go="result-why">Why</div>
+  </div>
+  <div class="vhero">
+    <div class="vicon" style="background:rgba(107,63,184,.14);color:var(--plum)">${I.flag}</div>
+    <div class="vpath">Selected pathway</div>
+    <div class="h-display serif" style="font-size:26px">Recycle</div>
+    <div class="vnet">₹6,100</div>
+    <div class="tiny">Net value · below hurdle rate</div>
+  </div>
+  ${priceBand('₹4,900','₹5,400','₹5,900')}
+  <div class="banner caution"><span class="bi">${I.flag}</span><span><b>REVIEW</b> — net value clears the floor but sits below the hurdle rate. Confirm with admin before presenting.</span></div>
+  <button class="btn btn-ghost" data-go="result-breakdown">View full breakdown</button>
+  <button class="btn btn-signal" data-go="pickup">Present anyway</button>
+</div>`;
+
+S['result-breakdown'] = `
+${tbar('PKP-3106 · Breakdown',{back:'result-verdict'})}
+<div class="body scroll">
+  <div class="subnav">
+    <div class="sn" data-go="result-verdict">Verdict</div>
+    <div class="sn on" data-go="result-breakdown">Breakdown</div>
+    <div class="sn" data-go="result-why">Why</div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span class="h-sec">Revenue · resale (Refurbish)</span>
+      <span class="serif" style="font-size:19px;font-weight:600">₹52,000</span>
+    </div>
+    <div class="brk" style="margin-top:6px">
+      <div class="r"><span class="lab">Refurbished pack resale</span><span class="val">₹48,000</span></div>
+      <div class="r"><span class="lab">Casing &amp; BMS salvage</span><span class="val">₹4,000</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span class="h-sec">Costs</span>
+      <span class="serif" style="font-size:19px;font-weight:600;color:var(--hazard)">−₹20,600</span>
+    </div>
+    <div class="brk" style="margin-top:6px">
+      <div class="r"><span class="lab">Intake processing</span><span class="val">₹2,400</span></div>
+      <div class="r"><span class="lab">QA</span><span class="val">₹3,100</span></div>
+      <div class="r"><span class="lab">Refurb labor</span><span class="val">₹6,800</span></div>
+      <div class="r"><span class="lab">Cell replacement</span><span class="val">₹5,200</span></div>
+      <div class="r"><span class="lab">Logistics</span><span class="val">₹1,600</span></div>
+      <div class="r"><span class="lab">Overhead</span><span class="val">₹1,500</span></div>
+    </div>
+  </div>
+  <div style="background:var(--ink);color:var(--paper);border-radius:var(--r-md);padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span class="mono" style="font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:rgba(242,237,226,.6)">Net value</span>
+      <span class="serif" style="font-size:23px;font-weight:600;color:var(--signal)">₹31,400</span>
+    </div>
+    <div class="mono" style="font-size:10.5px;color:rgba(242,237,226,.5);margin-top:6px">₹52,000 − ₹20,600 = ₹31,400 · margin 20%</div>
+  </div>
+  <button class="btn btn-ink" data-go="result-verdict">Back to verdict</button>
+</div>`;
+
+S['result-why'] = `
+${tbar('PKP-3106 · Why',{back:'result-verdict'})}
+<div class="body scroll">
+  <div class="subnav">
+    <div class="sn" data-go="result-verdict">Verdict</div>
+    <div class="sn" data-go="result-breakdown">Breakdown</div>
+    <div class="sn on" data-go="result-why">Why</div>
+  </div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:8px">Plain-English rationale</div>
+    <div class="muted">SoH of 82% and a clean damage score keep every pathway open. Refurbish clears the hierarchy tiebreaker over Recycle by more than 5%, so it wins on net value.</div>
+  </div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:8px">Alternative pathways</div>
+    <div class="brk">
+      <div class="r"><span class="lab">Recycle</span><span class="val">₹22,100 · −29.6%</span></div>
+      <div class="r"><span class="lab">Reuse</span><span class="val">Ineligible · SoH cap</span></div>
+    </div>
+  </div>
+  <div class="toggle open">
+    <div class="toggle-head" data-toggle><span>Sensitivity</span><span class="cv">${I.chevd}</span></div>
+    <div class="toggle-target">
+      <div class="sens">
+        <div class="sr">If Co rises &gt;20%, Recycle net value approaches Refurbish and could flip the selection.</div>
+        <div class="sr">A 5-point SoH drop moves this pack into the 50–75% band, closing Reuse eligibility entirely.</div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:8px">Audit footer</div>
+    <div class="audit">
+      <div class="ar"><span class="al">Config version</span><span class="av">v2.4.1</span></div>
+      <div class="ar"><span class="al">Market snapshot</span><span class="av">08:14 IST · &lt;24h</span></div>
+      <div class="ar"><span class="al">FX rate</span><span class="av">USD/INR 83.10</span></div>
+      <div class="ar"><span class="al">trace_id</span><span class="av">TRC-2026-0841</span></div>
+    </div>
+  </div>
+  <button class="btn btn-ghost">${I.info} Why this price? (AI explanation)</button>
+</div>`;
+
+/* ---------- D. COLLECT & HAND OFF ---------- */
+
+S.pickup = `
+${tbar('Confirm pickup',{back:'result-verdict'})}
+<div class="body scroll">
+  <div class="banner ok"><span class="bi">${I.check.replace('width="30"','width="14"')}</span><span>Vendor accepted the estimated offer of <b>₹29,900</b>.</span></div>
+  <div class="h-sec">Sealed packaging &amp; battery photos</div>
+  <div class="row-btns">
+    <div class="uphoto" style="flex:1;padding:20px 8px">${I.camera} Battery</div>
+    <div class="uphoto" style="flex:1;padding:20px 8px">${I.camera} Sealed pack</div>
+  </div>
+  ${field('Scheduled drop-off','Today, 5:30 PM · Warehouse B',{sel:1})}
+  ${field('Supplier contact confirmed','Sanjay Traders · +91 98••• ••210',{sel:1})}
+  <div class="h-sec">Signature</div>
+  <div class="sigpad">
+    <div class="sigline"></div>
+    <svg viewBox="0 0 220 60" width="180"><path d="M8 40 C 30 10, 45 55, 62 30 S 95 8, 112 34 S 150 52, 168 22 S 200 12, 212 30" fill="none" stroke="#3B3F3B" stroke-width="2" stroke-linecap="round"/></svg>
+  </div>
+  <div class="payout">
+    <div><div class="pk">Your payout on collection</div></div>
+    <div class="pv">₹140</div>
+  </div>
+  <div class="row-btns">
+    <button class="btn btn-ghost btn-sm" style="flex:1">Clear</button>
+    <button class="btn btn-text danger" style="flex:1" data-go="pickup-declined">Vendor declines</button>
+  </div>
+  <button class="btn btn-signal" data-go="receipt">Confirm collection</button>
+</div>`;
+
+S['pickup-declined'] = `
+${tbar('Confirm pickup',{back:'result-verdict'})}
+<div class="confirm">
+  <div class="seal neutral">${I.flag.replace('width="16"','width="30"')}</div>
+  <h3 class="serif">Offer declined</h3>
+  ${chip('Declined','declined')}
+  <p>The vendor chose not to accept ₹29,900 for <b>PKP-3106</b>. The request closes — no collection is made.</p>
+  <div style="width:100%;max-width:240px;display:flex;flex-direction:column;gap:10px;margin-top:8px">
+    <button class="btn btn-ghost" data-go="result-verdict">Re-open quote</button>
+    <button class="btn btn-signal" data-go="home">Back to home</button>
+  </div>
+</div>`;
+
+S.receipt = `
+${tbar('',{back:'home'})}
+<div class="confirm">
+  <div class="seal">${I.check}</div>
+  <h3 class="serif">Collected</h3>
+  ${chip('Pending drop-off','pending-dropoff')}
+  <p><b>PKP-3106</b> is collected and in your custody. <b>₹140</b> added to your wallet. Hand it off at the hub to complete the chain of custody.</p>
+  <div style="width:100%;max-width:240px;display:flex;flex-direction:column;gap:10px;margin-top:8px">
+    <div class="seclink"><div class="lk">${I.doc}</div><div class="mid"><div class="t1">Receipt PKP-3106</div><div class="t2">Share with vendor · QR issued</div></div></div>
+    <button class="btn btn-ghost">Share receipt</button>
+    <button class="btn btn-signal" data-go="dropoff-select">Go to hub drop-off</button>
+    <button class="btn btn-text" data-go="home">Back to home</button>
+  </div>
+</div>`;
+
+/* ---------- E. TRACK, HISTORY & PROFILE ---------- */
+
+S.pickups = `
+${tbar('My pickups')}
+<div class="body scroll">
+  <div class="banner caution"><span class="bi">${I.warehouse}</span><span><b>3 batteries</b> in your custody, ready for hub drop-off.</span></div>
+  <button class="btn btn-ink" data-go="dropoff-select">${I.warehouse} Bulk drop-off at hub</button>
+  <div class="filters">
+    <span class="fchip on">All</span><span class="fchip">Scheduled</span><span class="fchip">Collected</span><span class="fchip">In transit</span>
+  </div>
+  <div class="h-sec">Active</div>
+  <div class="list">
+    ${pickupRow('PKP-3108','LFP · Fleet pack','Scheduled','scheduled','pickups-detail')}
+    ${pickupRow('PKP-3106','NMC622','Pending drop-off','pending-dropoff','pickups-detail','In your custody')}
+    ${pickupRow('PKP-3099','LCO','Tested','tested','pickups-detail','With admin now')}
+    ${pickupRow('PKP-3091','NMC811','Processed','processed','pickups-detail','ETA cert · 2 days')}
+  </div>
+</div>
+${tabbar('pickups')}`;
+
+S['dropoff-select'] = `
+${tbar('Bulk drop-off',{back:'pickups'})}
+<div class="body scroll">
+  <div class="muted">Select every battery currently in your custody to hand off to the hub in one batch.</div>
+  <div class="list">
+    <div class="dcheck"><div class="cb on">${I.checksq}</div><div class="mid"><div class="t1">PKP-3106 · NMC622</div><div class="t2">Collected 5:42 PM · 40 kg</div></div></div>
+    <div class="dcheck"><div class="cb on">${I.checksq}</div><div class="mid"><div class="t1">PKP-3094 · LFP</div><div class="t2">Collected 2:10 PM · 28 kg</div></div></div>
+    <div class="dcheck"><div class="cb on">${I.checksq}</div><div class="mid"><div class="t1">PKP-3088 · LCO</div><div class="t2">Collected 12:05 PM · 12 kg</div></div></div>
+  </div>
+  <div class="batchbar">
+    <div><div class="bk">Batch total</div><div class="bv">3 items · 80 kg</div></div>
+    <div style="text-align:right"><div class="bk">Payout included</div><div class="bv">₹410</div></div>
+  </div>
+  <button class="btn btn-signal" data-go="dropoff-confirm">Continue to hand-off</button>
+</div>`;
+
+S['dropoff-confirm'] = `
+${tbar('Confirm hand-off',{back:'dropoff-select'})}
+<div class="body scroll">
+  ${field('Aggregation / segregation hub','Warehouse B · Sector 18',{sel:1})}
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:8px">Batch summary</div>
+    <div class="brk">
+      <div class="r"><span class="lab">PKP-3106 · NMC622</span><span class="val">40 kg</span></div>
+      <div class="r"><span class="lab">PKP-3094 · LFP</span><span class="val">28 kg</span></div>
+      <div class="r"><span class="lab">PKP-3088 · LCO</span><span class="val">12 kg</span></div>
+      <div class="r total"><span class="lab">Total</span><span class="val">80 kg · 3 items</span></div>
+    </div>
+  </div>
+  ${field('Hub staff receiving','Priya Nair · Staff ID W-204',{sel:1})}
+  <div class="banner info"><span class="bi">${I.mappin}</span><span>GPS + timestamp auto-captured at hand-off for the chain-of-custody record.</span></div>
+  <div class="h-sec">Staff signature</div>
+  <div class="sigpad">
+    <div class="sigline"></div>
+    <svg viewBox="0 0 220 60" width="180"><path d="M10 35 C 35 15, 50 50, 70 28 S 110 45, 130 20 S 170 40, 205 25" fill="none" stroke="#3B3F3B" stroke-width="2" stroke-linecap="round"/></svg>
+  </div>
+  <button class="btn btn-signal" data-go="dropoff-receipt">Confirm hand-off</button>
+</div>`;
+
+S['dropoff-receipt'] = `
+${tbar('',{back:'pickups'})}
+<div class="confirm">
+  <div class="seal">${I.check}</div>
+  <h3 class="serif">Batch handed off</h3>
+  ${chip('Collected','collected')}
+  <p><b>3 batteries · 80 kg</b> logged into chain-of-custody at Warehouse B. Admin takes over from here.</p>
+  <div style="width:100%;max-width:250px;display:flex;flex-direction:column;gap:10px;margin-top:8px">
+    <div class="seclink"><div class="lk">${I.doc}</div><div class="mid"><div class="t1">Chain-of-custody receipt</div><div class="t2">Batch BATCH-0512 · GPS + timestamp</div></div></div>
+    <button class="btn btn-ghost">Share receipt</button>
+    <button class="btn btn-signal" data-go="home">Back to home</button>
+  </div>
+</div>`;
+
+S['pickups-detail'] = `
+${tbar('PKP-3106',{back:'pickups'})}
+<div class="body scroll">
+  <div style="display:flex;align-items:center;justify-content:space-between"><div class="h-sec">Lifecycle</div>${chip('Collected','collected')}</div>
+  <div class="card">
+    ${timeline([
+      {s:'Collected',ts:'21 Jul, 5:42 PM',state:'done'},
+      {s:'Transit',ts:'In progress',state:'active'},
+      {s:'Warehouse',ts:'ETA 40 min',state:'todo'},
+      {s:'Refurb / Recycle',ts:'—',state:'todo'},
+      {s:'QA',ts:'—',state:'todo'},
+      {s:'Done',ts:'—',state:'todo'},
+    ])}
+  </div>
+  <div class="banner info"><span class="bi">${I.info}</span><span>Updates live via Supabase Realtime — no refresh needed.</span></div>
+  <div class="banner lock"><span class="bi">${I.lock}</span><span>Your role ends at hub drop-off. Transit → certified is admin-only — you're just watching from here.</span></div>
+  <button class="btn btn-ghost" data-go="map">${I.mappin} View on map</button>
+</div>
+${tabbar('pickups')}`;
+
+S.map = `
+${tbar('Battery location',{back:'pickups-detail'})}
+<div class="body" style="padding:0;gap:0">
+  <div style="flex:1;background:var(--paper-2);position:relative;display:flex;align-items:center;justify-content:center;background-image:radial-gradient(circle at 1px 1px,rgba(14,18,14,.08) 1px,transparent 0);background-size:18px 18px">
+    <div style="color:var(--ink-3);display:flex;flex-direction:column;align-items:center;gap:6px">
+      <div style="color:var(--hazard)">${I.mappin.replace('width="24"','width="30"')}</div>
+      <div class="tiny">Leaflet + OpenStreetMap</div>
+    </div>
+  </div>
+  <div class="card" style="border-radius:0;box-shadow:none;border-left:none;border-right:none;border-bottom:none">
+    <div class="h-sec" style="margin-bottom:6px">PKP-3106 · In transit</div>
+    <div class="muted">Currently 6.2 km from Warehouse B · ETA 40 min</div>
+  </div>
+</div>`;
+
+S.history = `
+${tbar('History')}
+<div class="body scroll">
+  <div class="filters">
+    <span class="fchip on">All</span><span class="fchip">Reuse</span><span class="fchip">Refurbish</span><span class="fchip">Recycle</span>
+  </div>
+  <div class="list">
+    ${pickupRow('PKP-3084','NMC622 · Refurbish','Certified','certified','history','₹29,900 · 18 Jul')}
+    ${pickupRow('PKP-3071','LFP · Recycle','Certified','certified','history','₹14,200 · 15 Jul')}
+    ${pickupRow('PKP-3060','NCA · Refurbish','Recovered','recovered','history','₹41,000 · 12 Jul')}
+    ${pickupRow('PKP-3052','LCO · Recycle','Certified','certified','history','₹8,600 · 09 Jul')}
+  </div>
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:13px"><span class="muted" style="font-weight:700;color:var(--ink-2)">Total collected · MTD</span><span class="serif" style="font-size:20px;font-weight:600">₹2.1L</span></div>
+</div>
+${tabbar('history')}`;
+
+S.profile = `
+${tbar('Profile')}
+<div class="body scroll">
+  <div class="card" style="display:flex;align-items:center;gap:12px">
+    <div style="width:48px;height:48px;border-radius:13px;background:var(--ink);color:var(--signal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px">RK</div>
+    <div><div style="font-size:15px;font-weight:800">Rakesh Kumar</div><div class="tiny">Agent ID · FA-1042</div></div>
+  </div>
+  <div class="walletcard">
+    <div class="wk">Wallet balance</div>
+    <div class="wv">₹8,240</div>
+    <div class="row-btns">
+      <button class="btn btn-signal btn-sm" style="flex:1">${I.wallet} Cash out</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;border-color:rgba(242,237,226,.3);color:var(--paper)">Statement</button>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v">182</div><div class="k">Pickups YTD</div></div>
+    <div class="stat"><div class="v">21%</div><div class="k">Avg margin</div></div>
+  </div>
+  <div class="card">
+    <div class="h-sec" style="margin-bottom:6px">Earnings history</div>
+    <div class="earningsrow"><div><div class="e1">PKP-3106 · pickup payout</div><div class="e2">Today, 5:44 PM</div></div><div class="ev">+₹140</div></div>
+    <div class="earningsrow"><div><div class="e1">Batch BATCH-0509 · hub drop-off</div><div class="e2">Yesterday, 6:10 PM</div></div><div class="ev">+₹380</div></div>
+    <div class="earningsrow"><div><div class="e1">PKP-3091 · pickup payout</div><div class="e2">Yesterday, 1:22 PM</div></div><div class="ev">+₹165</div></div>
+    <div class="earningsrow"><div><div class="e1">Weekly incentive bonus</div><div class="e2">Mon, 9:00 AM</div></div><div class="ev">+₹500</div></div>
+  </div>
+  <div class="card" style="display:flex;align-items:center;gap:10px">
+    <div style="color:var(--ink-3)">${I.wifioff}</div>
+    <div style="flex:1"><div class="t1" style="font-size:12.5px;font-weight:700">Offline queue</div><div class="tiny">0 items pending sync</div></div>
+    <span class="chip collected" style="background:rgba(63,164,91,.15);color:#2E7D46">Synced</span>
+  </div>
+  <div class="list">
+    <div class="lrow"><div class="mid"><div class="t1">Notifications</div><div class="t2">New assignments &amp; alerts</div></div><div class="chev">${I.chev}</div></div>
+    <div class="lrow"><div class="mid"><div class="t1">App version</div><div class="t2">v2.0.4 (114)</div></div><div class="chev">${I.chev}</div></div>
+  </div>
+  <button class="btn btn-ghost" data-go="login" style="margin-top:2px">Sign out</button>
+</div>
+${tabbar('profile')}`;
+
+/* ============ GALLERY METADATA ============ */
+const GROUPS = [
+  {tag:'B01–B02 · Login & Day View',desc:'The agent signs in with agent ID + OTP and lands on the day view — nearby job requests, accepted pickups, earnings, and the primary Scan / New Intake action.',screens:[
+    {id:'login',label:'Screen 01',title:'Login',cap:'Agent ID + OTP (shared auth shell, role = field_agent).',anno:'<b>Log in</b> → Home / day view'},
+    {id:'home-empty',label:'Screen 02a',title:'Day view — empty queue',cap:'Branch state: no requests or accepted pickups right now.',anno:'<b>Scan / New Intake</b> → Scan QR'},
+    {id:'home',label:'Screen 02',title:'Day view — active',cap:'New nearby requests, accepted pickups, earnings-today stat, offline-sync banner, resumable draft.',anno:'New request row → Accept/Decline · Accepted row → Navigate'},
+  ]},
+  {tag:'B02 · Accept / Reject Requests',desc:'The agent — a paid partner, not a salaried employee — chooses which nearby jobs to take. Each request shows the pickup fee before the agent commits.',screens:[
+    {id:'request-detail',label:'Screen 02b',title:'New request',cap:'Battery type, distance, est. weight and the payout offered for doing this pickup.',anno:'<b>Accept</b> → Navigate to pickup · <b>Decline</b> → back to Home'},
+  ]},
+  {tag:'B02 · Navigate & Contact Customer',desc:'Once accepted, the agent gets turn-by-turn directions to the pickup and can reach the customer directly from the app.',screens:[
+    {id:'navigate',label:'Screen 02c',title:'Turn-by-turn navigation',cap:'Live directions, ETA and distance, payout reminder, Chat/Call to the customer.',anno:'<b>Arrived · Start intake</b> → Scan QR'},
+    {id:'chat',label:'Screen 02d',title:'In-app chat',cap:'Direct message thread with the customer — pickup logistics without exposing phone numbers.',anno:'Reached from the Navigate screen'},
+    {id:'call',label:'Screen 02e',title:'In-app call',cap:'VoIP call UI — mute, speaker, end call. Same masked-number pattern as chat.',anno:'<b>End call</b> → back to Navigate'},
+  ]},
+  {tag:'B03 · Identify & Scan',desc:'On arrival, scan an existing QR to jump straight to its transaction, or generate a new one for an unlabelled battery.',screens:[
+    {id:'scan',label:'Screen 03',title:'QR scan',cap:'Camera viewport with corner-bracket frame + scan line; manual fallback.',anno:'<b>Enter manually</b> → Manual entry · <b>Generate QR</b> → Manual entry'},
+  ]},
+  {tag:'B04 · Intake & Assessment',desc:'Manual battery specs (Entroview sync is out for v1) followed by the 3-test damage rubric — engine Layer 1 — with live weighted scoring.',screens:[
+    {id:'intake-new',label:'Screen 04',title:'Manual battery entry',cap:'Type, SoH, capacity, weight, age, cycles + manual BMS read. Tooltips on every field.',anno:'Creates a <b>draft</b> transaction → Damage rubric'},
+    {id:'damage',label:'Screen 06',title:'Damage rubric — clean',cap:'Visual (0.40) · Leakage (0.35) · Thermal (0.25), each 0–3 with photo slots.',anno:'Score 0.35 → all pathways stay open'},
+  ]},
+  {tag:'Edge state · Damage forces Recycle',desc:'When the weighted score exceeds 2.5, Reuse and Refurbish lock out and only Recycle prices.',screens:[
+    {id:'damage-recycle',label:'Screen 06 · edge',title:'Damage rubric — forced Recycle',cap:'Score 2.85 — pathway lock surfaced before the engine even runs.',anno:'Continues straight to Recycle-only pricing'},
+  ]},
+  {tag:'B05 · Compute & Present the Quote',desc:'The engine runs all six layers, then the result screens render the output object 1:1 — Verdict, Breakdown, Why.',screens:[
+    {id:'computing',label:'Screen 07',title:'Computing',cap:'~1.5s layer-stepping loader; POST /api/quote runs in background.',anno:'Layers 0–3 done · Layer 4 running'},
+    {id:'result-verdict',label:'Screen 08',title:'Result — Verdict',cap:'Pathway hero, net value, P_min/P_rec/P_max band. Offer labelled estimated.',anno:'<b>Present offer</b> → Confirm pickup'},
+    {id:'result-breakdown',label:'Screen 09',title:'Result — Breakdown',cap:'Revenue lines + every cost line + net + margin %. Full economics, agent-only.',anno:'Mirrors the vendor app\u2019s suppression — inverted'},
+    {id:'result-why',label:'Screen 10',title:'Result — Why',cap:'Rationale, alternative pathways, sensitivity, audit footer, AI explain button.',anno:'<b>Why this price?</b> → POST /api/explain'},
+  ]},
+  {tag:'Edge states · HOLD & REVIEW',desc:'Sanity flags from Layer 5: no profitable pathway (HOLD) or below hurdle rate (REVIEW).',screens:[
+    {id:'result-hold',label:'Screen 08 · edge',title:'Result — HOLD',cap:'Every pathway net-negative. Offer blocked; agent escalates to admin.',anno:'No <b>Present offer</b> path available'},
+    {id:'result-review',label:'Screen 08 · edge',title:'Result — REVIEW',cap:'Clears the floor but below hurdle — requires admin confirmation before presenting.',anno:'<b>Present anyway</b> → Confirm pickup'},
+  ]},
+  {tag:'B06 · Collect & Hand Off',desc:'Signature, proof photos, drop-off scheduling, and the collection payout — the battery moves into the agent\u2019s custody, pending hub drop-off.',screens:[
+    {id:'pickup',label:'Screen 11',title:'Confirm pickup',cap:'Battery + sealed-packaging photos, drop-off datetime, contact confirm, payout, signature pad.',anno:'<b>Confirm collection</b> → status → <b>collected</b> · payout added to wallet'},
+    {id:'pickup-declined',label:'Screen 11 · edge',title:'Vendor declines',cap:'Branch state: vendor rejects the offer on-site — request closes, nothing is collected.',anno:'<b>Re-open quote</b> → Verdict'},
+    {id:'receipt',label:'Screen 12',title:'Receipt',cap:'Success state — pickup ID, receipt, wallet credit, share action.',anno:'<b>Go to hub drop-off</b> → Bulk drop-off select'},
+  ]},
+  {tag:'Bulk Drop-off at Hub',desc:'Collected batteries stay in the agent\u2019s custody until dropped off at the aggregation/segregation hub in one batch, with a digital chain-of-custody receipt.',screens:[
+    {id:'dropoff-select',label:'Screen 12b',title:'Select batch',cap:'Checklist of every battery currently in custody, with running item count and weight.',anno:'<b>Continue</b> → Confirm hand-off'},
+    {id:'dropoff-confirm',label:'Screen 12c',title:'Confirm hand-off',cap:'Hub selection, batch summary, receiving staff, GPS + timestamp capture, staff signature.',anno:'<b>Confirm hand-off</b> → Chain-of-custody receipt'},
+    {id:'dropoff-receipt',label:'Screen 12d',title:'Chain-of-custody receipt',cap:'Success state — batch ID, item count, weight, hub, GPS + timestamp.',anno:'<b>Back to home</b> · admin takes over from here'},
+  ]},
+  {tag:'Track, History & Profile',desc:'Everything after hub drop-off is admin-driven — the agent only watches, via a live lifecycle timeline shared with the vendor portal.',screens:[
+    {id:'pickups',label:'Screen 13',title:'Tracking list',cap:'Active pickups grouped by status, with ETA hints and a bulk drop-off shortcut.',anno:'Rows → Lifecycle timeline · banner → Bulk drop-off'},
+    {id:'pickups-detail',label:'Screen 14',title:'Lifecycle timeline',cap:'Collected → Transit → Warehouse → Refurb/Recycle → QA → done. Live via Realtime.',anno:'Admin-only stages beyond collected — watch only'},
+    {id:'map',label:'Screen 15',title:'Map',cap:'Pickup + current battery location (Leaflet + OSM).',anno:'Shared BatteryMap component'},
+    {id:'history',label:'Screen 16',title:'History',cap:'Completed pickups — searchable, filterable by pathway.',anno:'Columns: type, pathway, price, date, status'},
+    {id:'profile',label:'Screen 17',title:'Profile',cap:'Wallet balance, earnings history, agent stats, offline-queue indicator, sign out.',anno:'<b>Cash out</b> · earnings feed from payouts + batch drop-offs'},
+  ]},
+];
+
+/* journey + legend */
+const JSTEPS=[['B01','Login'],['B02','Accept & navigate'],['B03','Identify'],['B04','Intake & damage'],['B05','Compute quote'],['B06','Collect & hub drop-off'],['B07','Wallet & history']];
+document.getElementById('journey').innerHTML = JSTEPS.map((s,i)=>`<div class="step"><span class="n">${s[0]}</span>${s[1]}</div>${i<JSTEPS.length-1?'<span class="arrow">→</span>':''}`).join('');
+const LEG=[['Draft','#52564F'],['Scheduled','#0E6CA8'],['Quoted','#0E6CA8'],['Collected','#1F231F'],['Pending drop-off','#6B3FB8'],['Tested/Processed','#8A5A06'],['Recovered','#3F6E26'],['Certified','#4F6B16'],['Hold/Review','#9A3412']];
+document.getElementById('legend').innerHTML = '<span class="lg" style="color:var(--ink-2)">Status model:</span>'+LEG.map(l=>`<span class="lg"><span class="dot" style="background:${l[1]}"></span>${l[0]}</span>`).join('<span class="lg" style="color:var(--ink-5)">→</span>');
+
+/* build a phone node from a screen id */
+function phoneNode(id,big){
+  const p=document.createElement('div');
+  p.className='phone'+(big?' big':'');
+  p.innerHTML=`<div class="notch"></div><div class="phone-screen"><div class="statusbar"><span>9:41</span><span class="r">5G ▮▮▮ 100%</span></div><div class="app">${S[id]}</div></div>`;
+  return p;
+}
+
+/* render gallery */
+const gal=document.getElementById('gallery');
+GROUPS.forEach(g=>{
+  const tagEl=document.createElement('div');tagEl.className='section-tag';tagEl.innerHTML=`<span class="d"></span>${g.tag}`;gal.appendChild(tagEl);
+  const desc=document.createElement('div');desc.className='section-desc';desc.textContent=g.desc;gal.appendChild(desc);
+  const grid=document.createElement('div');grid.className='grid';
+  g.screens.forEach(sc=>{
+    const isEdge = /edge/i.test(sc.label) || /Edge/.test(g.tag);
+    const cell=document.createElement('div');cell.className='cell'+(isEdge?' edge':'');
+    cell.innerHTML=`<div class="clabel">${sc.label}</div><div class="ctitle serif">${sc.title}</div><div class="ccap">${sc.cap}</div>`;
+    cell.appendChild(phoneNode(sc.id,false));
+    const a=document.createElement('div');a.className='anno';a.innerHTML=sc.anno;cell.appendChild(a);
+    grid.appendChild(cell);
+  });
+  gal.appendChild(grid);
+});
+
+/* ============ INTERACTIVE PROTOTYPE ============ */
+const stage=document.getElementById('proto-stage');
+function show(id){ if(!S[id])return; stage.innerHTML=S[id]; stage.scrollTop=0; }
+show('login');
+
+/* delegated navigation + toggles */
+document.addEventListener('click',e=>{
+  const tg=e.target.closest('[data-toggle]');
+  if(tg){ tg.closest('.toggle').classList.toggle('open'); return; }
+  const so=e.target.closest('.so');
+  if(so && stage.contains(so)){ so.parentElement.querySelectorAll('.so').forEach(x=>x.classList.remove('sel')); so.classList.add('sel'); return; }
+  const sn=e.target.closest('.sn');
+  if(sn && stage.contains(sn)){ const dest=sn.getAttribute('data-go'); if(dest) show(dest); return; }
+  const go=e.target.closest('[data-go]');
+  if(!go)return;
+  const dest=go.getAttribute('data-go');
+  if(stage.contains(go)){ show(dest); }
+  else {
+    show(dest);
+    document.getElementById('proto').scrollIntoView({behavior:'smooth',block:'center'});
+  }
+});
+</script>
+</body>
+</html>
