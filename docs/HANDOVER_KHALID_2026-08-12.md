@@ -1,75 +1,66 @@
 # Handover to Khalid — deploy + outstanding work
 
-**From:** Aamir · **Written:** 2026-08-12 · **Updated:** 2026-08-14
-**State:** everything is merged to `main` and builds green. Nothing is blocked.
+**From:** Aamir · **Written:** 2026-08-12 · **Updated:** 2026-08-15
+**State: the deploy is LIVE and verified.** https://clbipp-customer.vercel.app —
+smoke 44/44, role gate 44/44. **One item left, and it's yours: Google sign-in
+(§3.3 + §3.4).** Everything else in this document is now reference.
 
 **This is the only document you need** — self-contained, follow it top to bottom.
 (`docs/DEPLOY.md` is the longer reference behind §3; you shouldn't need it.)
 
 ---
 
-## 0. The deploy is yours. Read this before anything else.
+## 0. Where things stand. Read this before anything else.
 
-**Decision taken 2026-08-14: your Vercel project is the only one.** Aamir had a
-second project (`clbipp`) that he deployed to manually from his laptop. He has
-**unlinked it and is deleting it.** Don't recreate that setup — one project,
-yours, GitHub-synced, auto-deploying on every merge to `main`. That's the whole
-reason this moved to you: you own the repo, so only you can authorise the Vercel
-GitHub App on it.
+**Your Vercel project is the only one** (decision 2026-08-14). Aamir's second
+project was unlinked and deleted. One project, yours, GitHub-synced,
+auto-deploying on every merge to `main`. Don't recreate the old setup.
 
-**Those failed-deployment emails are your project.** The GitHub↔Vercel sync is
-already working — the emails prove it. **The builds are failing on
-configuration**, and every push to `main` sends you another one until it's fixed.
+**The deploy is done.** §3.1 (build settings) and §3.2 (env vars) are correct and
+the site is live — no more failed-deployment emails. The rest of §3 is kept as
+the record of *why* each setting is what it is, not as work to do.
 
-**So this is not "set up a deploy". It is "fix four settings and paste five env
-vars on a project that already exists."** Realistically 15 minutes.
+**What's left for you: §3.3 (Google Cloud OAuth) + §3.4 (Supabase provider and
+redirect URLs).** One sitting, unhurried, nothing blocking it.
 
-**Aamir has already sent you the env values.** You are not waiting on him for
-anything.
-
-> ## ✅ DONE 2026-08-15 — the deploy is live. §1–§3 below are historical.
+> **How the deploy got fixed, 2026-08-15 — worth 60 seconds of your time.**
+> Three bugs, and **all three built green**: the Prisma engine path (code, PR
+> #20), then `DATABASE_URL`, then `SUPABASE_SERVICE_ROLE_KEY` — the last two both
+> the §2 whitespace trap. Each one masked the next, so every fix looked like it
+> had failed until the error was re-read.
 >
-> **https://clbipp-customer.vercel.app** is up and fully verified against
-> production: `npm run smoke` **44/44**, and `--blocked` **44/44** for both
-> `agent@test` and `admin@test`. Nothing in §3 needs doing again — build
-> settings, env vars, and the database are all correct. Read §3 only if you're
-> reconstructing why something is set the way it is.
->
-> Getting here took three fixes, all of which **built green**: the Prisma engine
-> path (code — PR #20), then `DATABASE_URL`, then `SUPABASE_SERVICE_ROLE_KEY`
-> (both env-var paste errors — the §2 whitespace trap, twice). Each masked the
-> next.
->
-> **What's left is §3.3 + §3.4 (Google sign-in), which are still optional** —
-> Google fails soft with readable copy pointing at password and OTP login, both
-> of which work in production today.
->
-> After any deploy or env-var change, re-verify with:
-> `SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke`
-> Full trail: `REVAMP_BATCHES_2026-08-09.md` → "Batch 12 — where the deploy
+> The takeaway for anything you touch from here: **a green build says nothing
+> about production.** Verify with the §4 smoke suite against the live URL.
+> Full trail in `REVAMP_BATCHES_2026-08-09.md` → "Batch 12 — where the deploy
 > actually stands".
 
-### The fast path to a URL — do only this first
+### What's left — the whole job, in order
 
-1. §3.1 — fix the four build settings. **The build command is the one that
-   matters.**
-2. §3.2 — paste the five env vars Aamir sent.
-3. Redeploy. **You now have a working URL.**
+1. **§3.3** — Google Cloud: consent screen, then an OAuth client ID. The
+   redirect URI is **Supabase's**, not the app's — the most-mistyped value here.
+2. **§3.4** — Supabase: enable the Google provider with those credentials, then
+   register the redirect URLs. **Same sitting as step 1.**
+3. Test the round trip by hand: a fresh Google account must land on
+   **`/onboarding`**, not `/dashboard` and not `/login`.
 
-**Stop there and send Aamir the URL.** Password login (`business@test` /
-`businesstest`) works immediately with no further config — that's enough to prove
-the deploy and enough to demo.
+**Not urgent.** Google sign-in currently fails soft with readable copy pointing
+users at password and OTP login, both of which work in production. Nothing is
+blocked on this — the demo runs today on `business@test` / `businesstest`.
 
-§3.3 (Google Cloud) and §3.4 (Supabase) are **not required for a working URL**.
-Google sign-in fails soft with readable copy pointing users at password and OTP
-login, both of which work. Do them after, unhurried.
+The app needs **no env var** for OAuth; it reads the origin from request headers,
+so localhost, production and previews all work off the same code.
 
-| Task | Owner |
-|---|---|
-| **Vercel build settings + env vars** (§3.1–3.2) | **you** |
-| Google Cloud OAuth (§3.3) | **you** — after the URL exists |
-| Supabase provider + redirect URLs (§3.4) | **whoever owns the Supabase project** — one pass, don't split it |
-| Verification (§4) | **you** |
+| Task | Owner | Status |
+|---|---|---|
+| **Vercel build settings + env vars** (§3.1–3.2) | you | ✅ **done** 2026-08-15 |
+| **Verification** (§4) | Aamir | ✅ **done** — 44/44 + role gate 44/44 against production |
+| **Google Cloud OAuth** (§3.3) | **you** | ⬜ **next, and it's the only thing on your plate** |
+| **Supabase provider + redirect URLs** (§3.4) | **you** | ⬜ same pass as §3.3 — don't split it |
+
+**Everything else in this document is reference.** §3.3 + §3.4 are the whole
+remaining job. They're one sitting, and §3.4 has a trap worth reading twice: the
+redirect-URL list is **per-origin**, and a missing entry is why a login lands on
+the wrong site.
 
 > **The merge conflict is done.** PRs #17 and #18 resolved it on 2026-08-14 —
 > record in §7. Nothing for you to do. Rule going forward: **conflicts about
@@ -147,12 +138,22 @@ explaining what it is:
 You'll also want **Supabase dashboard access** for project
 **`xlssgnnrtautldouirkt`** — needed for §3.4, not for the URL.
 
-> ⚠ **Three of the values are written `KEY = value`, with spaces around the
-> `=`.** dotenv trims them so they work locally. **Vercel's UI does not** — a
-> trailing space in the *name* field silently creates a variable nothing reads,
-> and the app boots with an undefined Supabase URL and no useful error. Paste
-> name and value separately and check both for stray whitespace. **If the deploy
-> builds but the site 500s, look here first.**
+> ⚠ **This trap bit twice on 2026-08-15 — it is the single most expensive thing
+> in this document.** Three of the values are written `KEY = value`, with spaces
+> around the `=`. dotenv trims them so they work locally; **Vercel's UI does
+> not.** Both `DATABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` landed with a
+> leading space and had to be deleted and re-added.
+>
+> How each one failed — note that **neither produced a build error**:
+> - `DATABASE_URL` → `the URL must start with the protocol postgresql://`, and
+>   every database-backed screen 500s.
+> - `SUPABASE_SERVICE_ROLE_KEY` → **no error at all.** Storage signing fails,
+>   `createSignedUrls` logs and drops the URLs, and pages return 200 with images
+>   silently missing.
+>
+> Paste name and value separately, and check that the value's **first character
+> is the real one** (no space, no quote, no `KEY=` prefix). **If a deploy builds
+> green but the site misbehaves, look here first.**
 
 🔴 `SUPABASE_SERVICE_ROLE_KEY` **bypasses RLS entirely.** Never prefix it with
 `NEXT_PUBLIC_`, never use it client-side, never paste it into a chat or a PR.
@@ -161,7 +162,11 @@ You'll also want **Supabase dashboard access** for project
 
 ## 3. Deploy
 
-### 3.1 Vercel build settings — this is what's failing
+### 3.1 Vercel build settings — ✅ DONE, kept as the record
+
+> Already correct in your project. Don't change these. The table below is what
+> they should be, and the ranked list under it is why — useful only if something
+> regresses.
 
 **First, read the actual error.** Don't guess: **your** Vercel dashboard →
 your project → **Deployments** → newest failed one → **Build Logs**. The last
@@ -207,9 +212,12 @@ retrigger a build on their own), and uncheck "use existing build cache".
 pooler is in `aws-1-ap-southeast-2` (Sydney). If your plan rejects the region,
 delete the key rather than fighting it. It's latency, not correctness.
 
-### 3.2 Environment variables
+### 3.2 Environment variables — ✅ DONE, kept as the record
 
-Set all five for **Production, Preview and Development**:
+> All five are set and correct. Two of them had to be re-pasted (see the
+> whitespace box in §2). Change nothing here unless a key is rotated.
+
+All five, for **Production, Preview and Development**:
 
 | Variable | Notes |
 |---|---|
@@ -222,11 +230,14 @@ Set all five for **Production, Preview and Development**:
 **Leave `PAYMENTS_MODE` unset.** Absent → `simulated`, and an unrecognised value
 also falls back to simulated, so a typo can never mean "settle real money".
 
-### 3.3 Google Cloud — OAuth credentials
+### 3.3 Google Cloud — OAuth credentials ⬅ **YOUR REMAINING WORK STARTS HERE**
 
 Google sign-in is built and merged but **enabled nowhere, including localhost**.
 Until §3.3 + §3.4 are done the button fails soft with readable copy pointing at
 password and OTP login, both of which work. That's deliberate, not a bug.
+
+**Do §3.3 and §3.4 in one sitting** — §3.4 registers the redirect URLs that §3.3's
+credentials depend on, and half-doing the pair is the main way this goes wrong.
 
 1. **APIs & Services → OAuth consent screen** → *External*. App name, support
    email, developer email. Leave it in **Testing** and add your own Google
@@ -290,14 +301,25 @@ you shouldn't need to touch them.
 
 ## 4. Verify against the live URL
 
+✅ **Passed 2026-08-15** — 44/44, and 44/44 `--blocked` for both `agent@test` and
+`admin@test`. Re-run after any deploy or env-var change (Aamir usually runs it):
+
 ```bash
-SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke
-SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke -- agent@test demo1234 --blocked
+SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke
+SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke -- agent@test demo1234 --blocked
 ```
 
 44/44 both times — same assertions, no code change. **The second one is the role
 gate.** If any app route lets `agent@test` through, stop and fix that before
 anything else.
+
+⚠ **Use the `clbipp-customer.vercel.app` alias, not a per-deployment
+`clbipp-customer-<hash>-…` URL.** Those sit behind Vercel Deployment Protection
+and 302 everyone outside your team to a Vercel login — that looks exactly like
+the app being broken, and it isn't.
+
+⚠ **A green build proves nothing about production.** All three deploy bugs on
+2026-08-15 built green; this suite is what caught every one of them.
 
 Then click the Google path once by hand: sign in with a fresh Google account →
 must land on `/onboarding`. If it works locally but bounces to `/login` on the
@@ -326,7 +348,7 @@ Ranked. **Verify before acting** — a few are several batches old.
 | # | Item | Notes |
 |---|---|---|
 | 1 | **Decide the `successText` colour** | Your commit `21cd3bd` bundled `#15803D` → `#0cb349` in with the middleware rename. It auto-merged with no conflict, so it's **live on `main` now**. Contrast on white drops **5.02:1 → 2.78:1**; WCAG AA needs 4.5:1. It's on success banners, status badges and wallet credit amounts, and the comment above the line says *"darker for WCAG contrast"*. Your call — if it was deliberate it needs a different approach than swapping the text shade; if not, it's a one-line revert in `packages/ui/src/tokens.ts:37` |
-| 2 | **Batch 13 — the full-app scan** | Never done, and it's yours. Every batch verified *itself*; nothing has looked across the seams for cross-batch drift or dead ends. Cheapest high-value slice: **`/code-review high`** over the diff (or `/code-review ultra` — it's large) |
+| 2 | **Batch 13 — the full-app scan** | **Not yours — Aamir is deciding whether to run it himself.** Listed here for visibility only; don't pick it up. Every batch verified *itself*, so nothing has looked across the seams for cross-batch drift |
 | 3 | **A real manual pass on a handset** | The one thing no script covers. List in `REVAMP_BATCHES_2026-08-09.md` → "Manual checks owed": Google round trip, an OTP code from a real inbox, GPS over LAN http, how a PDF opens on a phone, phone-width layout on payment/history/invoice/profile, the `cancelled` state against real data |
 | 4 | **Fleet vs individual** | A decision, not a sprint — §8 |
 
