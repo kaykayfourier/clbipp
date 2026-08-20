@@ -1,6 +1,15 @@
 # Customer-app revamp — batch tracker (started 2026-08-09)
 
-> **This is the resume point.** Read `PLAN_V2_CUSTOMER_APP.md` for the *why* and
+> **⚠ No longer the resume point (2026-08-20).** The revamp is merged to `main`
+> and the current sprint is the **Field Agent app** — resume from
+> `docs/PROJECT_STATE.md` → "▶ READ FIRST", then `docs/FIELD_AGENT_TASKS.md`.
+>
+> This file stays live for three things: **Batch 12 (deploy)**, which is
+> Khalid's and in flight; **Batch 13 (full-app scan)**, still open and now
+> deferred until all three apps exist; and the **consolidated outstanding list**
+> plus the demo accounts, passwords and commands, which are still the reference.
+
+> **Historical framing below.** Read `PLAN_V2_CUSTOMER_APP.md` for the *why* and
 > the decisions (D1–D7); read this file for *where we are* and what to do next.
 > Update the status column at the end of every batch.
 

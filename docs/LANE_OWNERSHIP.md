@@ -31,6 +31,33 @@ reality doesn't match the original split — not free-for-all editing.
 
 ## Change log
 
+### 2026-08-20 — Customer-app revamp override LAPSES; ownership reverts (Field Agent app)
+
+- **What changed:** the 2026-08-09 entry below handed B's entire lane to A
+  because B was unavailable for the customer-app revamp. That revamp is merged
+  and the cover is **spent**. All three of us are available for the Field Agent
+  app, so **ownership reverts to the `CLAUDE.md` map** for this sprint.
+- **Who owns what now** (batch numbers from `PLAN_FIELD_AGENT_APP.md` §4):
+  - **A (Aamir)** — auth + role gate, app scaffold, nav shell, job detail,
+    safety checklist, tracking + realtime, history, profile, and the cross-app
+    seam. Batches 0b, 1, 2, 5b, 8.
+  - **B (Khalid)** — schema + migration + seed, the decision engine and all pure
+    pricing logic, the PDF template, and deploy. Batches 0a, 4, 7b, 9.
+  - **C (Ali)** — the on-site flow: intake → assessment → quote → collect → hub
+    drop-off. Batches 3, 5a, 6, 7a.
+- **No lane shift was needed and none is being logged as one.** The agent app
+  decomposes along the same three seams the vendor app did — it is the same
+  architecture seen from the other side — so the standing map already fits.
+- **One thing to watch:** Batch 5b has A editing the *customer* app
+  (`handover/actions.ts`), which is normally C's flow area. That is A's
+  cross-app-seam ownership, which A has held since the 2026-07-10 entry below —
+  not a new shift.
+- **If C is unavailable again**, A absorbs 3/5a/6/7a and the cut list in §5 of
+  the plan stops being a contingency and becomes the plan. Flag it early; don't
+  absorb it silently.
+
+---
+
 ### 2026-08-09 — Lifecycle enum change (Batch 7A) executed by A under the revamp cover
 
 - **Whose lane it is normally:** B's. `packages/database/prisma/schema.prisma`
