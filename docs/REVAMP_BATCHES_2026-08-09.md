@@ -24,23 +24,28 @@ at the end. Aamir commits manually; Claude never runs `git commit`.
 
 ## Status
 
-| # | Batch | Owner (orig.) | Status |
-|---|---|---|---|
-| 1 | **0A — Turborepo migration** | A | ✅ done, committed `a5c15e2` |
-| 2 | **0B — schema v2 + buckets + seed + RLS** | B | ✅ done, staged |
-| 3 | **B2 — pricing engine + `createPickupWithItems`** | B | ✅ done, committed `ac07895` |
-| 4 | A2/A3 — address book + storage upload helper | A | ✅ done, committed `73bc512` |
-| 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | ✅ done, committed `a8684fa` |
-| 6 | **A1 — email OTP + `/verify` + roles** | A | ✅ done, staged |
-| 6.5 | **Demo-blocking fixes from the first manual pass** | A | ✅ done, committed `0b58956` |
-| 7A | **Lifecycle: add `arrived` + `offered` stages** | A/B | ✅ done, staged |
-| 7B | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | ✅ done, staged |
-| 8 | B3/B6 — PDF generation + payment + receipt screens | B | ✅ done, staged |
-| 9 | **B4/B5 — dashboard impact (CO₂) + compliance CSV** | B | ✅ done, staged |
-| 10 | P2 screens (invoices, history, profile, `/t` parity) + **deploy prep** | A | ✅ done, staged |
-| 11 | **Google sign-in + `/onboarding`** (Apple dropped — see below) | A | ✅ done, committed `de602fa` |
-| 12 | **Deploy** — deferred out of 10 on purpose, see `docs/DEPLOY.md` | A | 🔨 code half **done**; dashboard half (Google + Vercel) is yours to click |
-| 13 | **Full-app scan** — the whole revamp reviewed end to end (brief below) | A | pending, after 12 |
+| # | Batch | Owner (orig.) | Executed by | Status |
+|---|---|---|---|---|
+| 1 | **0A — Turborepo migration** | A | Aamir | ✅ done, committed `a5c15e2` |
+| 2 | **0B — schema v2 + buckets + seed + RLS** | B | **Aamir** (covering B) | ✅ done, staged |
+| 3 | **B2 — pricing engine + `createPickupWithItems`** | B | **Aamir** (covering B) | ✅ done, committed `ac07895` |
+| 4 | A2/A3 — address book + storage upload helper | A | Aamir | ✅ done, committed `73bc512` |
+| 5 | **A4 — 4-step booking wizard** (the centrepiece) | A | Aamir | ✅ done, committed `a8684fa` |
+| 6 | **A1 — email OTP + `/verify` + roles** | A | Aamir | ✅ done, staged |
+| 6.5 | **Demo-blocking fixes from the first manual pass** | A | Aamir | ✅ done, committed `0b58956` |
+| 7A | **Lifecycle: add `arrived` + `offered` stages** | A/B | **Aamir** (both halves) | ✅ done, staged |
+| 7B | A5/B7 — tracking upgrade (partner, custody log) + copy fix | A/B | **Aamir** (both halves) | ✅ done, staged |
+| 8 | B3/B6 — PDF generation + payment + receipt screens | B | **Aamir** (covering B) | ✅ done, staged |
+| 9 | **B4/B5 — dashboard impact (CO₂) + compliance CSV** | B | **Aamir** (covering B) | ✅ done, staged |
+| 10 | P2 screens (invoices, history, profile, `/t` parity) + **deploy prep** | A | Aamir | ✅ done, staged |
+| 11 | **Google sign-in + `/onboarding`** (Apple dropped — see below) | A | Aamir | ✅ done, committed `de602fa` |
+| 12 | **Deploy** — deferred out of 10 on purpose, see `docs/DEPLOY.md` | A | Aamir (code half, 08-10) + **Khalid** (Vercel/Google half, 08-15) | ✅ done — see "Batch 12 is DONE" below |
+| 13 | **Full-app scan** — the whole revamp reviewed end to end (brief below) | A | — (not started; **now Khalid's**) | pending, deferred until all three apps exist |
+
+> **Reading the two owner columns:** *Owner (orig.)* is the lane the batch was
+> planned into — `A` = Aamir, `B` = Khalid — and it is **not** a record of who
+> did the work. *Executed by* is. Aamir ran both lanes for batches 1–11 (see the
+> context note above); only Batch 12's deploy half was Khalid's in practice.
 
 > **🔀 HANDOFF POINT (2026-08-10).** Batch 11 was the last *build* batch. Every
 > feature batch of the revamp is done and staged on `feat/customer-v2`. What
