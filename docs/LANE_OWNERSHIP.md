@@ -7,29 +7,80 @@
 
 ---
 
-## Policy: strict by default, flexible by agreement
+## Policy: do it and note it (since 2026-08-20)
 
-Lanes exist so we don't scatter edits across each other's work and trip over
-half-built foundations. The default rule stands: **work inside your lane; don't
-edit another lane's area just because it's faster.**
+> **This replaces the previous "strict by default, flexible by agreement"
+> policy.** The old three-step flag → agree → log was costing more in waiting
+> than it saved in tidiness, on a three-person build with one week left. The old
+> text is preserved at the bottom of this file for the record; entries logged
+> under it stand.
 
-But the lane map was drawn up front and won't be perfectly carved. When a task
-genuinely straddles two lanes, or sits more naturally with a different owner:
+Lanes are now a **default assignment, not a gate.**
 
-1. **Flag it** — raise it (standup / group chat) before building across the
-   line. Don't silently absorb it, and don't silently skip it either.
-2. **Get the other owner's OK** — whoever loses or gains scope agrees first.
-3. **Log it here** — add an entry to the change log below, and update the
-   ownership map in `CLAUDE.md` + `PROJECT_STATE.md` so the canonical map stays
-   true.
+- **If a task straddles lanes, or its owner isn't ready, do it.** Don't wait for
+  agreement first. Blocking on someone else's lane is the expensive failure mode
+  this sprint, not stepping on their toes.
+- **Then log it here** — one entry saying what you took on and why. The log is
+  the point; the permission step is what's gone. Update the ownership map in
+  `CLAUDE.md` and `PROJECT_STATE.md` if the change outlives one batch.
+- **Attribute by who actually did the work,** not by whose lane it nominally
+  was. A handover doc that credits the wrong person is worse than no doc.
 
-What this is *not*: a licence to drift. **Phase sequencing is still fixed**, and
-"flag it" is a real step, not a formality to skip. The goal is a clean seam when
-reality doesn't match the original split — not free-for-all editing.
+Still true:
+
+- **Phase sequencing is fixed.** Lanes moved; the order of phases did not.
+- **Don't silently reassign.** Doing the work without saying so is the one thing
+  that still breaks the record. Writing it down takes a minute.
+- **Prefer building the real thing over stubbing it.** The stub-data pattern in
+  `CLAUDE.md` is now for dependencies you genuinely *can't* build (a decision you
+  don't own, credentials you don't have) — not for ones that are merely someone
+  else's.
 
 ---
 
 ## Change log
+
+### 2026-08-20 — Batch 0a (schema + seed): B → A
+
+- **Whose lane it is normally:** B's (Khalid). `packages/database/prisma/schema.prisma`,
+  its migrations, and `reset-demo.ts`.
+- **What A is taking on:** the whole of Batch 0a — the §3 schema delta from
+  `PLAN_FIELD_AGENT_APP.md`, the single `agent_app_v1` migration, and the
+  `reset-demo.ts` extension (agent-assigned pickups at five stages, mixed-category
+  `BatteryItem` rows, one `MarketPrices` row, one `Facility` row).
+- **Why:** it blocks **everything**. A's Batches 1 and 2 cannot read data without
+  it, and C's Batch 3 needs the seeded multi-item pickups. Under the new
+  do-it-and-note-it policy, waiting is the wrong call with a week on the clock.
+- **Not yet started as of this entry** — logged here in advance so the record is
+  straight before the work begins. Attribute it to **A**.
+- **Khalid should know:** don't also build 0a. His lane this sprint is now
+  **Batch 4 (engine + pricing), Batch 7b (custody PDF), Batch 9 (deploy)** — and
+  the agent app's Vercel project, see `DEPLOY.md` §5.
+
+### 2026-08-20 — Policy change: lanes stop being a gate
+
+- **What changed:** the flag → agree → log sequence is replaced by do-it-and-note-it.
+  See the Policy section above. Decided by Aamir (repo owner) on time-pressure
+  grounds, not because the old policy was wrong in principle.
+- **Also changed the same day:** git workflow is now **direct commits to `main`**,
+  no branches and no PRs. Recorded in `CLAUDE.md` → Conventions.
+- **Consequence worth stating:** both Vercel projects deploy off `main`, so a
+  push is a deploy. Run `npm run build` and the relevant `npm run smoke` before
+  pushing.
+
+### 2026-08-20 — Batch 0b (agent scaffold + auth gate) — A, in lane
+
+- Not a shift; noted because two decisions inside it touched the lane question.
+- **`AgentTabBar` was built local to `apps/agent`** rather than parameterising
+  `BottomTabBar` in `packages/ui` (C's lane), *under the old policy*. **Under the
+  policy adopted the same day that call would go the other way** — fold both into
+  one `tabs`-prop component in `packages/ui` directly. Left as-is for now because
+  it works and C's Batch 3 is live in that directory; revisit post-sprint.
+- **`packages/auth/src/middleware.ts` gained a comment** (no behaviour change)
+  documenting that `getUser()` fails closed on a network error. That file is A's
+  lane already.
+- **`scripts/smoke.mjs` gained `--app=agent`** and its customer summary total was
+  corrected from 44 to 45 (it never counted `OFFER_SURVIVED_GET`). Same probes.
 
 ### 2026-08-20 — Customer-app revamp override LAPSES; ownership reverts (Field Agent app)
 
@@ -159,3 +210,17 @@ reality doesn't match the original split — not free-for-all editing.
   Supabase Storage) as a *post-signup* onboarding step. Fleet accounts sign up
   first, then complete KYC.
 - **Agreed by:** B. Flagged + recorded per the policy above.
+
+---
+
+## Superseded policy (2026-06-27 → 2026-08-20) — kept for the record
+
+Entries logged above under dates before 2026-08-20 were made under this rule,
+and stand as written.
+
+> **Strict by default, flexible by agreement.** Work inside your lane; don't
+> edit another lane's area just because it's faster. When a task genuinely
+> straddles two lanes: (1) flag it before building across the line, (2) get the
+> other owner's OK, (3) log it here and update the ownership map.
+>
+> Replaced on 2026-08-20 because step 2 was producing waiting, not quality.

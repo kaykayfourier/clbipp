@@ -166,12 +166,14 @@ merged branch. It predates the monorepo and schema v2 — don't build on it.
 
 ## How to treat the plan in PROJECT_STATE.md
 
-- **Phase sequencing is fixed; lane ownership is strict-by-default but
-  shiftable.** The order of phases was decided for reasons outside the codebase
-  (team coordination) — don't reorder it. Lane ownership holds by default, but
-  when a task genuinely straddles lanes it can move by agreement: flag it, get
-  the other owner's OK, and log it in `docs/LANE_OWNERSHIP.md`. Don't silently
-  reassign work, and don't silently absorb another lane's task either.
+- **Phase sequencing is fixed; lane ownership no longer blocks anyone**
+  (changed 2026-08-20). The order of phases was decided for reasons outside the
+  codebase (team coordination) — don't reorder it. But lanes are now a default
+  assignment, not a gate: **if a task straddles lanes or its owner isn't ready,
+  do it and note who actually did it** in `docs/LANE_OWNERSHIP.md`. No waiting
+  for agreement first. The one-week deadline outranks tidy ownership. Still
+  write down what you did and why — silent reassignment is the thing to avoid,
+  not reassignment.
 - **Specific technical implementation choices are defaults, not mandates.** If
   you see a better technical approach for *how* to build a given task — more
   correct, more secure, more maintainable — say so explicitly with your
@@ -190,18 +192,22 @@ Ownership is back to the standing map.
 |------|-------|
 | **A — Aamir.** Supabase Auth, session/route protection, RLS policies, the app scaffold + auth gate, nav shell, job detail, the safety checklist, realtime + tracking screens, history, profile, PWA + offline, **and the cross-app seam** | A |
 | **B — Khalid.** Prisma schema + migrations + seed, the decision engine and all pure pricing logic in `packages/core`, PDF templates, **and deployment/CI** | B |
+| ↳ **Batch 0a (schema + seed) moved to A on 2026-08-20** — it blocks A's Batches 1 and 2 and every other lane, so it was taken over rather than waited on. Logged in `docs/LANE_OWNERSHIP.md`. | A |
 | **C — Ali.** Component library, and the full on-site flow: intake → assessment → quote → collect → hub drop-off | C |
 
 The agent app decomposes along the same three seams the vendor app did — it's
 the same architecture from the other side — so no lane shift was needed.
 Batch-by-batch ownership is in §4 of `docs/PLAN_FIELD_AGENT_APP.md`.
 
-**Do not edit another lane's area, even if faster** — unless ownership has been
-shifted by agreement and logged in `docs/LANE_OWNERSHIP.md` (lanes are
-strict-by-default but can move when a task straddles them: flag → agree → log).
-If you need something from a lane that isn't finished yet, stub it against the
-agreed shape and leave `// TODO: replace with <thing> once <owner> ships it`.
-See "Stub-data pattern" below.
+**Editing another lane's area is fine when it unblocks you** (changed
+2026-08-20) — do the work, then log what you took on in `docs/LANE_OWNERSHIP.md`
+so the record is honest. Don't sit blocked waiting for an owner.
+
+Prefer the stub-data pattern only when the dependency is genuinely *unbuildable*
+by you (it needs a decision you don't own, or credentials you don't have) —
+otherwise just build the real thing. When you do stub, match the locked contract
+and leave `// TODO: replace with <thing> once <owner> ships it`. See
+"Stub-data pattern" below.
 
 ## Commands
 
@@ -276,7 +282,7 @@ keeps every lane moving in parallel without anyone touching another's files.
 - `docs/PROJECT_STATE.md` — historical status. Its top section is current; most
   of the detail below that predates the monorepo migration and schema v2.
 - `docs/CONTEXT.md` — decisions made and why, conventions, deferred items.
-- `docs/LANE_OWNERSHIP.md` — lane-shift policy (strict-by-default, flexible-with-flagging) + the log of ownership changes.
+- `docs/LANE_OWNERSHIP.md` — lane policy (**do-it-and-note-it since 2026-08-20**) + the log of who actually did what.
 - `docs/markdown-preview.pdf` — **the company's flow document** (sent by HR after
   they reviewed our first draft). The company's intended flow for the app. It is
   an image-only PDF — render the pages to read it, there is no text layer.
@@ -354,14 +360,17 @@ explicitly asked to.
   their answer is a value change in that one file. `packages/database` restates
   the table (it must not import `packages/core` — the cycle breaks the generated
   client), and Batch 9's verification asserts the two agree.
-- Branch naming: `feat/<scope>`. No direct pushes to `main` — branch → PR →
-  1 review → merge.
+- **Git: commit and push straight to `main`. No branches, no PRs** (changed
+  2026-08-20). Branch-and-PR was costing more time in merge friction than it was
+  buying in review, on a three-person build with one week left. Both Vercel
+  projects deploy off `main`, so **a push is a deploy** — run `npm run build`
+  and the relevant `npm run smoke` before pushing, not after.
 - Inline error handling at API route / async boundaries; let internal pure
   functions throw freely.
 - Comments explain *why*, not *what*.
 - Shared data shapes (e.g. JSON breakdown fields) have stable keys — don't
   change an existing key without updating every consumer.
-- One feature = one small branch/PR. Don't bundle unrelated changes.
+- One feature = one small commit. Don't bundle unrelated changes.
 
 ## Path alias
 

@@ -21,8 +21,9 @@ Do this before anyone writes code. It is the only meeting in the week.
    quote screens against a mock `QuoteOutput`, not against B's API.
 3. **B starts the migration immediately.** A and C are both blocked on it, and
    only on it. It's fully specified in §3 of the plan; there is nothing to design.
-4. **Agree the branch names** so nobody collides: `feat/agent-b0a-schema`,
-   `feat/agent-b0b-scaffold`, `feat/agent-b1-dayview`, etc.
+4. ~~Agree the branch names~~ — **superseded 2026-08-20: we push straight to
+   `main`, no branches.** Coordinate by not editing the same file at the same
+   time, and by pushing small and often so nobody rebases a day's work.
 
 Then split up. The seam table exists so you don't need to talk again until
 Batch 9.
@@ -90,14 +91,31 @@ route to `ROUTES` in `scripts/smoke.mjs` as it lands.
 source. **Apps hold no tests.** If logic is worth testing, it belongs in
 `packages/core`, not in a screen.
 
-**Git:** one feature = one small branch = one PR = one review. No stacked PRs,
-no direct pushes to `main`.
+**Git (changed 2026-08-20):** commit and **push straight to `main`**. No
+branches, no PRs — branch-and-PR was costing more in merge friction than it was
+buying in review. One feature = one small commit; don't bundle unrelated changes.
+
+⚠ **Both Vercel projects deploy off `main`, so a push is a deploy.** The three
+commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 0a — Schema + seed · **Khalid** · ~0.4d
+## Batch 0a — Schema + seed · **Aamir** *(moved from Khalid 2026-08-20)* · ~0.4d
 
 **Depends on:** nothing. **Blocks:** everything. Do it first, ship it same-day.
+
+> **Owner changed 2026-08-20.** It blocks A's Batches 1 and 2 *and* C's Batch 3,
+> so under the new do-it-and-note-it lane policy it was taken over rather than
+> waited on. Logged in `docs/LANE_OWNERSHIP.md`. **Khalid: don't also build
+> this** — your lane is now Batch 4, Batch 7b, Batch 9, and the agent app's
+> Vercel project (`DEPLOY.md` §9).
+>
+> Two extra steps beyond the list below, both consequences of Batch 0b:
+> 1. **Re-point the agent smoke ids** once the seed is real — `AGENT_PICKUP` /
+>    `AGENT_ARRIVED` / `AGENT_ITEM` / `AGENT_BATCH` in `scripts/smoke.mjs` are
+>    placeholders that only 200 today because the stubs query nothing.
+> 2. Read `docs/ai-prompts/database-create-migration.md` before authoring the
+>    migration.
 
 **Edit**
 - `packages/database/prisma/schema.prisma`

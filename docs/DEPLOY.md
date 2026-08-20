@@ -1,4 +1,4 @@
-# Deploying the customer app (Vercel)
+# Deploying to Vercel — customer app, and (§9) the Field Agent app
 
 > **Not the doc to follow.** `docs/HANDOVER_KHALID_2026-08-12.md` is the single
 > self-contained runbook — it covers everything here plus local setup, the
@@ -65,7 +65,8 @@ repo was scanned on 2026-08-15 with no markers remaining. Worth a
 
 ## 2. Vercel project settings
 
-One project, for `apps/customer`. (`apps/agent` and `apps/admin` are scaffolds —
+One project per app. **`apps/agent` now needs its own — see §9 at the bottom of
+this file.** This section is the customer app's. (`apps/admin` is a scaffold —
 don't deploy them yet.)
 
 | Setting | Value |
@@ -253,9 +254,93 @@ SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke
 SMOKE_BASE_URL=https://<project>.vercel.app npm run smoke -- agent@test demo1234 --blocked
 ```
 
-`scripts/smoke.mjs` already reads `SMOKE_BASE_URL`, so the same **44** assertions
+`scripts/smoke.mjs` already reads `SMOKE_BASE_URL`, so the same **45** assertions
 run against production with no change.
 
 One thing that needs **no** change: the compliance CSV's `verification_link`
 column is built from the **request's own origin**, so it will point at the
 Vercel URL automatically rather than at localhost.
+
+---
+
+## 9. The Field Agent app — a SECOND Vercel project, same repo · **Khalid**
+
+Added 2026-08-20, after Batch 0b made `apps/agent` a real app.
+
+**The existing customer project needs no changes. Don't touch it.**
+
+### How this works, since it surprises people
+
+One GitHub repo can back **many** Vercel projects. Each project has its own
+**Root Directory** setting and only deploys what it's pointed at. That is how
+Vercel does monorepos — you do not restructure the repo, and you do not merge the
+two apps into one deployment. Two apps, two projects, one repo, one `main`.
+
+Both projects redeploy on every push to `main`. Since 2026-08-20 we push to
+`main` directly with no PR gate, so **a push is a deploy to both**. Run
+`npm run build` and the relevant `npm run smoke` before pushing.
+
+### Settings for the new project
+
+| Setting | Value |
+|---|---|
+| Repository | `kaykayfourier/clbipp` — **the same one** |
+| **Root Directory** | `apps/agent` |
+| **Include source files outside of the Root Directory** | **ON** — required; the app imports `packages/*` |
+| Install Command | *(leave default)* — Vercel installs npm workspaces from the repo root |
+| **Build Command** | `cd ../.. && npx turbo run build --filter=agent` |
+| Framework preset | Next.js (auto-detected) |
+
+### Three things that will otherwise cost an hour
+
+1. 🔴 **The build command must go through turbo**, exactly as for the customer
+   app and for the same reason (§1). A bare `next build` skips turbo's
+   `^db:generate`, so `@clbipp/database` has no generated client, and the build
+   fails on missing Prisma types.
+2. **`apps/agent` has its own `scripts/copy-prisma-engine.mjs`**, wired as npm
+   `prebuild` — already in the repo, nothing to configure. It exists because
+   Prisma's query engine is a native binary loaded by a runtime-computed path
+   that no bundler traces; without it the build goes green and every query 500s.
+   Don't remove it, and don't "simplify" `outputFileTracingIncludes` in
+   `apps/agent/next.config.ts`.
+3. **`apps/agent/vercel.json` pins `regions: ["syd1"]`** to sit next to Supabase.
+   If your plan rejects the region, **delete the `regions` key** rather than
+   changing it to a US region — a cross-Pacific round trip per query is worse
+   than an unpinned default.
+
+### Environment variables
+
+The same five as the customer project, copied verbatim — **the two apps read the
+same Supabase project.** One database, one auth pool, one set of roles; they are
+separated by `profiles.role` at each app's `src/proxy.ts`, not by project.
+
+`NEXT_PUBLIC_SUPABASE_URL` · `NEXT_PUBLIC_SUPABASE_ANON_KEY` ·
+`SUPABASE_SERVICE_ROLE_KEY` · `DATABASE_URL` · `DIRECT_URL`
+
+⚠ Same trap as §3: **no quotes, no spaces around the `=`.** Vercel's UI does not
+trim them.
+
+### Supabase dashboard
+
+Add the new origin to **Auth → URL Configuration → Redirect URLs**:
+`https://<agent-project>.vercel.app/**`
+
+Lower stakes than the customer app — agents don't self-sign-up (D6), so there
+are no confirmation or OAuth redirects today. Do it anyway; it is one line now
+and an afternoon later.
+
+**Leave Site URL pointing at the customer app.** It is a single global value and
+the customer app is the one that sends emails.
+
+### Verify after the first deploy
+
+```bash
+SMOKE_BASE_URL=https://<agent-project>.vercel.app npm run smoke -- --app=agent
+SMOKE_BASE_URL=https://<agent-project>.vercel.app npm run smoke -- --app=agent --blocked business@test businesstest
+```
+
+The second is the one that matters: it proves a vendor session cannot reach the
+agent app in production. The agent app shows full revenue, every cost line, net
+value, margin % and the P_min/P_rec/P_max band — the deliberate inverse of the
+vendor-visibility rule — so that boundary is the highest-consequence thing in
+this deployment.

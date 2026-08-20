@@ -5,9 +5,12 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-20 — **Field Agent app sprint opened, and Batch 0b
-(scaffold + auth gate) is done**; see the ▶ READ FIRST section below. Everything
-under "Historical" describes the customer app and is kept for the record.
+**Last updated:** 2026-08-20 — **Field Agent app sprint opened; Batch 0b
+(scaffold + auth gate) is done and merged to `main`.** Two working-practice
+changes the same day: **lanes are no longer a gate** (do it and log it) and
+**we push straight to `main`** — no branches, no PRs. **Batch 0a moved from
+Khalid to Aamir.** See the ▶ READ FIRST section below. Everything under
+"Historical" describes the customer app and is kept for the record.
 
 Prior entry (2026-08-10): (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
 + 8 + 9 + 10 + 11 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
@@ -71,32 +74,64 @@ the `.md` files are the source of truth.
   stub for all 22 §2 routes plus `/login`. `scripts/smoke.mjs` takes `--app=agent`.
   **C's Batch 3 is unblocked.** Details and traps: "Batch 0b — as built" at the
   bottom of `FIELD_AGENT_TASKS.md`.
-- **Batch 0a (Khalid) is the only thing now blocking Batch 1.** Every agent
-  screen is a stub that queries nothing, so nothing has real data yet.
+- **Batch 0a blocks everything else and is now A's** (moved from Khalid
+  2026-08-20). Every agent screen is a stub that queries nothing, so nothing has
+  real data yet, and C's Batch 3 needs the seeded multi-item pickups.
 - **Admin app: untouched.** Not this sprint.
 
-### Lanes — reverted, all three available
+### Lanes — as of 2026-08-20
 
-The 2026-08-09 override (A covering all three lanes) **lapsed on 2026-08-20**.
-Logged in `LANE_OWNERSHIP.md`. Ownership is back to the `CLAUDE.md` map:
+The 2026-08-09 override (A covering all three lanes) **lapsed on 2026-08-20**,
+then **Batch 0a moved from B to A** the same day. Both logged in
+`LANE_OWNERSHIP.md`.
 
 | | Owner | Batches |
 |---|---|---|
-| **A** | Aamir | **0b** scaffold + auth gate · **1** day view + job detail · **2** safety checklist · **5b** cross-app seam · **8** track/history/profile |
-| **B** | Khalid | **0a** schema + seed · **4** engine + pricing · **7b** custody PDF · **9** deploy |
+| **A** | Aamir | ~~**0b** scaffold + auth gate~~ ✅ · **0a** schema + seed *(taken from B 2026-08-20)* · **1** day view + job detail · **2** safety checklist · **5b** cross-app seam · **8** track/history/profile |
+| **B** | Khalid | **4** engine + pricing · **7b** custody PDF · **9** deploy **+ the agent app's Vercel project (`DEPLOY.md` §9)** |
 | **C** | Ali | **3** multi-item intake · **5a** quote screens · **6** collect · **7a** hub drop-off |
 
-### A's next action
+**Lane policy changed 2026-08-20: lanes are a default, not a gate.** If a task
+straddles lanes or its owner isn't ready, **do it and log it** in
+`LANE_OWNERSHIP.md` — no waiting for agreement first. That is why 0a moved.
+Attribute work to whoever actually did it.
 
-**Batch 1 — day view + job detail.** Steps in `FIELD_AGENT_TASKS.md`.
-Replaces the `/` and `/job/[id]` stubs with real screens: assigned jobs, the
-three home stats (Assigned / Collected / Earned today), and the job detail with
-Google Maps + `tel:` + the **Arrived** action that writes `scheduled → arrived`.
+**Git changed 2026-08-20: commit and push straight to `main`.** No branches, no
+PRs. Both Vercel projects deploy off `main`, so **a push is a deploy** — run
+`npm run build` and the relevant `npm run smoke` first.
 
-- 🔴 **Blocked on Khalid's Batch 0a.** Batch 1 is the first agent screen that
-  reads data; until 0a assigns `agentId` on the seeded pickups there is nothing
-  to render and the smoke ids are placeholders. Nothing else in A's lane is
-  blocked — Batch 2 (safety checklist) needs the `SafetyChecklist` write, also 0a.
+### A's next action — **Batch 0a, then Batch 1**
+
+**Batch 0a — schema + seed. Taken over from Khalid on 2026-08-20** because it
+blocks A's Batches 1 and 2 *and* C's Batch 3, and waiting was the wrong call with
+a week on the clock. Logged in `LANE_OWNERSHIP.md`. **Not started yet.**
+
+Fully specified — there is nothing to design:
+- §3 of `PLAN_FIELD_AGENT_APP.md` is the schema delta, exactly as written:
+  `Pickup.agentFeePaise` · `Offer.acceptedAt` · `BatteryItem.damageVisual /
+  damageLeakage / damageThermal / damageScore / pathway / traceId` ·
+  `WalletTxnKind + agent_fee` · new `CustodyBatch` · `Pickup.custodyBatchId`.
+- One migration, named `agent_app_v1`.
+- `reset-demo.ts`: `agentId` on pickups so `agent@test` has ≥1 at each of
+  `scheduled`, `arrived`, `offered`, `collected`, plus two further along;
+  2–3 mixed-category `BatteryItem` rows on the `scheduled` and `arrived` ones
+  (≥1 li-ion and ≥1 lead-acid — C cannot build Batch 3 without this); one
+  `MarketPrices` row; one `Facility` row.
+- Read `docs/ai-prompts/database-create-migration.md` before authoring it.
+- ⚠ `packages/database` **must not import `packages/core`** — the cycle breaks
+  the generated client. Restate the CO₂ table if needed; a test already asserts
+  the two agree.
+- ⚠ `LIFECYCLE` in `reset-demo.ts` must stay in sync with `enum PickupStatus`,
+  `LIFECYCLE_STAGES` in `packages/ui/src/tokens.ts` and `pickupstatusSchema` in
+  `packages/core`. **You are not changing the list** — just don't let it drift.
+- **Then re-point the agent smoke ids** — `AGENT_PICKUP` / `AGENT_ARRIVED` /
+  `AGENT_ITEM` / `AGENT_BATCH` in `scripts/smoke.mjs` are placeholders that only
+  200 today because the stubs query nothing.
+
+**Then Batch 1 — day view + job detail.** Replaces the `/` and `/job/[id]` stubs:
+assigned jobs, the three home stats (Assigned / Collected / Earned today), and
+job detail with Google Maps + `tel:` + the **Arrived** action that writes
+`scheduled → arrived`.
 - Before writing the screen, read **"Batch 0b — as built"** at the bottom of
   `FIELD_AGENT_TASKS.md`. The two that will bite: every `(agent)` screen must
   pass `hideNav` to `AppShell` and add no bottom padding, and the agent smoke
