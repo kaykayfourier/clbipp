@@ -15,13 +15,17 @@ Three-person internship build.
 Three surfaces, built **in sequence**, as three apps in one **Turborepo
 monorepo** (migrated 2026-08-09):
 
-1. **Customer / Vendor app** — `apps/customer` — **CURRENT SPRINT**
-2. **Field Agent app** — `apps/agent` — scaffolded, built later
+1. **Customer / Vendor app** — `apps/customer` — **built + deployed** (revamp
+   merged to `main` 2026-08-15)
+2. **Field Agent app** — `apps/agent` — **CURRENT SPRINT** (one week, from
+   2026-08-20). Batch 0b (scaffold + role-gated auth) landed 2026-08-20; it runs
+   on **port 3001** (`npm run dev:agent`).
 3. **Admin dashboard** — `apps/admin` — scaffolded, built last
 
 ```
 apps/customer            the customer app (Next.js App Router)
-apps/agent · apps/admin  scaffolds only
+apps/agent               the field agent app — CURRENT SPRINT
+apps/admin               scaffold only
 packages/ui              components, design tokens, cn()   → @clbipp/ui
 packages/auth            supabase server/browser/admin clients, auth.ts,
                          realtime, createAuthMiddleware()  → @clbipp/auth
@@ -33,7 +37,8 @@ packages/pdf             EPR certificate · pickup receipt ·
                          invoice templates + renderers     → @clbipp/pdf
 packages/database        prisma schema + migrations + client + seed
                                                            → @clbipp/database
-packages/decision-engine PARKED engine (Field Agent app, later)
+packages/decision-engine pathway + pricing engine (Layers 0–5). Live code this
+                         sprint — see "The decision engine" below
 packages/tsconfig · packages/eslint-config
 supabase/                policies.sql, storage-policies.sql, realtime.sql,
                          grants.sql — hand-written SQL, stays at repo root
@@ -47,64 +52,117 @@ which re-exports the client *and* every model type and enum).
 Packages ship raw TypeScript and are compiled by each app via
 `transpilePackages` — there is no per-package build step to maintain.
 
-## Current sprint: Vendor app only
+## Current sprint: Field Agent app
 
-Read `docs/PROJECT_STATE.md` first for live status; `docs/CONTEXT.md` for
-decisions made and why. This section is the quick version.
+Read `docs/FIELD_AGENT_TASKS.md` first — it is the executable task sheet
+(files, steps, done-when checks, traps, per batch). `docs/PLAN_FIELD_AGENT_APP.md`
+is the *why* behind it: the wireframe assessment and decisions **D0–D10**, which
+are settled and **must not be re-litigated mid-build**.
 
-**In scope:** the 17 vendor wireframe screens
-(`docs/CLBIPP_Vendor_Wireframes_1.html` is the layout source of truth).
+**In scope:** the 19 screens in §2 of the plan. `docs/CLBIPP_FieldAgentWireframes_V2.html`
+is the layout source, but it has nine known defects — §0 of the plan lists them
+all and every one is already resolved there. **Read §0 before building from the
+wireframe.**
 
-**PARKED — do not edit or extend this sprint:**
-- `packages/decision-engine/` (Layers 0–5, merged, tested) — belongs to the
-  later Field Agent app.
-- Any existing field-agent intake-flow code.
+Headlines you need even if you read nothing else:
 
-**No recovery rate % shown to the vendor, anywhere.** This one is hard — the
-company's flow document doesn't ask for it either.
+- **The agent app is the mirror of the vendor app.** The agent sees *everything*:
+  full revenue, every cost line, net value, margin %, and the P_min/P_recommended/
+  P_max band. That is deliberate, and it is exactly the inverse of the vendor
+  rule below — which is untouched. Nothing agent-side may leak onto a vendor screen.
+- **The nine-stage lifecycle is unchanged.** No migration adds a stage. The
+  wireframe invents `Draft` / `Quoted` / `Pending drop-off` and a 6-stage
+  timeline — all of those are derived UI states or existing stages renamed. See
+  D5.
+- **Jobs are pushed, not pulled** (D2) — `Pickup.agentId` is set when scheduled;
+  there is no nearby-jobs feed.
+- **A mandatory safety checklist gates intake** (W1). All three HR documents
+  require it; the wireframe omitted it entirely.
+- **Chat, VoIP call and turn-by-turn navigation are cut** (D4) — `tel:` link,
+  static Leaflet map, Google Maps deep link.
+- **Agents do not self-sign-up** (D6). Login only; accounts come from the seed.
 
-**No recovered value shown to the vendor — default, now scoped (Batch 8).** Offer
-screens show price + qualitative rationale only; `Offer.materialBreakdown` /
-`Offer.deductions` may exist in the DB but **don't render them on `offer`,
-`offer-breakdown`, or tracking screens** (they're fine on the certificate, a
-compliance doc). That part still holds.
+**The agent app's auth guard is `apps/agent/src/proxy.ts`** (live since Batch
+0b), exporting `proxy`, with `allowRoles: ['agent']` and no `onboardingPath`
+(D6). Same rule as the customer app: **it must stay under `src/`** — Next's dev
+bundler silently never registers it at the project root when `src/app` is in
+use, and an unregistered auth guard fails **OPEN**.
 
-What changed 2026-08-09: Plan v2 **D6** relaxes the rule for the money surfaces
-the company's flow document explicitly asks for, and Batch 8 built them — so
-**`/payment/[id]`, `/wallet`, `/receipt/[id]` and the invoice PDF do show ₹.**
-A payout screen that hides the amount is not a payout screen. Use `formatPaise`
-from `@clbipp/core` so every ₹ in the app is formatted identically.
-
-So the line is: **what the customer was paid is visible; how we valued it
-material-by-material is not.** The separate **no recovery-rate %** rule is
-untouched. See `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
-
-**The customer app's auth guard is `apps/customer/src/proxy.ts`**, exporting
-`proxy` — renamed from `middleware.ts` on 2026-08-14 (PR #18) for the Next 16
-convention change. **It must stay under `src/`**: Next's dev bundler silently
-never registers it at the project root when `src/app` is in use, and an
-unregistered auth guard fails **OPEN**. ⚠ `packages/auth/src/middleware.ts` is
-**not** renamed and must not be — that's the `createAuthMiddleware` factory, an
-ordinary module, not a Next convention file. After touching it, verify with
-`npm run build` (expect `ƒ Proxy (Middleware)`), `npm run smoke`, and
-`npm run smoke -- agent@test demo1234 --blocked`.
+**Every agent screen must pass `hideNav` to `AppShell`.** `apps/agent/src/app/(agent)/layout.tsx`
+renders the agent's own `<AgentTabBar />` and owns the clearance under it;
+`AppShell`'s built-in bar is the *customer's*. A screen that forgets `hideNav`
+renders two navs, and a screen that adds its own bottom padding double-pads.
+`npm run smoke` fails on anything but exactly one `aria-label="Main navigation"`.
 
 **Status lifecycle (locked contract):**
 `requested → scheduled → arrived → offered → collected → tested → processed →
 recovered → certified` (plus `cancelled`).
 
-> `arrived` and `offered` were **added 2026-08-09 (Batch 7A)** — agreed, applied,
-> and the contract is locked again at nine stages. Rationale: the company flow
-> document puts assessment and quoting *on site*, and before this "an offer
-> exists" was an implicit sub-state of `scheduled` rather than a status, which is
-> what made the offer screens unreachable in Batch 6.5. `/offer` and
-> `/offer-breakdown` now admit `status === 'offered'` exactly.
+> `arrived` and `offered` were **added 2026-08-09 (Batch 7A)** and the contract is
+> locked again at nine stages. The Field Agent app is what `arrived` was added
+> for: the agent taps "Arrived" on site.
 
 **Stage order has one source of truth per layer, and they must agree:**
 `enum PickupStatus` (`schema.prisma`) · `LIFECYCLE_STAGES` + `STAGE_LABELS`
 (`packages/ui/src/tokens.ts`) · `pickupstatusSchema` (`packages/core`) ·
 `LIFECYCLE` (`reset-demo.ts`). Screens must **not** re-declare the list — use
 `isLifecycleStage` / `isStageBefore` from `@clbipp/ui`.
+
+**Who writes which transition (D7 — the cross-app seam):**
+
+| Transition | Written by |
+|---|---|
+| `scheduled → arrived` | agent app |
+| `arrived → offered` | agent app (creates the `Offer`) |
+| vendor accepts | customer app — sets `Offer.acceptedAt`, **status stays `offered`** |
+| `offered → collected` | agent app |
+
+⚠ A vendor cannot mark their own battery collected. `acceptOffer` in the
+customer app used to write `collected`; Batch 5b changes that.
+
+## Vendor-visibility rules (still live — the agent app is their inverse)
+
+These govern the **customer app**. The Field Agent app deliberately shows the
+opposite; nothing from an agent screen may leak onto a vendor screen.
+
+**No recovery rate % shown to the vendor, anywhere.** The company's flow
+document doesn't ask for it either. This one is hard.
+
+**No recovered value shown to the vendor — default, scoped in Batch 8.** Offer
+screens show price + qualitative rationale only; `Offer.materialBreakdown` /
+`Offer.deductions` may exist in the DB but **don't render them on `offer`,
+`offer-breakdown`, or tracking screens** (they're fine on the certificate, a
+compliance doc).
+
+Plan v2 **D6** relaxes the rule for the money surfaces the company's flow
+document explicitly asks for, and Batch 8 built them — so **`/payment/[id]`,
+`/wallet`, `/receipt/[id]` and the invoice PDF do show ₹.** A payout screen that
+hides the amount is not a payout screen. Use `formatPaise` from `@clbipp/core`
+so every ₹ in the app is formatted identically.
+
+So the line is: **what the customer was paid is visible; how we valued it
+material-by-material is not.** The separate **no recovery-rate %** rule is
+untouched. See `docs/COMPANY_FLOW_REVIEW_2026-08-07.md`.
+
+## The decision engine
+
+`packages/decision-engine` is **no longer parked** (D0, 2026-08-18). Its logic is
+the asset; its code is not frozen, and it may be corrected or extended where
+that's right.
+
+- **Where the engine and the HR documents disagree, the HR documents win.** The
+  engine predates the company's flow document; it is not a specification.
+- It has **20 passing tests** and is a live pricing surface. Fix defects and
+  anything the documents contradict; **don't refactor it because it could be
+  nicer.**
+- 🔴 **A change that moves a price must say so explicitly in its PR.** Silent
+  economics drift is the one failure here nobody notices until a demo.
+- Two known defects are fixed in Batch 4: market-freshness is a module constant
+  that breaks any demo older than 24h, and `trace_id` is an in-memory counter
+  that collides across serverless cold starts.
+
+**Parked instead:** any existing field-agent intake-flow code from the early
+merged branch. It predates the monorepo and schema v2 — don't build on it.
 
 ## How to treat the plan in PROJECT_STATE.md
 
@@ -124,16 +182,19 @@ recovered → certified` (plus `cancelled`).
 
 ## Ownership map (this sprint)
 
+All three of us are available for the Field Agent app, so the 2026-08-09
+override (A covering all three lanes for the customer-app revamp) **has lapsed**.
+Ownership is back to the standing map.
+
 | Area | Owner |
 |------|-------|
-| Supabase Auth, session/route protection, RLS policies (all tables), login + full signup/account-creation flow (account-type selector, individual & fleet forms, `auth.signUp` + initial profile-row insert), the 3 realtime tracking screens, profile screen, **PWA + offline, deployment/CI**, **the cross-lane navigation seam** (dashboard↔flow↔track routing) | Person A |
-| Prisma schema + types, post-signup KYC upload + verification, dashboard, compliance, certificate PDF generation, internal seed/simulation surface | Person B |
-| Component library (from wireframe), the full request → offer → handover flow | Person C |
+| **A — Aamir.** Supabase Auth, session/route protection, RLS policies, the app scaffold + auth gate, nav shell, job detail, the safety checklist, realtime + tracking screens, history, profile, PWA + offline, **and the cross-app seam** | A |
+| **B — Khalid.** Prisma schema + migrations + seed, the decision engine and all pure pricing logic in `packages/core`, PDF templates, **and deployment/CI** | B |
+| **C — Ali.** Component library, and the full on-site flow: intake → assessment → quote → collect → hub drop-off | C |
 
-> **Temporary override (2026-08-09, customer-app revamp):** C is assumed
-> unavailable (Plan v2 D4) and B gave A explicit permission to cover his lane for
-> this revamp — so **A is currently executing all three lanes**. Logged in
-> `docs/LANE_OWNERSHIP.md`. The map above is what ownership reverts to.
+The agent app decomposes along the same three seams the vendor app did — it's
+the same architecture from the other side — so no lane shift was needed.
+Batch-by-batch ownership is in §4 of `docs/PLAN_FIELD_AGENT_APP.md`.
 
 **Do not edit another lane's area, even if faster** — unless ownership has been
 shifted by agreement and logged in `docs/LANE_OWNERSHIP.md` (lanes are
@@ -147,10 +208,18 @@ See "Stub-data pattern" below.
 All commands run from the **repo root** (turbo fans them out to the workspaces).
 
 ```bash
-npm run dev          # Customer app dev server
+npm run dev          # Customer app dev server  (:3000)
+npm run dev:agent    # Field Agent app dev server (:3001) — both can run at once
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
 npm run test         # All tests (Vitest) — currently 142
+
+# Logged-in route check. `npm run build` never renders a page with a session, so
+# this is what catches a server component that throws at request time.
+npm run smoke                                                     # customer, as business@test
+npm run smoke -- --app=agent                                      # agent, as agent@test
+npm run smoke -- --app=agent --blocked business@test businesstest # role gate, both
+npm run smoke -- --blocked agent@test demo1234                    # directions
 
 # Run a single test file (from the owning package)
 cd packages/core && npx vitest run src/booking.test.ts
@@ -166,8 +235,11 @@ cd packages/database
 npx prisma db execute --file ../../supabase/policies.sql --schema prisma/schema.prisma
 ```
 
-**Env files:** `apps/customer/.env.local` (Supabase URL + keys, DB URLs) and
-`packages/database/.env` (DB URLs only). Both gitignored.
+**Env files:** `apps/customer/.env.local`, `apps/agent/.env.local` (Supabase URL
++ keys, DB URLs — the two apps read the *same* Supabase project; they are
+separated by `profiles.role` at the proxy, not by project) and
+`packages/database/.env` (DB URLs only). All gitignored; `.env.example` next to
+each holds the key names.
 
 ## Stack
 
@@ -189,11 +261,18 @@ keeps every lane moving in parallel without anyone touching another's files.
 
 ## Key docs (read when relevant — don't load all of these by default)
 
-- `docs/REVAMP_BATCHES_2026-08-09.md` — **live status + resume point.** Batch
-  tracker for the customer-app revamp, demo accounts, commands, known gaps.
-  **Read this first.**
-- `docs/PLAN_V2_CUSTOMER_APP.md` — the operative plan (decisions D1–D7, screen
-  map, batch definitions).
+- `docs/FIELD_AGENT_TASKS.md` — **the executable task sheet for this sprint.**
+  Per batch: files, numbered steps, done-when checklist, traps. **Read this
+  first.** (`FIELD_AGENT_TASKS.pdf` is a generated rendition — edit the `.md`.)
+- `docs/PLAN_FIELD_AGENT_APP.md` — the operative plan behind it: wireframe
+  assessment (§0), decisions **D0–D10**, screen map (§2), schema delta (§3),
+  lanes and day-by-day (§4), risks (§5).
+- `docs/CLBIPP_FieldAgentWireframes_V2.html` — layout source for this sprint.
+  ⚠ It has nine known defects — **read §0 of the plan before building from it.**
+- `docs/REVAMP_BATCHES_2026-08-09.md` — customer-app revamp tracker. Historical
+  now; still the reference for demo accounts, commands and the outstanding
+  Batch 13 scan.
+- `docs/PLAN_V2_CUSTOMER_APP.md` — the customer app's plan (decisions D1–D7).
 - `docs/PROJECT_STATE.md` — historical status. Its top section is current; most
   of the detail below that predates the monorepo migration and schema v2.
 - `docs/CONTEXT.md` — decisions made and why, conventions, deferred items.
@@ -206,16 +285,15 @@ keeps every lane moving in parallel without anyone touching another's files.
   sent back to the company. **Read this before planning any work against the flow
   document.** Status: awaiting the company's reply — don't start building to the
   flow document until they confirm.
-- `docs/CLBIPP_Vendor_Wireframes_1.html` — UI source of truth for this sprint.
-  Note it predates the company flow document; where the two disagree, the flow
-  document wins (once confirmed).
+- `docs/CLBIPP_Vendor_Wireframes_1.html` — UI source for the *customer* app.
+  Predates the company flow document; where the two disagree, the flow doc wins.
 - `docs/BATCH_0B_SCHEMA.md` — reference for what every schema-v2 model means.
   **Already executed** (2026-08-09) — read it, don't run it.
 - `packages/database/prisma/schema.prisma` — the real schema (Profile, Pickup,
   StatusEvent, Certificate). Read before writing any RLS policy or auth code
   that touches these tables. Owned by Person B — don't edit directly.
-- `docs/DecisionSystemBreakdown.pdf` — engine spec. For the LATER Field Agent
-  app — not this sprint. Needing this for a vendor-app task is a sign of scope drift.
+- `docs/DecisionSystemBreakdown.pdf` — the engine spec. **Relevant this sprint**
+  (Batch 4). Where it and the HR documents disagree, the HR documents win (D0).
 - `docs/CLBIPP_Vendor_Build_Plan.pdf` — the full granular build plan (screen
   mappings, exact checklists, demo-path definition of done). `PROJECT_STATE.md`
   has the operative summary; only open this PDF if more detail is needed.
@@ -294,9 +372,14 @@ code is never reached with `@/` — it comes from `@clbipp/{ui,auth,core,databas
 
 - RLS / policy question → read `docs/ai-prompts/database-rls-policies.md` first.
 - Migration question → read `docs/ai-prompts/database-create-migration.md` first.
-- UI/UX question → check `docs/CLBIPP_Vendor_Wireframes_1.html` — navigation
-  between screens is built into it (each button's `data-go` shows the target).
-- Status / "what's done, what's next" → `docs/REVAMP_BATCHES_2026-08-09.md`.
+- UI/UX question → `docs/CLBIPP_FieldAgentWireframes_V2.html` for the agent app
+  (⚠ read §0 of the plan first — nine known defects), or
+  `docs/CLBIPP_Vendor_Wireframes_1.html` for the customer app. Navigation is
+  built into both (each button's `data-go` shows the target).
+- Status / "what's done, what's next" → `docs/PROJECT_STATE.md`, then
+  `docs/FIELD_AGENT_TASKS.md` for the batch you're on.
+- "What exactly do I build?" → `docs/FIELD_AGENT_TASKS.md`. "Why is it like
+  that?" → `docs/PLAN_FIELD_AGENT_APP.md`.
 - Stack question → Next.js + Supabase + Prisma in a Turborepo monorepo, deployed
   to Vercel. Don't introduce new frameworks.
 - "Where does this file live now?" → the 2026-08-09 migration moved everything.

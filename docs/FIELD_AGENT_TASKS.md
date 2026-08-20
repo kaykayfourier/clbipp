@@ -137,7 +137,16 @@ no direct pushes to `main`.
 
 ---
 
-## Batch 0b — App scaffold + auth gate · **Aamir** · ~0.5d
+## Batch 0b — App scaffold + auth gate · **Aamir** · ~0.5d ✅ DONE 2026-08-20
+
+> Shipped on `feat/agent-b0b-scaffold`. Verified: `npm run build` prints
+> `ƒ Proxy (Middleware)` for `apps/agent`; lint clean; 142 tests pass;
+> `npm run smoke -- --app=agent` 23/23; `npm run smoke` 45/45 (unchanged);
+> and the role gate holds in **both** directions —
+> `--app=agent --blocked business@test` 23/23 and `--blocked agent@test` 45/45.
+> **C's Batch 3 is unblocked.** What was actually built, and the four things
+> that differ from the steps below, are in "Batch 0b — as built" at the bottom
+> of this file. Read that before Batch 1.
 
 **Depends on:** nothing (start in parallel with 0a). **Blocks:** C's Batch 3.
 
@@ -174,11 +183,11 @@ no direct pushes to `main`.
 6. Extend `scripts/smoke.mjs` to run against the agent app as `agent@test`.
 
 **Done when**
-- [ ] `npm run build` shows `ƒ Proxy (Middleware)` for `apps/agent`
-- [ ] `agent@test` can log in and land on `/`
-- [ ] `business@test` (a customer) is **signed out** when hitting the agent app
-- [ ] `npm run smoke` passes against the agent app
-- [ ] Every §2 route returns 200, even if the page is empty
+- [x] `npm run build` shows `ƒ Proxy (Middleware)` for `apps/agent`
+- [x] `agent@test` can log in and land on `/`
+- [x] `business@test` (a customer) is **signed out** when hitting the agent app
+- [x] `npm run smoke` passes against the agent app
+- [x] Every §2 route returns 200, even if the page is empty
 
 **Watch out**
 - 🔴 **`proxy.ts` must live at `apps/agent/src/proxy.ts`, not the project root.**
@@ -618,3 +627,97 @@ half-finished batch is not:
 3. HOLD / REVIEW branches (Batch 5a)
 
 **Batches 0–7 minus those are the demo path and cannot be cut.**
+
+---
+
+## Batch 0b — as built (2026-08-20, Aamir)
+
+Read this before Batch 1. The batch shipped as specified; the notes below are
+the decisions taken inside it, the four deviations, and what the next person
+needs from it.
+
+### What exists now
+
+`apps/agent` is a full app, not a scaffold: Tailwind v4 + PostCSS, ESLint, the
+Prisma-engine prebuild, its own `.env.local`, and `dev` on **port 3001** (root
+script `npm run dev:agent`, so both apps run side by side).
+
+| Thing | Where |
+|---|---|
+| Auth guard | `apps/agent/src/proxy.ts` — `allowRoles: ['agent']`, `homePath: '/'`, no `onboardingPath` |
+| Root layout | `apps/agent/src/app/layout.tsx` — same three fonts as the customer app, **no service worker** (PWA is Batch 8) |
+| Design tokens | `apps/agent/src/app/globals.css` — byte-copy of the customer's, incl. the `@source` line that stops Tailwind purging `packages/ui` |
+| Nav shell | `apps/agent/src/app/(agent)/layout.tsx` + `apps/agent/src/components/agent-tab-bar.tsx` |
+| Login | `apps/agent/src/app/(auth)/login/{page.tsx,actions.ts}` + `(auth)/field.tsx` |
+| 22 stubs | `apps/agent/src/app/(agent)/**/page.tsx` |
+
+### Four deviations from the steps above
+
+1. **The bottom tab bar is local to `apps/agent`, not `@clbipp/ui`.**
+   `BottomTabBar` in `packages/ui` hardcodes the *customer's* four destinations.
+   Parameterising it would be DRY-er but `packages/ui` is lane C — a straddle
+   needing flag → agree → log. `CLAUDE.md` puts the nav shell in lane A, so the
+   agent bar is `apps/agent/src/components/agent-tab-bar.tsx`. Tabs are
+   Home `/` · Pickups `/pickups` · History `/history` · Profile `/profile`.
+   **Post-sprint (lane C): fold both into one `tabs`-prop component.**
+
+2. **The `…/result*` screens live under `items/[itemId]`.** §2 of the plan
+   writes them as `…/result`, which leaves the parent ambiguous. The engine runs
+   **per item** (D1), so the full paths are
+   `/job/[id]/items/[itemId]/result{,/breakdown,/why}`.
+
+3. **The Prisma-engine prebuild shipped now**, in the scaffold, rather than
+   waiting for the first screen that queries. Same script and
+   `outputFileTracingIncludes` as the customer app. Without it every Prisma
+   query 500s on Vercel while the build stays green (confirmed 2026-08-15) —
+   cheaper here than inside Batch 9. **Khalid: `apps/agent` therefore needs its
+   own Vercel project and the same env vars.**
+
+4. **`scripts/smoke.mjs` grew a `--app=` switch** rather than a second file.
+   Per-app config is the `APPS` map near the top; the customer-only sections
+   (documents, CSV export, public `/t/` tracking, the `/onboarding` probes) are
+   gated on `app === 'customer'` rather than given empty tables — an assertion
+   over an empty table passes vacuously.
+
+   ⚠ One behaviour change to the **customer** run: the summary total was
+   undercounting by one (it never counted `OFFER_SURVIVED_GET`). It now reads
+   `45`, not `44`. Same probes, corrected count.
+
+### Traps for whoever writes the next agent screen
+
+- 🔴 **Every screen under `(agent)` must pass `hideNav` to `AppShell`.** The
+  layout renders the nav; `AppShell`'s built-in bar is the *customer's*. Forget
+  it and you get two bars — `npm run smoke` counts `aria-label="Main navigation"`
+  and fails on anything but exactly one.
+- **Pages add no bottom padding.** `(agent)/layout.tsx` owns the clearance. This
+  is the bug customer Batch 6.5 fixed.
+- **The pickup ids in the agent smoke tables are placeholders**
+  (`PKP-2026-000102`, `PKP-2026-000103`, and two synthetic uuids for item and
+  batch). They 200 today only because the stubs query nothing. **Khalid's Batch
+  0a must assign `agentId` to those pickups, or re-point the constants** —
+  `AGENT_PICKUP` / `AGENT_ARRIVED` / `AGENT_ITEM` / `AGENT_BATCH` in
+  `scripts/smoke.mjs`. The failure surfaces the moment Batch 1 makes
+  `/job/[id]` real.
+- **Agent smoke content assertions are stub headings** and are meant to be
+  replaced batch by batch with real screen content. A heading is a weak
+  assertion.
+
+### One thing worth knowing about the guard
+
+A flaky connection makes `npm run smoke` report `BOUNCED TO LOGIN` on routes
+that are fine. `supabase.auth.getUser()` in `packages/auth/src/middleware.ts`
+**fails closed** — a DNS blip returns `user: null` and every authenticated route
+bounces. That is deliberate (you cannot admit a request whose user you could not
+verify) and survivable (nothing calls `signOut()` on that path, so a retry
+works), and it is now commented in the factory. Seen for real on 2026-08-20 on a
+cold dev server: **check the dev-server log for `getaddrinfo ENOTFOUND` before
+hunting a guard bug.**
+
+### Deferred out of this batch, on purpose
+
+- PWA / offline — `ServiceWorkerRegister`, manifest, icons. Batch 8. Registering
+  a service worker now would cache the scaffold and serve it over real screens.
+- No `loading.tsx` anywhere yet — add per screen as real data lands, as the
+  customer app did.
+- `(auth)/field.tsx` is now duplicated in both apps. Same TODO as the customer's:
+  swap for C's real `<Input>` when it ships, in both at once.

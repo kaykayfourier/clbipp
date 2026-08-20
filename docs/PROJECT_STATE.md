@@ -5,7 +5,11 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-10 (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
+**Last updated:** 2026-08-20 — **Field Agent app sprint opened, and Batch 0b
+(scaffold + auth gate) is done**; see the ▶ READ FIRST section below. Everything
+under "Historical" describes the customer app and is kept for the record.
+
+Prior entry (2026-08-10): (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
 + 8 + 9 + 10 + 11 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
 booking quote engine + `createPickupWithItems` shipped in `packages/core`, the
 address book + Storage upload helper landed, **the 4-step booking wizard at
@@ -38,12 +42,106 @@ Prior: 2026-08-07 Plan v2 written)
 > being deleted. Live detail and the deploy fixes are in
 > `REVAMP_BATCHES_2026-08-09.md` → "▶ Resume here", and the runbook Khalid
 > follows is `HANDOVER_KHALID_2026-08-12.md`.
-**Current sprint:** all three apps — 2 weeks. Customer app first (~2–2.5 days).
-**Build order across project:** Customer app FIRST → then Field Agent app → then Admin dashboard
+**Build order across project:** Customer app ✅ → **Field Agent app (current)** →
+Admin dashboard
 
 ---
 
-## READ FIRST — resume point (2026-08-10)
+## ▶ READ FIRST — resume point (2026-08-20)
+
+**Current sprint: the Field Agent app (`apps/agent`). One week, from 2026-08-20.**
+
+**→ `docs/FIELD_AGENT_TASKS.md` is the live task sheet and the place to resume.**
+Per batch: exact files, numbered steps, a done-when checklist, and the traps.
+`docs/PLAN_FIELD_AGENT_APP.md` is the *why* — wireframe assessment (§0),
+decisions **D0–D10**, screen map (§2), schema delta (§3), lanes + day-by-day
+(§4), risk + cut list (§5). Both are also in `docs/` as PDFs for sharing;
+the `.md` files are the source of truth.
+
+### State of play
+
+- **Customer app: done and merged to `main`** (PR #17). Deploy (Batch 12) is
+  Khalid's, on his GitHub-synced Vercel project; runbook is
+  `HANDOVER_KHALID_2026-08-12.md`. **Batch 13 — the full-app scan — is still
+  open** and has been deferred to after all three apps exist.
+- **Field Agent app: Batch 0b done (2026-08-20), on `feat/agent-b0b-scaffold`.**
+  `apps/agent` is now a real app — Tailwind, ESLint, Prisma-engine prebuild, its
+  own `.env.local`, dev on **:3001** via `npm run dev:agent` — with a role-gated
+  `src/proxy.ts`, an email+password login, an agent-specific bottom nav, and a
+  stub for all 22 §2 routes plus `/login`. `scripts/smoke.mjs` takes `--app=agent`.
+  **C's Batch 3 is unblocked.** Details and traps: "Batch 0b — as built" at the
+  bottom of `FIELD_AGENT_TASKS.md`.
+- **Batch 0a (Khalid) is the only thing now blocking Batch 1.** Every agent
+  screen is a stub that queries nothing, so nothing has real data yet.
+- **Admin app: untouched.** Not this sprint.
+
+### Lanes — reverted, all three available
+
+The 2026-08-09 override (A covering all three lanes) **lapsed on 2026-08-20**.
+Logged in `LANE_OWNERSHIP.md`. Ownership is back to the `CLAUDE.md` map:
+
+| | Owner | Batches |
+|---|---|---|
+| **A** | Aamir | **0b** scaffold + auth gate · **1** day view + job detail · **2** safety checklist · **5b** cross-app seam · **8** track/history/profile |
+| **B** | Khalid | **0a** schema + seed · **4** engine + pricing · **7b** custody PDF · **9** deploy |
+| **C** | Ali | **3** multi-item intake · **5a** quote screens · **6** collect · **7a** hub drop-off |
+
+### A's next action
+
+**Batch 1 — day view + job detail.** Steps in `FIELD_AGENT_TASKS.md`.
+Replaces the `/` and `/job/[id]` stubs with real screens: assigned jobs, the
+three home stats (Assigned / Collected / Earned today), and the job detail with
+Google Maps + `tel:` + the **Arrived** action that writes `scheduled → arrived`.
+
+- 🔴 **Blocked on Khalid's Batch 0a.** Batch 1 is the first agent screen that
+  reads data; until 0a assigns `agentId` on the seeded pickups there is nothing
+  to render and the smoke ids are placeholders. Nothing else in A's lane is
+  blocked — Batch 2 (safety checklist) needs the `SafetyChecklist` write, also 0a.
+- Before writing the screen, read **"Batch 0b — as built"** at the bottom of
+  `FIELD_AGENT_TASKS.md`. The two that will bite: every `(agent)` screen must
+  pass `hideNav` to `AppShell` and add no bottom padding, and the agent smoke
+  pickup ids need re-pointing at whatever 0a actually seeds.
+- Lifecycle writes use the pattern in
+  `apps/customer/src/app/(app)/handover/actions.ts`: `"use server"` +
+  `createAdminClient()` + re-verify `pickup.agentId === user.id` **in code**,
+  because the service role bypasses RLS.
+
+**Verification commands, now that there are two apps:**
+
+```bash
+npm run dev          # customer, :3000
+npm run dev:agent    # agent,    :3001
+npm run smoke                                                     # customer, 45/45
+npm run smoke -- --app=agent                                      # agent
+npm run smoke -- --app=agent --blocked business@test businesstest # vendor barred from agent app
+npm run smoke -- --blocked agent@test demo1234                    # agent barred from customer app
+```
+
+The last two are the role gate in both directions. Both were green on 2026-08-20.
+
+⚠ If smoke reports `BOUNCED TO LOGIN` on routes you believe are fine, check the
+dev-server log for `getaddrinfo ENOTFOUND` first. `getUser()` in the shared
+middleware fails closed on a network error — deliberately, and now commented
+there. It is not a guard bug.
+
+### Decisions that are settled — do not re-litigate
+
+D0–D10 in `PLAN_FIELD_AGENT_APP.md` §1. The ones most likely to be
+second-guessed mid-build:
+
+- **D0** — the decision engine is live code, not frozen. Where it and the HR
+  documents disagree, **the HR documents win**. Fix defects; don't refactor it.
+- **D1** — all four battery categories; the engine runs on li-ion only.
+  Lead-acid prices off `PricingRate` (it's a commodity, not a pathway decision).
+- **D2** — jobs are pushed, not pulled. No nearby-jobs feed.
+- **D5** — the nine-stage lifecycle is untouched. No migration adds a stage.
+- **D7** — the cross-app seam: the agent writes `collected`, never the vendor.
+
+---
+
+## Historical — customer app (2026-08-10)
+
+### Resume point as of 2026-08-10 — superseded, kept for the record
 
 **→ `docs/REVAMP_BATCHES_2026-08-09.md` is the live status file and the place to
 resume.** It has the batch tracker, what batches 1–2 delivered, the demo

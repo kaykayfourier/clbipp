@@ -14,8 +14,9 @@ assesses and quotes them; an admin oversees pricing rules and compliance. A
 deterministic engine picks the pathway (Reuse / Refurbish / Recycle) and a price.
 
 Three-person internship build. Three surfaces, built in sequence:
-1. **Vendor / Client app** (current sprint) — the supplier's PWA.
-2. **Field Agent app** (later) — mobile intake → quote flow.
+1. **Vendor / Client app** — ✅ built, merged to `main` 2026-08-15.
+2. **Field Agent app** (**current sprint**, from 2026-08-20) — on-site intake →
+   assessment → quote → collect → hub drop-off.
 3. **Admin dashboard** (later) — config, oversight, compliance reporting.
 
 ---
@@ -36,11 +37,24 @@ One repo, three apps separated by route folders. Shared code at root.
 
 ## Decisions made (and why)
 
-- **Vendor app built first, alone this sprint.** It's the surface guaranteed to
-  ship and the one the lead circulates for feedback. Field-agent + admin come later.
-- **Decision engine is NOT in the vendor app.** The vendor side never shows internal
-  pricing mechanics. Offers + status changes are faked by an internal seed/sim
-  surface (a protected route + seed script), not the real engine.
+**Field Agent app decisions D0–D10 live in `PLAN_FIELD_AGENT_APP.md` §1**, not
+here — they are sprint-scoped and settled. This section holds the decisions that
+outlive a single sprint.
+
+- **Vendor app built first.** It was the surface guaranteed to ship and the one
+  the lead circulates for feedback. Done; field agent is now current.
+- **Decision engine is NOT in the vendor app.** The vendor side never shows
+  internal pricing mechanics. On the vendor side, offers + status changes come
+  from the seed/sim surface, not the engine.
+  **The Field Agent app is where the engine actually runs** — and as of
+  2026-08-18 (D0) it is **live code, not a parked artifact**: it may be corrected
+  or extended, and where it and the HR documents disagree, **the HR documents
+  win**. It carries 20 tests and a live pricing surface, so fix defects rather
+  than refactoring, and any change that moves a price says so in its PR.
+- **The agent sees everything the vendor doesn't.** Full revenue, every cost
+  line, net value, margin %, and the price band. This is the deliberate inverse
+  of the vendor-visibility rules below, not an exception to them — nothing
+  agent-side may leak onto a vendor screen.
 - **No recovery rate % shown to the vendor — hard rule.** Lead's explicit
   instruction; the company's flow document doesn't ask for it either.
 - **No recovered value shown to the vendor — a default, not a hard rule**
