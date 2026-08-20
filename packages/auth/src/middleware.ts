@@ -64,6 +64,22 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
     )
 
     // Refreshes the session if expired and tells us who (if anyone) is logged in.
+    //
+    // ⚠ The error is deliberately ignored, and this FAILS CLOSED — the opposite
+    // of the profiles read below. A network failure here (DNS blip, Supabase
+    // unreachable) returns `user: null`, and every authenticated route then
+    // bounces to /login until it recovers.
+    //
+    // That is the right trade: we cannot admit a request whose user we were
+    // unable to verify. It is also survivable in a way the profiles case is
+    // not — nothing calls signOut() on this path, so the session cookie is
+    // intact and a retry works. Do NOT "fix" this by falling through on error;
+    // that would let an unverified request into the app.
+    //
+    // Practical consequence, and the reason this comment exists: a flaky
+    // connection makes `npm run smoke` report BOUNCED TO LOGIN on routes that
+    // are actually fine. Seen 2026-08-20 on a cold dev server. Check the dev
+    // server log for `getaddrinfo ENOTFOUND` before hunting a guard bug.
     const {
       data: { user },
     } = await supabase.auth.getUser()

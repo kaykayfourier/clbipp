@@ -1,14 +1,26 @@
 /**
- * Logged-in smoke test for the customer app.
+ * Logged-in smoke test. Runs against either app in the monorepo.
  *
- *   npm run dev            # in another terminal
- *   npm run smoke          # every screen, as business@test
+ *   npm run dev                  # customer, :3000, in another terminal
+ *   npm run dev:agent            # agent,    :3001, in another terminal
+ *
+ *   npm run smoke                            # customer, as business@test
  *   npm run smoke -- agent@test demo1234 --blocked
+ *   npm run smoke -- --app=agent             # agent, as agent@test
+ *   npm run smoke -- --app=agent --blocked business@test businesstest
+ *
+ * `--app=` selects which app to point at (default `customer`); it swaps the
+ * base URL, the .env.local read for Supabase credentials, the default account
+ * and the route tables. The document, export and public-tracking sections are
+ * customer-only and are skipped for other apps — those routes do not exist
+ * there yet, and asserting on absent features passes vacuously.
  *
  * `--blocked` inverts every expectation: the run passes only if EVERY app route
- * bounces to /login. That is how the Batch 6 role gate is verified — a
- * non-customer session must not reach the customer app at all, so for those
- * accounts "bounced to login" is the pass condition, not the failure.
+ * bounces to /login. That is how the role gate is verified — a session with the
+ * wrong role must not reach the app at all, so for those accounts "bounced to
+ * login" is the pass condition, not the failure. It is what proves the boundary
+ * runs in BOTH directions: an agent barred from the customer app, and a vendor
+ * barred from the agent app.
  *
  * Why this exists: `npm run build` type-checks but never renders a page with a
  * real session, so a server component that throws at request time (a bad Prisma
@@ -24,7 +36,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const BASE = process.env.SMOKE_BASE_URL ?? 'http://localhost:3000'
+// Set in main() once --app has been read. SMOKE_BASE_URL still wins, which is
+// how a deployed preview gets smoke-tested.
+let BASE = 'http://localhost:3000'
+
+// ─── Customer app ────────────────────────────────────────────────────────────
+// Everything from here to the AGENT block below is the customer app's, exactly
+// as it was before apps/agent existed. The names are unprefixed for that
+// reason — moving them would make the diff of adding a second app look like a
+// rewrite of the first.
 
 // Routes worth checking on every batch. Add new screens here as they land.
 const ROUTES = [
@@ -349,6 +369,119 @@ const CONTENT = {
 // reachable logged out.
 const ONBOARDING_ANON = '/onboarding'
 
+// ═══ Agent app (Batch 0b) ════════════════════════════════════════════════════
+//
+// Every route here is still a STUB — a heading and no data access — so these
+// currently prove routing, the layout and the role gate, not screen content.
+// Content assertions get added per batch as the real screens land, the same way
+// the customer tables above grew.
+//
+// ⚠ The pickup ids below are placeholders until Khalid's Batch 0a assigns
+// `agentId` on the seeded pickups. They 200 today because the stubs query
+// nothing; the moment Batch 1 makes /job/[id] real, these must be ids the seed
+// actually gives agent@test or the run starts failing. Re-check after 0a.
+const AGENT_PICKUP = 'PKP-2026-000102' // seeded `scheduled` — the day-view job
+const AGENT_ARRIVED = 'PKP-2026-000103' // seeded `arrived`
+// Well-formed uuid in the seed's demo shape. BatteryItem.id is a uuid; there is
+// no seeded item to point at until 0a adds them, and a malformed id would fail
+// for the wrong reason once the screen is real.
+const AGENT_ITEM = '00000000-0000-4000-8000-000000000201'
+const AGENT_BATCH = '00000000-0000-4000-8000-000000000301'
+
+const AGENT_ROUTES = [
+  // A. Entry & day view
+  '/',
+  // B. Job → arrival
+  `/job/${AGENT_PICKUP}`,
+  `/job/${AGENT_PICKUP}/safety`,
+  // C. Intake & assessment
+  `/job/${AGENT_PICKUP}/items`,
+  `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}`,
+  `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/damage`,
+  `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/computing`,
+  `/job/${AGENT_PICKUP}/scan`,
+  // D. Quote
+  `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result`,
+  `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/breakdown`,
+  `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/why`,
+  `/job/${AGENT_PICKUP}/offer`,
+  // E. Collect & hand off
+  `/job/${AGENT_ARRIVED}/collect`,
+  `/job/${AGENT_ARRIVED}/receipt`,
+  '/dropoff',
+  '/dropoff/confirm',
+  `/dropoff/${AGENT_BATCH}`,
+  // F. Track, history, profile
+  '/pickups',
+  `/pickups/${AGENT_ARRIVED}`,
+  `/pickups/${AGENT_ARRIVED}/map`,
+  '/history',
+  '/profile',
+]
+
+// Proves the stub actually rendered rather than the layout alone. Replace each
+// entry with real screen content as its batch lands — a stub heading is a weak
+// assertion and is meant to be temporary.
+const AGENT_APP_CONTENT = {
+  '/': ['Today'],
+  '/pickups': ['My pickups'],
+  '/history': ['History'],
+  '/profile': ['Profile'],
+  [`/job/${AGENT_PICKUP}/safety`]: ['Safety checklist'],
+  [`/job/${AGENT_PICKUP}/items`]: ['Items'],
+  [`/job/${AGENT_PICKUP}/offer`]: ['Offer'],
+  '/dropoff/confirm': ['Confirm hand-off'],
+}
+
+const AGENT_PUBLIC_ROUTES = ['/login']
+
+const AGENT_CONTENT = {
+  '/login': ['Field Agent', 'Log in', 'Email', 'Password'],
+}
+
+// D6 made assertable. Agents do not self-sign-up, and the agent login must not
+// grow the customer login's other three doors. Each string below is one that
+// genuinely appears on apps/customer's /login — so a copy-paste from there
+// fails this run rather than quietly shipping a signup route the plan rules
+// out. 'Agent ID' is the wireframe's W7 defect, kept here for the same reason.
+const AGENT_LOGIN_ISOLATION = {
+  '/login': ['Create account', 'Send code', 'Email me a login code', 'Continue with Google', 'Agent ID'],
+}
+
+// ═══ App selection ═══════════════════════════════════════════════════════════
+// `--app=<name>`. Only the shared shape lives here; the customer-only sections
+// (documents, exports, public /t/ tracking, the onboarding probes) are gated on
+// `app === 'customer'` in main() rather than being stubbed out per app —
+// asserting on a feature that does not exist passes vacuously, which is the
+// Batch 10 lesson.
+const APPS = {
+  customer: {
+    port: 3000,
+    envFile: 'apps/customer/.env.local',
+    defaultUser: ['business@test', 'businesstest'],
+    routes: ROUTES,
+    appContent: APP_CONTENT,
+    appIsolation: (route) => BOOK_PREFILL_ISOLATION[route] ?? ONBOARDING_ISOLATION[route] ?? [],
+    publicRoutes: PUBLIC_ROUTES,
+    content: CONTENT,
+    publicIsolation: {},
+  },
+  agent: {
+    port: 3001,
+    // The agent app reads the same Supabase project as the customer app — one
+    // database, one auth pool. The apps are separated by profiles.role at the
+    // proxy, not by project.
+    envFile: 'apps/agent/.env.local',
+    defaultUser: ['agent@test', 'demo1234'],
+    routes: AGENT_ROUTES,
+    appContent: AGENT_APP_CONTENT,
+    appIsolation: () => [],
+    publicRoutes: AGENT_PUBLIC_ROUTES,
+    content: AGENT_CONTENT,
+    publicIsolation: AGENT_LOGIN_ISOLATION,
+  },
+}
+
 // Note the `KEY =value` spacing and quoted values in .env.local — Next's dotenv
 // tolerates both, a naive split does not (same trap as packages/database/prisma/env.ts).
 function loadEnv(file) {
@@ -383,11 +516,25 @@ function sessionCookie(session, projectRef) {
 async function main() {
   const args = process.argv.slice(2)
   const blocked = args.includes('--blocked')
-  const [email = 'business@test', password = 'businesstest'] = args.filter(
+
+  const appName = args.find((a) => a.startsWith('--app='))?.slice('--app='.length) ?? 'customer'
+  const cfg = APPS[appName]
+  if (!cfg) {
+    console.error(`Unknown --app=${appName}. Known: ${Object.keys(APPS).join(', ')}`)
+    process.exit(1)
+  }
+  // Only the customer app has documents, exports and public /t/ tracking. This
+  // gates those sections rather than giving the agent app empty tables for
+  // them: an assertion over an empty table passes without checking anything.
+  const isCustomer = appName === 'customer'
+
+  BASE = process.env.SMOKE_BASE_URL ?? `http://localhost:${cfg.port}`
+
+  const [email = cfg.defaultUser[0], password = cfg.defaultUser[1]] = args.filter(
     (a) => !a.startsWith('--'),
   )
 
-  const env = loadEnv(path.join(ROOT, 'apps/customer/.env.local'))
+  const env = loadEnv(path.join(ROOT, cfg.envFile))
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
   const projectRef = new URL(supabaseUrl).hostname.split('.')[0]
@@ -406,7 +553,7 @@ async function main() {
 
   const Cookie = sessionCookie(session, projectRef)
   console.log(
-    `\nSmoke test — ${BASE} as ${email}` +
+    `\nSmoke test — ${appName} app — ${BASE} as ${email}` +
       (blocked ? '  [--blocked: app routes MUST bounce to /login]' : '') +
       '\n',
   )
@@ -478,36 +625,39 @@ async function main() {
   }
 
   console.log('  — app routes —')
-  for (const route of ROUTES) {
+  for (const route of cfg.routes) {
     // In --blocked mode the pass condition is a bounce to /login, so there is no
     // body to assert against.
     await probe(route, {
       expectBounce: blocked,
-      mustContain: blocked ? [] : (APP_CONTENT[route] ?? []),
-      mustNotContain: blocked
-        ? []
-        : (BOOK_PREFILL_ISOLATION[route] ?? ONBOARDING_ISOLATION[route] ?? []),
+      mustContain: blocked ? [] : (cfg.appContent[route] ?? []),
+      mustNotContain: blocked ? [] : cfg.appIsolation(route),
     })
   }
 
   // The other half of the status guard: these ids are NOT at `offered`, so the
   // offer screen must turn them away. In --blocked mode the role gate gets there
   // first and the expectation is a /login bounce instead.
-  console.log('\n  — status guards (must reject) —')
-  for (const [route, forbidden] of Object.entries(APP_REJECTS)) {
-    await probe(route, {
-      expectBounce: blocked,
-      mustNotContain: blocked ? [] : forbidden,
-    })
-  }
+  // Customer-only from here. The agent app has no status-guarded ?id= screens
+  // yet (its guards arrive with Batch 5b), no documents, no CSV export and no
+  // public bearer-token page.
+  if (isCustomer) {
+    console.log('\n  — status guards (must reject) —')
+    for (const [route, forbidden] of Object.entries(APP_REJECTS)) {
+      await probe(route, {
+        expectBounce: blocked,
+        mustNotContain: blocked ? [] : forbidden,
+      })
+    }
 
-  // Batch 12. Must come after the loop above — see OFFER_SURVIVED_GET.
-  console.log('\n  — the offer survived being GET-ed at /handover —')
-  for (const [route, expected] of Object.entries(OFFER_SURVIVED_GET)) {
-    await probe(route, {
-      expectBounce: blocked,
-      mustContain: blocked ? [] : expected,
-    })
+    // Batch 12. Must come after the loop above — see OFFER_SURVIVED_GET.
+    console.log('\n  — the offer survived being GET-ed at /handover —')
+    for (const [route, expected] of Object.entries(OFFER_SURVIVED_GET)) {
+      await probe(route, {
+        expectBounce: blocked,
+        mustContain: blocked ? [] : expected,
+      })
+    }
   }
 
   /**
@@ -559,14 +709,16 @@ async function main() {
   // a lifecycle transition — so unlike /handover it cannot advance a pickup,
   // break another route, or change what any screen shows. Worth the write: it
   // is the only way to prove the render → upload → stream path end to end.
-  console.log('\n  — documents (must be real PDFs) —')
-  for (const route of DOCUMENT_ROUTES) {
-    await probeDocument(route, { expectBounce: blocked })
-  }
+  if (isCustomer) {
+    console.log('\n  — documents (must be real PDFs) —')
+    for (const route of DOCUMENT_ROUTES) {
+      await probeDocument(route, { expectBounce: blocked })
+    }
 
-  console.log('\n  — documents (must refuse) —')
-  for (const route of DOCUMENT_REJECTS) {
-    await probeDocument(route, { expectPdf: false, expectBounce: blocked })
+    console.log('\n  — documents (must refuse) —')
+    for (const route of DOCUMENT_REJECTS) {
+      await probeDocument(route, { expectPdf: false, expectBounce: blocked })
+    }
   }
 
   /**
@@ -618,35 +770,42 @@ async function main() {
     console.log(`  ${String(status).padEnd(3)} ${route.padEnd(46)} ${verdict} ${note}`)
   }
 
-  console.log('\n  — compliance export —')
-  for (const [route, expected] of Object.entries(EXPORT_ROUTES)) {
-    await probeExport(route, { mustContain: expected })
+  if (isCustomer) {
+    console.log('\n  — compliance export —')
+    for (const [route, expected] of Object.entries(EXPORT_ROUTES)) {
+      await probeExport(route, { mustContain: expected })
+    }
+    await probeExport(EXPORT_EMPTY, { expectEmpty: true })
   }
-  await probeExport(EXPORT_EMPTY, { expectEmpty: true })
 
   // Fetched WITHOUT the session cookie — that is the state they're built for,
   // and a logged-in hit on /login legitimately redirects to /dashboard, which
   // would make a content check meaningless. A rejected session that also
   // couldn't load /login would have nowhere to go, so these must always render.
   console.log('\n  — public auth routes (logged out) —')
-  for (const route of PUBLIC_ROUTES) {
-    await probe(route, { anon: true, mustContain: CONTENT[route] ?? [] })
-  }
-  // The other half of the /onboarding guard: a session is required. `anon` with
-  // `expectBounce` is the pass condition here, unlike the /t routes below.
-  await probe(ONBOARDING_ANON, { anon: true, expectBounce: true })
-
-  // Batch 10. Anonymous by definition — these must render with NO session, in
-  // both normal and --blocked mode, so they are never given `expectBounce`.
-  console.log('\n  — public tracking links (logged out, isolation asserted) —')
-  for (const [route, expected] of Object.entries(PUBLIC_TRACK_ROUTES)) {
-    await probe(route, { anon: true, ...expected })
+  for (const route of cfg.publicRoutes) {
+    await probe(route, {
+      anon: true,
+      mustContain: cfg.content[route] ?? [],
+      mustNotContain: cfg.publicIsolation[route] ?? [],
+    })
   }
 
-  // A well-formed token that matches no pickup. Checked with a bare fetch
-  // rather than probe(), because the pass condition is a STATUS (404) and
-  // probe() reads no body on a non-200 — it would report "ok" for a 500.
-  {
+  if (isCustomer) {
+    // The other half of the /onboarding guard: a session is required. `anon`
+    // with `expectBounce` is the pass condition here, unlike the /t routes.
+    await probe(ONBOARDING_ANON, { anon: true, expectBounce: true })
+
+    // Batch 10. Anonymous by definition — these must render with NO session, in
+    // both normal and --blocked mode, so they are never given `expectBounce`.
+    console.log('\n  — public tracking links (logged out, isolation asserted) —')
+    for (const [route, expected] of Object.entries(PUBLIC_TRACK_ROUTES)) {
+      await probe(route, { anon: true, ...expected })
+    }
+
+    // A well-formed token that matches no pickup. Checked with a bare fetch
+    // rather than probe(), because the pass condition is a STATUS (404) and
+    // probe() reads no body on a non-200 — it would report "ok" for a 500.
     const r = await fetch(`${BASE}${PUBLIC_TRACK_UNKNOWN}`, { redirect: 'manual' })
     const ok = r.status === 404
     if (!ok) failures++
@@ -657,16 +816,19 @@ async function main() {
   }
 
   const total =
-    ROUTES.length +
-    Object.keys(APP_REJECTS).length +
-    DOCUMENT_ROUTES.length +
-    DOCUMENT_REJECTS.length +
-    Object.keys(EXPORT_ROUTES).length +
-    1 + // EXPORT_EMPTY
-    PUBLIC_ROUTES.length +
-    1 + // ONBOARDING_ANON
-    Object.keys(PUBLIC_TRACK_ROUTES).length +
-    1 // PUBLIC_TRACK_UNKNOWN
+    cfg.routes.length +
+    cfg.publicRoutes.length +
+    (isCustomer
+      ? Object.keys(APP_REJECTS).length +
+        Object.keys(OFFER_SURVIVED_GET).length +
+        DOCUMENT_ROUTES.length +
+        DOCUMENT_REJECTS.length +
+        Object.keys(EXPORT_ROUTES).length +
+        1 + // EXPORT_EMPTY
+        1 + // ONBOARDING_ANON
+        Object.keys(PUBLIC_TRACK_ROUTES).length +
+        1 // PUBLIC_TRACK_UNKNOWN
+      : 0)
   console.log(
     failures === 0
       ? `\nAll ${total} routes behaved as expected.\n`

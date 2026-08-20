@@ -18,7 +18,8 @@ monorepo** (migrated 2026-08-09):
 1. **Customer / Vendor app** — `apps/customer` — **built + deployed** (revamp
    merged to `main` 2026-08-15)
 2. **Field Agent app** — `apps/agent` — **CURRENT SPRINT** (one week, from
-   2026-08-20)
+   2026-08-20). Batch 0b (scaffold + role-gated auth) landed 2026-08-20; it runs
+   on **port 3001** (`npm run dev:agent`).
 3. **Admin dashboard** — `apps/admin` — scaffolded, built last
 
 ```
@@ -81,10 +82,17 @@ Headlines you need even if you read nothing else:
   static Leaflet map, Google Maps deep link.
 - **Agents do not self-sign-up** (D6). Login only; accounts come from the seed.
 
-**The agent app's auth guard is `apps/agent/src/proxy.ts`**, exporting `proxy`,
-with `allowRoles: ['agent']`. Same rule as the customer app: **it must stay
-under `src/`** — Next's dev bundler silently never registers it at the project
-root when `src/app` is in use, and an unregistered auth guard fails **OPEN**.
+**The agent app's auth guard is `apps/agent/src/proxy.ts`** (live since Batch
+0b), exporting `proxy`, with `allowRoles: ['agent']` and no `onboardingPath`
+(D6). Same rule as the customer app: **it must stay under `src/`** — Next's dev
+bundler silently never registers it at the project root when `src/app` is in
+use, and an unregistered auth guard fails **OPEN**.
+
+**Every agent screen must pass `hideNav` to `AppShell`.** `apps/agent/src/app/(agent)/layout.tsx`
+renders the agent's own `<AgentTabBar />` and owns the clearance under it;
+`AppShell`'s built-in bar is the *customer's*. A screen that forgets `hideNav`
+renders two navs, and a screen that adds its own bottom padding double-pads.
+`npm run smoke` fails on anything but exactly one `aria-label="Main navigation"`.
 
 **Status lifecycle (locked contract):**
 `requested → scheduled → arrived → offered → collected → tested → processed →
@@ -200,10 +208,18 @@ See "Stub-data pattern" below.
 All commands run from the **repo root** (turbo fans them out to the workspaces).
 
 ```bash
-npm run dev          # Customer app dev server
+npm run dev          # Customer app dev server  (:3000)
+npm run dev:agent    # Field Agent app dev server (:3001) — both can run at once
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
 npm run test         # All tests (Vitest) — currently 142
+
+# Logged-in route check. `npm run build` never renders a page with a session, so
+# this is what catches a server component that throws at request time.
+npm run smoke                                                     # customer, as business@test
+npm run smoke -- --app=agent                                      # agent, as agent@test
+npm run smoke -- --app=agent --blocked business@test businesstest # role gate, both
+npm run smoke -- --blocked agent@test demo1234                    # directions
 
 # Run a single test file (from the owning package)
 cd packages/core && npx vitest run src/booking.test.ts
@@ -219,8 +235,11 @@ cd packages/database
 npx prisma db execute --file ../../supabase/policies.sql --schema prisma/schema.prisma
 ```
 
-**Env files:** `apps/customer/.env.local` (Supabase URL + keys, DB URLs) and
-`packages/database/.env` (DB URLs only). Both gitignored.
+**Env files:** `apps/customer/.env.local`, `apps/agent/.env.local` (Supabase URL
++ keys, DB URLs — the two apps read the *same* Supabase project; they are
+separated by `profiles.role` at the proxy, not by project) and
+`packages/database/.env` (DB URLs only). All gitignored; `.env.example` next to
+each holds the key names.
 
 ## Stack
 

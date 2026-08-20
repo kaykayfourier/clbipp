@@ -42,8 +42,9 @@ next-env.d.ts
 
 # prisma generated client (explicit generator output)
 packages/database/src/generated/
-# the query engine copied in by apps/customer's prebuild step
+# the query engine copied in by each app's prebuild step
 apps/customer/src/generated/
+apps/agent/src/generated/
 
 CLAUDE.local.md
 post-review.md

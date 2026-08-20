@@ -5,9 +5,9 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-20 — **Field Agent app sprint opened**; see the
-▶ READ FIRST section below. Everything under "Historical" describes the
-customer app and is kept for the record.
+**Last updated:** 2026-08-20 — **Field Agent app sprint opened, and Batch 0b
+(scaffold + auth gate) is done**; see the ▶ READ FIRST section below. Everything
+under "Historical" describes the customer app and is kept for the record.
 
 Prior entry (2026-08-10): (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
 + 8 + 9 + 10 + 11 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
@@ -64,10 +64,15 @@ the `.md` files are the source of truth.
   Khalid's, on his GitHub-synced Vercel project; runbook is
   `HANDOVER_KHALID_2026-08-12.md`. **Batch 13 — the full-app scan — is still
   open** and has been deferred to after all three apps exist.
-- **Field Agent app: nothing built yet.** `apps/agent` is a bare scaffold
-  (`layout.tsx` + `page.tsx`). The foundation it will use — monorepo, schema v2,
-  auth + role gate, `@clbipp/ui`, `packages/pdf`, `npm run smoke`, and an
-  `agent@test` user already seeded with `role: 'agent'` — is all in place.
+- **Field Agent app: Batch 0b done (2026-08-20), on `feat/agent-b0b-scaffold`.**
+  `apps/agent` is now a real app — Tailwind, ESLint, Prisma-engine prebuild, its
+  own `.env.local`, dev on **:3001** via `npm run dev:agent` — with a role-gated
+  `src/proxy.ts`, an email+password login, an agent-specific bottom nav, and a
+  stub for all 22 §2 routes plus `/login`. `scripts/smoke.mjs` takes `--app=agent`.
+  **C's Batch 3 is unblocked.** Details and traps: "Batch 0b — as built" at the
+  bottom of `FIELD_AGENT_TASKS.md`.
+- **Batch 0a (Khalid) is the only thing now blocking Batch 1.** Every agent
+  screen is a stub that queries nothing, so nothing has real data yet.
 - **Admin app: untouched.** Not this sprint.
 
 ### Lanes — reverted, all three available
@@ -83,19 +88,41 @@ Logged in `LANE_OWNERSHIP.md`. Ownership is back to the `CLAUDE.md` map:
 
 ### A's next action
 
-**Batch 0b — app scaffold + auth gate.** Full steps in `FIELD_AGENT_TASKS.md`.
-In short: `apps/agent` config mirroring `apps/customer`, `src/proxy.ts` with
-`allowRoles: ['agent']` and no `onboardingPath`, an `(agent)` layout that owns
-bottom-nav clearance, an email+password login, stub pages for every §2 route,
-and the agent app wired into `scripts/smoke.mjs`.
+**Batch 1 — day view + job detail.** Steps in `FIELD_AGENT_TASKS.md`.
+Replaces the `/` and `/job/[id]` stubs with real screens: assigned jobs, the
+three home stats (Assigned / Collected / Earned today), and the job detail with
+Google Maps + `tel:` + the **Arrived** action that writes `scheduled → arrived`.
 
-- **Runs in parallel with B's Batch 0a** — neither blocks the other.
-- 🔴 `proxy.ts` must live at `apps/agent/src/proxy.ts`, never the project root:
-  Next's dev bundler silently skips a root-level guard when `src/app` is in use,
-  and an unregistered auth guard fails **OPEN**.
-- Done when `npm run build` shows `ƒ Proxy (Middleware)` for the agent app,
-  `agent@test` lands on `/`, `business@test` is signed out of it, and
-  `npm run smoke` is green.
+- 🔴 **Blocked on Khalid's Batch 0a.** Batch 1 is the first agent screen that
+  reads data; until 0a assigns `agentId` on the seeded pickups there is nothing
+  to render and the smoke ids are placeholders. Nothing else in A's lane is
+  blocked — Batch 2 (safety checklist) needs the `SafetyChecklist` write, also 0a.
+- Before writing the screen, read **"Batch 0b — as built"** at the bottom of
+  `FIELD_AGENT_TASKS.md`. The two that will bite: every `(agent)` screen must
+  pass `hideNav` to `AppShell` and add no bottom padding, and the agent smoke
+  pickup ids need re-pointing at whatever 0a actually seeds.
+- Lifecycle writes use the pattern in
+  `apps/customer/src/app/(app)/handover/actions.ts`: `"use server"` +
+  `createAdminClient()` + re-verify `pickup.agentId === user.id` **in code**,
+  because the service role bypasses RLS.
+
+**Verification commands, now that there are two apps:**
+
+```bash
+npm run dev          # customer, :3000
+npm run dev:agent    # agent,    :3001
+npm run smoke                                                     # customer, 45/45
+npm run smoke -- --app=agent                                      # agent
+npm run smoke -- --app=agent --blocked business@test businesstest # vendor barred from agent app
+npm run smoke -- --blocked agent@test demo1234                    # agent barred from customer app
+```
+
+The last two are the role gate in both directions. Both were green on 2026-08-20.
+
+⚠ If smoke reports `BOUNCED TO LOGIN` on routes you believe are fine, check the
+dev-server log for `getaddrinfo ENOTFOUND` first. `getUser()` in the shared
+middleware fails closed on a network error — deliberately, and now commented
+there. It is not a guard bug.
 
 ### Decisions that are settled — do not re-litigate
 

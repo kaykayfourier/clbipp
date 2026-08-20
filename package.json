@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "turbo run dev --filter=customer",
+    "dev:agent": "turbo run dev --filter=agent",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
