@@ -428,7 +428,17 @@ const AGENT_ROUTES = [
 // entry with real screen content as its batch lands — a stub heading is a weak
 // assertion and is meant to be temporary.
 const AGENT_APP_CONTENT = {
-  '/': ['Today'],
+  // Batch 1 — real screens now. The seeded pickup id is the load-bearing
+  // assertion on both: it only renders if the agent-scoped Prisma read ran and
+  // returned this agent's own rows, so a broken query fails here rather than
+  // passing on a layout that rendered an empty list.
+  '/': ['Assigned today', 'Collected today', 'Earned today', AGENT_PICKUP],
+  [`/job/${AGENT_PICKUP}`]: [
+    'Open in Google Maps',
+    'Arrived on site',
+    'Your fee for this job',
+    'Declared load',
+  ],
   '/pickups': ['My pickups'],
   '/history': ['History'],
   '/profile': ['Profile'],

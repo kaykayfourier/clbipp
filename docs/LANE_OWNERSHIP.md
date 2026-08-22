@@ -40,6 +40,40 @@ Still true:
 
 ## Change log
 
+### 2026-08-22 — Batch 1 (day view + job detail) — A, in lane, one seed edit taken
+
+- **In lane, no shift:** `apps/agent/src/app/(agent)/page.tsx`,
+  `job/[id]/page.tsx`, `job/[id]/actions.ts`, `src/lib/job-nav.ts`. A owns the
+  agent nav shell, job detail and the cross-app seam.
+- **Taken from B:** two lines of `packages/database/prisma/reset-demo.ts` — the
+  agent's live jobs (`scheduled` / `arrived`) now get a `scheduledSlot` of
+  *today*, and the one `collected` pickup moved from `daysAgo: 6` to `4` so its
+  `collected` status event lands today.
+  - **Why:** the day view's three stats are date-bounded to today, per §2 of the
+    plan. With the old fixture dates nothing was dated today at all, so a fresh
+    seed rendered `0 / 0 / ₹0` — a home screen that looks broken rather than
+    quiet. Two numbers were cheaper than reinterpreting the spec's stat labels.
+  - **Blast radius checked:** `npm run smoke` is 45/45 against the customer
+    production build both before and after, so no customer screen depends on
+    those dates.
+  - **Khalid:** the `agentFee` seed placeholder is still a flat 10%. Your Batch 4
+    D3 rule replaces it and **will move the "Earned today" number** on the
+    agent's home screen — that is the silent-economics-drift case, so say so in
+    the commit.
+- **Deferred, not dropped:** the wireframe's offline banner on the day view. It
+  has nothing to read until the PWA/offline queue exists — it belongs to Batch 8,
+  which is also A's.
+
+🔴 **Found while verifying, unrelated to this batch:** `npm run smoke` reports 3
+failures against `npm run dev` (`/api/documents/{certificate,receipt,invoice}/…`
+return Next's own HTML 404 instead of a PDF) but is **45/45 against the
+production build** (`next build` then `next start`). It reproduces at clean
+`HEAD` with this batch stashed, so it is not Batch 1's, and the deployed app is
+unaffected. It looks like Turbopack dev not matching the doubly-nested dynamic
+API route `api/documents/[kind]/[id]`. **Owner: Khalid (PDF templates + deploy).**
+Until it's understood, smoke the customer app against a production build before
+pushing, not against `npm run dev`.
+
 ### 2026-08-21 — Batch 0a EXECUTED by A, plus three things taken on the way
 
 Follow-up to the 2026-08-20 entry below, which reassigned Batch 0a from Khalid

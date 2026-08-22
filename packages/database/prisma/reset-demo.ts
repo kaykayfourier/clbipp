@@ -454,7 +454,13 @@ const PICKUPS: PickupSpec[] = [
     status: "collected",
     category: "industrial",
     location: "Noida Sector 62, UP",
-    daysAgo: 6,
+    // 4, not 6, so this pickup's `collected` status event lands on day(0) —
+    // TODAY. Event dates are derived as day(daysAgo - i) over the stage list,
+    // so for a 5-stage `collected` pickup 4 is the smallest value that keeps
+    // every event non-future. This is the row behind the agent day view's
+    // "Collected today" and "Earned today" (Batch 1); drop it back to 6 and
+    // both stats read zero again.
+    daysAgo: 4,
     items: [
       { category: "industrial", quantity: 6, weightKg: 240, condition: "healthy", chemistry: "lead_acid" },
       { category: "industrial", quantity: 3, weightKg: 120, condition: "swollen", chemistry: "lead_acid" },
@@ -728,7 +734,18 @@ async function seed() {
         // Null on `collected` is the derived "pending drop-off" state (D5).
         custodyBatchId: DROPPED_OFF.includes(spec.status) ? CUSTODY_BATCH_ID : null,
         conditionFlags: [...new Set(spec.items.map((i) => i.condition))],
-        scheduledSlot: hasAgent ? day(spec.daysAgo - 1) : null,
+        // The agent's LIVE jobs sit on today's slate; everything past `offered`
+        // keeps its historical slot. This is what makes the Field Agent day
+        // view's "Assigned today" non-zero on a fresh seed (Batch 1) — and it
+        // is also just true: a job you are scheduled for, or standing at, is
+        // today's work. Without it every seeded slot is at least a day old and
+        // the agent's home screen reads 0 / 0 / ₹0, which looks broken rather
+        // than quiet.
+        scheduledSlot: hasAgent
+          ? spec.status === "scheduled" || spec.status === "arrived"
+            ? day(0)
+            : day(spec.daysAgo - 1)
+          : null,
         etaMinutes: spec.status === "scheduled" ? 45 : null,
         preferredDate: day(spec.daysAgo - 1),
         createdAt: day(spec.daysAgo),

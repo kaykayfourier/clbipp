@@ -1,0 +1,103 @@
+import type { PickupStatus } from '@clbipp/database'
+import { isStageBefore } from '@clbipp/ui'
+
+// ─── Where an agent's job row goes, and what it says ─────────────────────────
+// The agent-side mirror of apps/customer/src/lib/pickup-nav.ts, and it exists
+// for the same reason: /  (day view) and /pickups (Batch 8) are two lists of the
+// SAME rows, and two lists that route differently — or describe the same job
+// differently — is a drift bug waiting to happen.
+//
+// This lives in the app rather than @clbipp/ui because it is app ROUTING: the UI
+// package knows what a status is, not what URL it means in this app. The
+// customer app maps the identical statuses onto completely different screens.
+//
+// ⚠ Never re-declare the stage list here or in a screen. `isStageBefore` from
+// @clbipp/ui is the one source of order (CLAUDE.md, and PickupStatus in
+// schema.prisma is the enum it must agree with).
+
+/** The minimum a row needs to describe itself on the day view. */
+export type JobRowLike = {
+  id: string
+  status: PickupStatus
+  custodyBatchId: string | null
+  vendor: { fullName: string }
+  _count: { items: number }
+}
+
+/**
+ * Status-routed destination for one of the agent's jobs.
+ *
+ * The rule is "where does this job want me next", not "show me this job":
+ *
+ * - `scheduled` — nothing has happened yet. Job detail, where **Arrived** is.
+ * - `arrived` — on site. Straight to the safety checklist, which is the
+ *   mandatory gate in front of intake (W1/Batch 2). Deliberately NOT the items
+ *   screen: routing past the gate would make the row a way around it.
+ * - `offered` — the quote is with the vendor; the offer screen is the one that
+ *   shows its state.
+ * - `collected` with no `custodyBatchId` — the derived "pending drop-off" state
+ *   (D5 — it is NOT a tenth lifecycle stage), so the next action is the hub
+ *   drop-off flow.
+ * - everything else — the agent's part is done; watch-only tracking.
+ *
+ * `requested` never reaches here in practice (no `agentId` is set until a
+ * pickup is scheduled) but falls through to tracking rather than 404ing.
+ */
+export function jobHref(
+  status: PickupStatus,
+  custodyBatchId: string | null,
+  id: string,
+): string {
+  if (status === 'scheduled') return `/job/${id}`
+  if (status === 'arrived') return `/job/${id}/safety`
+  if (status === 'offered') return `/job/${id}/offer`
+  if (status === 'collected' && custodyBatchId === null) return '/dropoff'
+  return `/pickups/${id}`
+}
+
+/**
+ * True while the job still needs something from the agent.
+ *
+ * Drives which list a row lands in on the day view. Derived from `isStageBefore`
+ * rather than a hard-coded set so that a future stage can't leave a job in
+ * neither list — the mistake the customer app's history filters were written to
+ * avoid.
+ *
+ * A `collected` job is still active *only* until it is dropped off: once it has
+ * a `custodyBatchId` the chain of custody has moved on and the agent is just
+ * watching. `cancelled` is off the linear lifecycle, so `isStageBefore` returns
+ * false for it and it correctly reads as inactive.
+ */
+export function isActiveJob(status: PickupStatus, custodyBatchId: string | null): boolean {
+  if (status === 'collected') return custodyBatchId === null
+  return isStageBefore(status, 'collected')
+}
+
+/**
+ * Row subtitle: who it's for, and how big it is.
+ *
+ * The vendor's name leads because that is what an agent is actually looking for
+ * in a list of their own jobs — the pickup id is already the row's title.
+ */
+export function jobSubtitle(job: JobRowLike): string {
+  const lines = job._count.items
+  if (lines === 0) return job.vendor.fullName
+  return `${job.vendor.fullName} · ${lines} line${lines === 1 ? '' : 's'}`
+}
+
+/**
+ * The row's one-line "what happens next", paired with `jobHref` above.
+ *
+ * Phrased as the agent's next action rather than as a status name — the
+ * StatusBadge next to it already says the status, so repeating it would waste
+ * the line. "Resume" on `arrived` is what the wireframe drew as a resumable
+ * *draft* row; the draft is derived from the lifecycle (D5), not a stored state.
+ */
+export function jobNextStep(status: PickupStatus, custodyBatchId: string | null): string {
+  if (status === 'scheduled') return 'Head over and tap Arrived'
+  if (status === 'arrived') return 'Resume — safety checklist, then intake'
+  if (status === 'offered') return 'Awaiting the vendor’s decision'
+  if (status === 'collected' && custodyBatchId === null) return 'Pending drop-off at the hub'
+  if (status === 'cancelled') return 'Cancelled'
+  return 'In recovery — nothing to do'
+}

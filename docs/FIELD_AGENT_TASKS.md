@@ -232,7 +232,18 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 1 — Day view + job detail · **Aamir** · ~0.75d
+## Batch 1 — Day view + job detail · **Aamir** · ~0.75d ✅ DONE 2026-08-22
+
+> Shipped to `main`. Verified: `npm run build` green (agent app still prints
+> `ƒ Proxy (Middleware)`); lint clean; **154 tests pass** (142 + Batch 4's 12);
+> `npm run smoke -- --app=agent` **23/23** with real content assertions on both
+> new screens; `npm run smoke` **45/45 against the customer production build**;
+> and 12 scripted checks over the `Arrived` write, its idempotency and its
+> ownership guard — including a **forged `pickupId`**, which is turned away.
+>
+> ⚠ **Read "Batch 1 — as built" at the bottom of this file before Batch 2 or
+> Batch 3.** One seed edit, one deferred wireframe element, and a live
+> dev-server-only smoke failure that is NOT this batch's.
 
 **Depends on:** 0a + 0b.
 
@@ -904,3 +915,96 @@ keep the column defaults — this is demo-only.
 5. **The `prisma db execute` route can't print query results**, so the RLS and
    seed assertions were run through a throwaway `tsx` script (not committed).
    Re-create it from the "Done when" list if you need to re-verify.
+
+---
+
+## Batch 1 — as built (2026-08-22, Aamir)
+
+Read this before Batch 2 (A) and Batch 3 (C). The batch shipped as specified;
+below are the deviations, the pattern C is meant to copy, and one live issue
+that belongs to someone else.
+
+### What exists now
+
+| Thing | Where |
+|---|---|
+| Day view | `apps/agent/src/app/(agent)/page.tsx` |
+| Job detail | `apps/agent/src/app/(agent)/job/[id]/page.tsx` |
+| `scheduled → arrived` | `apps/agent/src/app/(agent)/job/[id]/actions.ts` |
+| Row → destination routing | `apps/agent/src/lib/job-nav.ts` |
+| Content assertions | `scripts/smoke.mjs` → `AGENT_APP_CONTENT` |
+
+### 📌 `actions.ts` is the pattern — copy it, don't reinvent it
+
+C's Batch 3 and every later agent write should copy the shape of
+`markArrived` / `markArrivedAndContinue`. Four things make it the shape:
+
+1. **Caller identity comes from the session**, never from the form. A form field
+   is attacker-controlled; using it would make the ownership check compare the
+   request against itself.
+2. **The write uses `createAdminClient()`** — there are no agent-scoped RLS
+   policies on `pickups`, and only the service role may write `status_events`
+   (D10).
+3. **Therefore the action re-verifies `agent_id === user.id` itself.** That line
+   is standing in for a policy. This is verified adversarially, not just by
+   reading it: a POST carrying another pickup's id, using an action id harvested
+   from a job the agent *does* own, is turned away with
+   `This job is not assigned to you.` and writes nothing.
+4. **Status and event are written together.** `pickups.status` is a denormalised
+   cache of the event log; drift is invisible until a timeline renders wrong.
+
+Plus: it is a **POST form action, not a `<Link>`**, and it is **idempotent** —
+a re-tap re-runs the whole thing, writes no duplicate event, doesn't go
+backwards, and still routes onward. A field agent on one bar of signal taps
+twice; that must not be an error.
+
+### Deviations from the plan
+
+1. **The wireframe's offline banner is deferred to Batch 8.** It has nothing to
+   read until the PWA/offline queue exists, and a hard-coded "2 items queued"
+   would be a lie on the screen. A `TODO (Batch 8)` marks the spot.
+2. **The "resumable draft" row is derived, not stored** (D5). An `arrived` job
+   *is* the resumable one; `jobNextStep()` labels it "Resume — safety checklist,
+   then intake" and `jobHref()` routes it to `/job/[id]/safety`. Real per-item
+   draft state arrives with C's Batch 3.
+3. **Two lines of `reset-demo.ts` were edited** (B's file — logged in
+   `LANE_OWNERSHIP.md`). The stats are date-bounded to today, and no seeded row
+   was dated today, so a fresh seed rendered `0 / 0 / ₹0`. Now: the agent's live
+   jobs get a `scheduledSlot` of today, and the one `collected` pickup moved to
+   `daysAgo: 4` so its `collected` event lands today.
+   ⚠ **`daysAgo: 4` is a floor, not a preference.** Event dates are derived as
+   `day(daysAgo - i)` over the stage list, so anything lower future-dates that
+   pickup's own events.
+
+### 🔴 Not this batch's, but it will bite you
+
+`npm run smoke` reports **3 failures against `npm run dev`** — the three
+`/api/documents/{certificate,receipt,invoice}/…` routes return Next's own HTML
+404 instead of a PDF. It is **45/45 against the production build**
+(`npm run build`, then `npx next start` in `apps/customer`), and it reproduces
+at clean `HEAD` with this batch stashed. Almost certainly Turbopack dev failing
+to match the doubly-nested dynamic API route `api/documents/[kind]/[id]`.
+
+**Until it's understood, smoke the customer app against a production build
+before pushing.** Owner: Khalid (PDF templates + deploy).
+
+### For Batch 2 — the chemistry problem is still open
+
+Batch 0a flagged that `BatteryItem` has `category` but **no chemistry** on the
+customer-declared half, so "show lithium items only when the pickup has a li-ion
+item" can't be answered from declared data. Batch 1 changed nothing here — job
+detail renders `category` and `condition` only. **Still the first decision of
+Batch 2.**
+
+Job detail already reads `pickup.safetyChecklist` and renders a completed-state
+banner plus a "Continue to intake" button when `passed` is true, so Batch 2 only
+has to write the row — the job screen's half of step 4 is done.
+
+### Verification worth re-running
+
+`packages/database/prisma/verify-batch1.ts` was written for the "Done when" list
+and is **not committed** (same convention as Batch 0a's assertion script). It
+logs in as `agent@test`, harvests the server-action id from the job page, drives
+`Arrived` over HTTP, and asserts the write, the idempotency and the ownership
+guard — then restores `PKP-2026-000102` to `scheduled` so it is re-runnable.
+Recreate it from the checklist above if you need it.
