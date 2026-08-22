@@ -286,7 +286,20 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 2 — Safety checklist · **Aamir** · ~0.5d
+## Batch 2 — Safety checklist · **Aamir** · ~0.5d ✅ DONE 2026-08-23
+
+> Shipped to `main`. Verified: `npm run build` green (agent app still prints
+> `ƒ Proxy (Middleware)`); lint clean; **174 tests pass** (154 + 20 new in
+> `packages/core/src/safety.test.ts`); `npm run smoke -- --app=agent` **25/25**
+> with the gate asserted in BOTH directions; `npm run smoke` **45/45 against the
+> customer production build**; role gate holds both ways (**25/25** and
+> **45/45**); and 15 scripted checks over the gate, the failed-checklist record,
+> the upsert and a **forged `pickupId`**, which is turned away.
+>
+> ⚠ **Read "Batch 2 — as built" at the bottom of this file before Batch 3.** One
+> real bug found (Prisma `@default(uuid())` does NOT apply on a service-role
+> write), one line Ali must not delete from `items/page.tsx`, and a seed change
+> that unblocks Batch 3.
 
 **Depends on:** 1. **This is the feature HR looks for first (W1).**
 
@@ -1008,3 +1021,192 @@ logs in as `agent@test`, harvests the server-action id from the job page, drives
 `Arrived` over HTTP, and asserts the write, the idempotency and the ownership
 guard — then restores `PKP-2026-000102` to `scheduled` so it is re-runnable.
 Recreate it from the checklist above if you need it.
+
+---
+
+## Batch 2 — as built (2026-08-23, Aamir)
+
+Read this before Batch 3 (C). The batch shipped as specified; below are the one
+real bug it uncovered, the line that must survive Ali's rewrite, the deviations,
+and what is deliberately left for later.
+
+### What exists now
+
+| Thing | Where |
+|---|---|
+| Checklist catalogue + rules (pure, tested) | `packages/core/src/safety.ts` |
+| 20 tests | `packages/core/src/safety.test.ts` |
+| Checklist screen | `apps/agent/src/app/(agent)/job/[id]/safety/page.tsx` |
+| The form (client, lithium toggle only) | `…/safety/SafetyChecklistForm.tsx` |
+| The write | `…/safety/actions.ts` |
+| 🔴 **The intake gate** | `apps/agent/src/lib/safety-gate.ts` |
+| Seeded passing checklists (`arrived`+) | `packages/database/prisma/reset-demo.ts` |
+| Gate asserted both directions | `scripts/smoke.mjs` → `AGENT_ITEMS_GATE` |
+
+### 🔴 ALI — one line in your file must survive Batch 3
+
+`apps/agent/src/app/(agent)/job/[id]/items/page.tsx` now calls:
+
+```ts
+await requireSafetyChecklist(id, user.id)
+```
+
+That call **is** the mandatory gate. Everything else about this feature is
+presentation. Delete it and intake silently stops being gated: every screen
+still works, the checklist still saves, and the only change is that an agent can
+start handling batteries without confirming it is safe to.
+
+It also enforces ownership and **throws** rather than returning a boolean, so
+once it has run you may treat the pickup as this agent's — you don't need a
+separate check. There is a long comment block at the top of that file and the
+full rationale in `safety-gate.ts`.
+
+**Extend it to your other screens.** `/items/[itemId]`, `/damage`, `/scan` and
+`/collect` are all downstream of the gate and none of them call it yet — this
+batch only wired the entry point. One indexed read each.
+
+`scripts/smoke.mjs` fails if the gate goes missing from `/items`, but note the
+📌 **BATCH 3 MAINTENANCE** comment next to `AGENT_ITEMS_GATE`: its two assertion
+strings come from the stub you are about to replace, and must be swapped for
+text only your built screen renders — otherwise it passes by asserting the
+absence of text that no longer exists anywhere (the Batch 10 vacuous-assertion
+lesson).
+
+### 🔴 The bug this batch found — it will bite Batches 3, 5b, 6 and 7a
+
+**Prisma's `@default(uuid())` does not apply to a service-role write.**
+
+`SafetyChecklist.id` is `@id @default(uuid())` in `schema.prisma`, but the
+migration created the column as plain `TEXT NOT NULL` with **no database
+default**. That default is applied by the *Prisma client*. Agent actions write
+through `createAdminClient()` (Supabase/PostgREST), which never goes near
+Prisma — so the insert failed with:
+
+```
+null value in column "id" of relation "safety_checklists" violates not-null constraint
+```
+
+The id is now generated in the action with `crypto.randomUUID()`.
+
+⚠ **Batch 1's `status_events` insert gets away with omitting its id only because
+that column is `BIGSERIAL` — a real database default. Do not generalise from
+it.** Every uuid-keyed table written through the service role needs the id
+supplied in code. Check the migration, not `schema.prisma`.
+
+### Design decisions taken
+
+1. **The chemistry problem is resolved by asking the agent.** `BatteryItem.chemistry`
+   is in the agent-confirmed half of the model and is null until intake — the
+   screen this one gates — so the plan's "show lithium items only when the pickup
+   has a li-ion item" names a field that cannot be read at this point in the
+   flow. The screen asks instead, defaulting the toggle from the declared
+   category and recording `lithiumBasis` in the row so the audit trail says
+   which it was.
+
+   **The five HR-named items are unconditionally required.** Nothing the agent
+   or a heuristic does can remove one — the conditional logic only ever *adds*.
+   That direction is the whole safety argument, and `safety.test.ts` asserts it
+   across every flag combination.
+
+   ⚠ `lithiumLikelyFromCategories` is a **denylist** (`automotive` is the only
+   assumed-lead-acid category), not an allowlist. Written the other way, an
+   unrecognised category — a new enum value, a typo — would read as "no lithium"
+   and silently drop the fire-safety items. This was caught by a test during the
+   batch, having been written wrong the first time.
+
+2. **A failing checklist is recorded, not discarded.** `passed: false` is
+   written, intake stays blocked, and the agent gets the outstanding items back
+   with their previous ticks pre-filled. A compliance checklist whose whole
+   purpose is finding hazards should not throw away the finding.
+
+3. **A third, condition-derived item** (`damagedUnitsContained`) appears when the
+   customer declared a `swollen` or `leaking` line. Unlike `chemistry`,
+   `condition` *is* customer-declared and reliable here. `PKP-2026-000102` has a
+   leaking line, so the demo exercises it.
+
+4. **The safety screen is NOT gated on `arrived`** — ownership is checked, the
+   stage is not. Filling a checklist writes no lifecycle state, and a stage gate
+   would trap an agent who tapped back out of intake.
+
+5. **No `status_events` row and no lifecycle transition.** A safety checklist is
+   not a stage; the nine are locked. It gates intake by its existence.
+
+### Deviations from the plan
+
+1. **A third file was added** — `packages/core/src/safety.ts` + tests, against
+   the task sheet's two-file list. Agreed before starting. The pass/fail rule is
+   the thing most worth testing, apps hold no tests, and the admin app and Batch
+   7b's PDF will need to describe a checklist they didn't render.
+2. **Two cross-lane edits**, both logged in `docs/LANE_OWNERSHIP.md`: one line in
+   Ali's `items/page.tsx` (the gate — the task sheet's step 3 puts it there), and
+   a seed block in Khalid's `reset-demo.ts`.
+3. **`packages/database` restates the checklist JSON shape** rather than
+   importing it, because it must not depend on `packages/core` (the cycle breaks
+   the generated client) — the same restatement the CO₂e factors already live
+   with. Batch 9's verification is where the two should be compared.
+
+### Seed change — this one unblocks Ali
+
+Every pickup at `arrived` or beyond now gets a **passing** `SafetyChecklist`,
+because the lifecycle implies it: the check is mandatory before any battery is
+handled, so a pickup that got assessed necessarily passed one.
+
+⚠ **`PKP-2026-000102` deliberately gets none.** It is the `scheduled` intake demo
+job, it must arrive at the checklist un-done, and it is what smoke asserts the
+gate rejects. **`PKP-2026-000103` is the paired admit case** — it has a passing
+row, so `/job/PKP-2026-000103/items` renders and **Batch 3 has a job past the
+gate to build against.** Without it, every intake route Ali builds would redirect
+away.
+
+### ⚠ Wording provenance — needs HR confirmation
+
+The five always-required items are HR-named. The three conditional ones
+(`lithiumStateOfCharge`, `lithiumDamagedCellsIsolated`, `damagedUnitsContained`)
+are **our wording** — defensible battery-handling practice, but not quoted from
+anything the company sent. Same standing as the placeholder factors in
+`packages/core/src/impact.ts`; the file header says so. **Add to the open
+questions in `COMPANY_FLOW_REVIEW_2026-08-07.md`.** Their answer is a text change
+in one file.
+
+### Deliberately not in this batch
+
+- **Hazard escalation.** A failed checklist blocks this agent but notifies
+  nobody — there is no admin surface to send it to. `TODO` in `actions.ts`.
+  Pairs with the plan's existing note that the HOLD verdict's "Escalate to
+  admin" must also do something (Batch 5a).
+- **Photo evidence on the checklist** — HR doesn't ask for it; camera work lands
+  with Batch 6.
+- **`Profile.safetyTrainedAt`** read-only display — Batch 8 (D6).
+- **Gating the downstream intake screens** — see the Ali note above.
+
+### Testing notes for the end-of-sprint manual pass
+
+Everything below is verified programmatically already; these are the things
+worth *looking at* on a real phone when the app is finished.
+
+1. `/job/PKP-2026-000102/safety` — the lithium toggle. Tap No; the two li-ion
+   rows disappear and the five HR rows stay. Tap Yes; they come back.
+2. Submit with two items ticked. Check the red banner names exactly what is
+   outstanding, and that the two you ticked are still ticked.
+3. Complete it. You land on `/items`. Go back to `/safety` — it should show the
+   completed state with "Redo the checklist" collapsed, not a blank form.
+4. Type `/job/PKP-2026-000102/items` into the URL bar before completing the
+   checklist. It must bounce to `/safety`.
+5. Checkbox tap targets with gloves on — rows are 44px, but worth a real check.
+6. `/job/PKP-2026-000103/safety` — the seeded completed state.
+
+### Verification worth re-running
+
+`packages/database/prisma/verify-batch2.ts` was written for the "Done when" list
+and is **not committed** (same convention as Batches 0a and 1). It drove all 15
+checks over HTTP as `agent@test` and restored `PKP-2026-000102` afterwards.
+
+📌 **If you recreate it — or write one for your own batch — the server-action
+POST must be `multipart/form-data`.** The rendered form is
+`encType="multipart/form-data"`, and that is the only encoding Next's no-JS
+progressive-enhancement path parses the `$ACTION_ID_<id>` field out of. A
+urlencoded body is **silently ignored**: the POST returns 200 with the page
+re-rendered and writes nothing, which looks exactly like a broken action. Adding
+a `Next-Action` header instead switches Next to the JS-driven RSC protocol, which
+wants a different body again. Pass a `FormData` to `fetch` and let it set the
+boundary. This cost ~20 minutes.

@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./format": "./src/documents.ts",
-    "./market": "./src/market.ts"
+    "./market": "./src/market.ts",
+    "./safety": "./src/safety.ts"
   },
   "scripts": {
     "test": "vitest run"

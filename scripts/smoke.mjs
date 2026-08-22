@@ -399,6 +399,12 @@ const AGENT_ROUTES = [
   // B. Job → arrival
   `/job/${AGENT_PICKUP}`,
   `/job/${AGENT_PICKUP}/safety`,
+  // Batch 2 — the safety gate's ADMIT path. 103 is seeded WITH a passing
+  // checklist and 102 deliberately without, so these two routes and the pair
+  // below are the gate asserted in both directions. A gate only ever asserted
+  // to reject is indistinguishable from a gate that rejects everything.
+  `/job/${AGENT_ARRIVED}/safety`,
+  `/job/${AGENT_ARRIVED}/items`,
   // C. Intake & assessment
   `/job/${AGENT_PICKUP}/items`,
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}`,
@@ -442,10 +448,57 @@ const AGENT_APP_CONTENT = {
   '/pickups': ['My pickups'],
   '/history': ['History'],
   '/profile': ['Profile'],
-  [`/job/${AGENT_PICKUP}/safety`]: ['Safety checklist'],
-  [`/job/${AGENT_PICKUP}/items`]: ['Items'],
+  // Batch 2 — real screen. 102 has NO seeded checklist, so this is the blank
+  // checklist. The lithium question is the load-bearing string: it only renders
+  // if the declared categories were read off this agent's own pickup, and the
+  // HR-named items below it are what the batch's "Done when" list requires be
+  // present. 102 declares automotive + industrial, so the toggle defaults to
+  // Yes and the lithium block renders with it.
+  [`/job/${AGENT_PICKUP}/safety`]: [
+    'Safety checklist',
+    'Does this load contain lithium-ion?',
+    'Terminals taped or capped',
+    'No puncturing, crushing or dismantling on site',
+    'Fire-safe crate in use',
+    'Chemistries kept separate',
+    'PPE worn',
+    'Li-ion packs at low state of charge',
+    // 102 declares a `leaking` line, so the condition-derived item applies too.
+    'Damaged units separately contained',
+  ],
+  // 103 IS seeded with a passing checklist — so this renders the completed
+  // state, not the form. Asserting on the completed banner is what proves the
+  // stored row was read back rather than the screen just rendering blank.
+  [`/job/${AGENT_ARRIVED}/safety`]: ['Safety checklist completed', 'Continue to intake'],
+  // The gate's ADMIT half: 103 has a passing checklist, so intake renders.
+  [`/job/${AGENT_ARRIVED}/items`]: ['Items'],
   [`/job/${AGENT_PICKUP}/offer`]: ['Offer'],
   '/dropoff/confirm': ['Confirm hand-off'],
+}
+
+// 🔴 Batch 2 — THE SAFETY GATE, asserted by URL.
+//
+// 102 has no passing safety checklist, so /items must NOT render for it. This is
+// the "Done when" item that says the block is verified by URL and not by the
+// button being hidden — the UI is not the security boundary.
+//
+// ⚠ Asserted on ABSENT CONTENT, not on a 3xx + Location, following the
+// APP_REJECTS precedent above. The stub redirects cleanly today, but the moment
+// Batch 3 gives this route a `loading.tsx`, Next flushes the shell before the
+// gate runs and the redirect travels inside the RSC stream as a 200 with no
+// Location header. A status check would then fail on a correctly gated app.
+//
+// This also fails if `requireSafetyChecklist` is deleted from items/page.tsx
+// during Ali's Batch 3 rewrite, which is the main thing it is here to catch.
+//
+// 📌 BATCH 3 MAINTENANCE. Both strings below come from the STUB. When the real
+// items screen lands, replace them with something only the built screen renders
+// (a running total, a per-item row) — otherwise this assertion passes by
+// asserting the absence of text that no longer exists anywhere, which is the
+// Batch 10 vacuous-assertion lesson repeating itself. `'Items'` is the AppShell
+// title and is the more durable of the two, so it is listed first.
+const AGENT_ITEMS_GATE = {
+  [`/job/${AGENT_PICKUP}/items`]: ['Items', 'Batch 3 · Ali'],
 }
 
 const AGENT_PUBLIC_ROUTES = ['/login']
@@ -490,7 +543,7 @@ const APPS = {
     defaultUser: ['agent@test', 'demo1234'],
     routes: AGENT_ROUTES,
     appContent: AGENT_APP_CONTENT,
-    appIsolation: () => [],
+    appIsolation: (route) => AGENT_ITEMS_GATE[route] ?? [],
     publicRoutes: AGENT_PUBLIC_ROUTES,
     content: AGENT_CONTENT,
     publicIsolation: AGENT_LOGIN_ISOLATION,

@@ -777,6 +777,68 @@ async function seed() {
       },
     })
 
+    // ── Mandatory pre-pickup safety checklist (W1 · Batch 2, Aamir) ─────────
+    // Seeded for every pickup that reached `arrived` or beyond, because the
+    // lifecycle implies it: all three HR documents make the check mandatory
+    // BEFORE any battery is handled, so a pickup that got assessed necessarily
+    // passed one. A seeded history without these rows would depict an app whose
+    // central compliance gate nobody ever went through.
+    //
+    // ⚠ DELIBERATELY NOT SEEDED for PKP-2026-000102, the `scheduled` intake demo
+    // job. That is the job the agent app's day view opens, and it must arrive at
+    // the checklist un-done — it is both the demo of the gate and what
+    // `scripts/smoke.mjs` asserts the gate REJECTS. Seeding it would make the
+    // one screen this batch exists for unreachable in a fresh demo.
+    //
+    // PKP-2026-000103 (`arrived`) is the paired ADMIT case: it gets a passing
+    // row, so /job/PKP-2026-000103/items renders and Ali's Batch 3 has a job
+    // that is past the gate to build against.
+    //
+    // The shape must stay in step with `buildChecklistJson` in
+    // packages/core/src/safety.ts. This file cannot import it — packages/database
+    // must not depend on packages/core (the cycle breaks the generated client),
+    // the same restatement the CO₂e factors already live with — so the keys are
+    // repeated here and Batch 9's verification is where the two get compared.
+    // `lithiumBasis: 'declared-category'` is honest: no agent answered these.
+    if (reachedIndex >= LIFECYCLE.indexOf("arrived")) {
+      const lithiumPresent = spec.items.some((i) => i.category !== "automotive")
+      const damagedUnitsPresent = spec.items.some(
+        (i) => i.condition === "swollen" || i.condition === "leaking",
+      )
+
+      const answers: Record<string, boolean> = {
+        terminalsInsulated: true,
+        noPuncturing: true,
+        fireSafeCrate: true,
+        noMixedChemistry: true,
+        ppeWorn: true,
+        ...(lithiumPresent
+          ? { lithiumStateOfCharge: true, lithiumDamagedCellsIsolated: true }
+          : {}),
+        ...(damagedUnitsPresent ? { damagedUnitsContained: true } : {}),
+      }
+
+      await prisma.safetyChecklist.create({
+        data: {
+          pickupId: spec.id,
+          agentId,
+          items: {
+            version: 1,
+            lithiumPresent,
+            lithiumBasis: "declared-category",
+            damagedUnitsPresent,
+            answers,
+            required: Object.keys(answers),
+            missing: [],
+          },
+          passed: true,
+          // Before the agent started assessing — the check gates intake, so it
+          // has to predate the work it gates.
+          completedAt: day(spec.daysAgo),
+        },
+      })
+    }
+
     // Chain-of-custody log: one event per stage reached, each with GPS.
     const stages: PickupStatus[] =
       spec.status === "cancelled"

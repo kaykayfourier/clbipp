@@ -40,6 +40,41 @@ Still true:
 
 ## Change log
 
+### 2026-08-23 — Batch 2 (safety checklist) — A, in lane, two cross-lane edits taken
+
+Batch 2 is A's own lane (W1 — the mandatory safety gate). Two files outside it
+were edited rather than waiting, per the do-it-and-note-it policy above.
+
+**1. `apps/agent/src/app/(agent)/job/[id]/items/page.tsx` — Ali's file (Batch 3).**
+Added a session read plus one line: `await requireSafetyChecklist(id, user.id)`.
+*Why:* the task sheet's Batch 2 step 3 puts the gate in the items page
+explicitly — "the gate lives in the items page, server-side" — so this is Batch
+2's work landing in a file Batch 3 owns, not a land grab. The stub body is
+untouched.
+*Risk, and what was done about it:* Ali replaces that file wholesale in Batch 3,
+and a gate written inline would be deleted by the rewrite with nothing failing
+visibly. So the logic lives in `apps/agent/src/lib/safety-gate.ts` (A's `lib/`),
+the call site is one line with a loud comment block above it, and
+`scripts/smoke.mjs` asserts the gate still rejects. Flagged for Ali in the
+"Batch 2 — as built" section of `FIELD_AGENT_TASKS.md`.
+
+**2. `packages/database/prisma/reset-demo.ts` — Khalid's file.**
+Added a `SafetyChecklist` seed block: a passing row for every pickup at
+`arrived` or beyond, and deliberately none for `PKP-2026-000102`.
+*Why:* the lifecycle implies it — the check is mandatory before any battery is
+handled, so an assessed pickup necessarily passed one, and a seeded history
+without these rows depicts an app whose central compliance gate nobody used.
+*And it unblocks Ali:* Batch 3 needs a job that is **past** the gate to build
+against. `PKP-2026-000103` is now that job. Without this, every intake route Ali
+builds would redirect straight back to the checklist.
+*Same file A edited two lines of in Batch 1* — that entry is below.
+
+**Also, and worth Khalid knowing:** this batch found that Prisma's
+`@default(uuid())` does **not** apply to a service-role write, because the
+migration created `safety_checklists.id` as plain `TEXT NOT NULL` with no
+database default. It affects every uuid-keyed table these agent actions write.
+Details in the as-built notes; no schema change was made.
+
 ### 2026-08-23 — 🔴 NOTED, not actioned: reschedule-after-cancel needs the lifecycle contract updated
 
 Spotted while rebasing Batch 1 onto `8d51cbe` / `3470b34` (customer app auth +

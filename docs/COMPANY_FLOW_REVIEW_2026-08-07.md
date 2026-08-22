@@ -251,6 +251,28 @@ framing is wrong: two-segment support is a data-model change, not a tweak.
    8) — does it apply, and at what rate? Every invoice currently shows
    `taxPaise: 0`. The column and the PDF line exist so the answer is a value
    change, not a schema change.
+10. **Safety-checklist wording — do you have an approved list?** (added
+   2026-08-23, Field Agent Batch 2.) The mandatory pre-pickup checklist at
+   `/job/[id]/safety` asks five items your documents name directly — terminals
+   insulated, no puncturing, fire-safe crate, no mixed chemistry, PPE worn — and
+   **three more that are our own wording**: li-ion state of charge, no
+   swollen/vented li-ion cells packed with healthy ones, and damaged units
+   separately contained. They are defensible battery-handling practice but are
+   not quoted from anything you sent, and the agent ticks them as a compliance
+   record. Same standing as the CO₂e factors in question 7. **Their answer is a
+   text change in one file** — `SAFETY_ITEMS` in `packages/core/src/safety.ts`.
+   If you have an approved checklist, send it and we will use it verbatim.
+
+11. **Battery chemistry at booking — can the customer tell us?** (added
+   2026-08-23, Field Agent Batch 2.) The safety checklist is *pre-pickup*, so it
+   runs before the agent has assessed anything — and chemistry is only recorded
+   during assessment. That means the screen that decides whether to show
+   lithium-specific handling items cannot know whether the load contains
+   lithium. We currently default from the declared category and **ask the agent
+   to confirm**, which is safe but is an extra step on every job. If your
+   customers can reasonably pick a chemistry (or even "contains lithium: yes/no")
+   at booking, the checklist could be driven from real declared data instead.
+   Related to the category-vs-chemistry section above.
 
 ---
 

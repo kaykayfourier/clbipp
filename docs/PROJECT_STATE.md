@@ -5,11 +5,23 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-23 — **Field Agent app: Batches 0b, 0a and 1 are
+**Last updated:** 2026-08-23 — **Field Agent app: Batches 0b, 0a, 1 and 2 are
 done.** Batch 1 shipped the day view, job detail and the first agent-owned
 lifecycle write (`scheduled → arrived`) — that action is the **reference
-service-role action** every later agent batch copies. **A's next is Batch 2
-(safety checklist).** Khalid's Batch 4 has landed too. Working practice as of
+service-role action** every later agent batch copies. **Batch 2 shipped the
+mandatory safety checklist (W1)** — the gate between `arrived` and intake, the
+feature HR looks for first. `/job/[id]/items` now redirects to `/safety` unless
+a passing `SafetyChecklist` exists, enforced server-side in
+`apps/agent/src/lib/safety-gate.ts` and asserted by URL in `npm run smoke`.
+Checklist rules and their 20 tests live in `packages/core/src/safety.ts`
+(**174 tests** total).
+⚠ Batch 2 found that **Prisma's `@default(uuid())` does not apply to a
+service-role write** — the id must be generated in the action. It affects every
+uuid-keyed table Batches 3, 5b, 6 and 7a will write; see "Batch 2 — as built" in
+`FIELD_AGENT_TASKS.md`.
+**Next up: Batch 3 (multi-item intake) — Ali**, now unblocked by a seeded
+passing checklist on `PKP-2026-000103`. **A's next is Batch 5b (cross-app
+seam).** Khalid's Batch 4 has landed too. Working practice as of
 2026-08-20 still stands: **lanes are no longer a gate** (do it and log it) and
 **we push straight to `main`** — no branches, no PRs. See the ▶ READ FIRST
 section below. Everything under "Historical" describes the customer app and is
