@@ -296,4 +296,19 @@ describe("Decision Engine", () => {
     const b = computeQuote(input, lumpSumConfig, makeMarket());
     expect(a.economics.net_value).toBeCloseTo(b.economics.net_value, 1);
   });
+
+  it("caller-supplied trace_id is used instead of counter", () => {
+  const input = makeWorkedExampleInput()
+  input.trace_id = "PKP-3099-item-001"
+  const out = computeQuote(input, DEFAULT_CONFIG, makeMarket())
+  expect(out.trace_id).toBe("PKP-3099-item-001")
+})
+
+it("two concurrent calls with supplied trace_ids get different ids", () => {
+  const input1 = { ...makeWorkedExampleInput(), trace_id: "PKP-3099-item-001" }
+  const input2 = { ...makeWorkedExampleInput(), trace_id: "PKP-3099-item-002" }
+  const out1 = computeQuote(input1, DEFAULT_CONFIG, makeMarket())
+  const out2 = computeQuote(input2, DEFAULT_CONFIG, makeMarket())
+  expect(out1.trace_id).not.toBe(out2.trace_id)
+})
 });

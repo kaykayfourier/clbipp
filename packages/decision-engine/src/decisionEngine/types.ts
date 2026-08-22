@@ -55,18 +55,6 @@ export interface BMSData {
   inspector_id?: string;
 }
 
-export interface QuoteInput {
-  battery: BMSData;
-  damage: DamageScores;
-  distance_km: {
-    in: number;
-    out_reuse?: number;
-    out_refurb?: number;
-    out_recycle?: number;
-  };
-  inflow_type: InflowType;
-  supplier_id?: string; // for external — used to look up margin tier override
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Inputs: Business config (admin-configurable, versioned)
@@ -82,7 +70,8 @@ export type CostInput =
 
 export interface Config {
   config_version: string; // e.g. "v2026-04-25-r3"
-
+  // Market freshness
+  marketFreshnessMaxHours?: number;
   // ─── Cost rates ───
   // Common (intake) — applies to all pathways, sunk before pathway decision
   processing: CostInput; // ₹/kg or flat
@@ -180,6 +169,21 @@ export interface AuditTrail {
   input_hash: string;
   engine_version: string;
 }
+
+export interface QuoteInput {
+  trace_id?: string;
+  battery: BMSData;
+  damage: DamageScores;
+  distance_km: {
+    in: number;
+    out_reuse?: number;
+    out_refurb?: number;
+    out_recycle?: number;
+  };
+  inflow_type: InflowType;
+  supplier_id?: string; // for external — used to look up margin tier override
+}
+
 
 export interface QuoteOutput {
   trace_id: string;

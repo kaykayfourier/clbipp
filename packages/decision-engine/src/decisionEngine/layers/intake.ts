@@ -14,7 +14,7 @@ import {
   type QuoteInput,
 } from "../types";
 
-const MARKET_FRESHNESS_MAX_HOURS = 24;
+const DEFAULT_MARKET_FRESHNESS_MAX_HOURS = 24;
 
 export interface IntakeResult {
   trace_id: string;
@@ -86,7 +86,7 @@ export function runIntake(
     );
   }
   const ageHours = (Date.now() - snapshotMs) / 3_600_000;
-  if (ageHours > MARKET_FRESHNESS_MAX_HOURS) {
+  if (ageHours > (config.marketFreshnessMaxHours ?? DEFAULT_MARKET_FRESHNESS_MAX_HOURS)) {
     // AMBIGUITY: E7 — fail closed vs fail open. Currently: fail closed.
     throw new StaleMarketDataError(market.snapshot_timestamp, ageHours);
   }
@@ -107,7 +107,7 @@ export function runIntake(
     );
   }
 
-  const trace_id = b.trace_id ?? generateTraceId();
+  const trace_id = input.trace_id ?? generateTraceId();
   const intake_timestamp = b.intake_timestamp ?? new Date().toISOString();
 
   return { trace_id, intake_timestamp };

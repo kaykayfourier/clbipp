@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { certificateNumber, invoiceNumber, formatPaise } from "./documents";
 import { formatOfferPrice } from "./offer";
+import { rupeesToPaise } from "./documents"
 
 describe("certificateNumber", () => {
   it("follows the CERT-{YEAR}-{pickupId}-{CATEGORY} format from Plan v2 §5", () => {
@@ -64,3 +65,18 @@ describe("formatPaise", () => {
     expect(formatOfferPrice(18450000)).toBe(formatPaise(18450000));
   });
 });
+
+
+describe("rupeesToPaise", () => {
+  it("converts whole rupees exactly", () => {
+    expect(rupeesToPaise(100)).toBe(10000)
+  })
+
+  it("rounds half-up at paise level", () => {
+    expect(rupeesToPaise(1.005)).toBe(101) // not 100
+  })
+
+  it("never returns a float", () => {
+    expect(Number.isInteger(rupeesToPaise(184500.50))).toBe(true)
+  })
+})
