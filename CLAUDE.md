@@ -5,6 +5,27 @@ repository. It is shared and committed — keep it limited to facts true for
 anyone working in this repo. Personal working-style preferences belong in
 `CLAUDE.local.md` instead (gitignored, not this file).
 
+## ⚠ Second glance — `docs/BEFORE_YOU_PUSH.md`
+
+**Read `docs/BEFORE_YOU_PUSH.md` before every push.** It is the consolidated
+list of things that have already cost this team an hour each — pre-push checks,
+the shared-database rules, and the traps that pass review. The essentials, so
+they are in context even if nothing else is:
+
+- **A push to `main` is a deploy, and there is no CI.** Run `npm run build`
+  (never optional) plus `npm run smoke` for anything that touches a route or a
+  server action. `build` never renders a page with a session; only `smoke`
+  catches a server component that throws at request time.
+- **One shared Supabase project.** Announce before `npm run reset-demo`, and
+  remember it restores rows but **not** grants or policies — missing grants make
+  the app half-work rather than fail.
+- **The auth guard must stay at `apps/<app>/src/proxy.ts`** — unregistered, it
+  fails **OPEN**.
+- **Agent screens pass `hideNav` and add no bottom padding.**
+- **Integer paise everywhere**; `formatPaise` from `@clbipp/core/format` in
+  client components.
+- 🔴 **A change that moves a price says so in its commit message.**
+
 ## What this project is
 
 Closed-Loop Battery Intelligence & Pricing Platform (CLBIPP). A platform for
@@ -267,6 +288,9 @@ keeps every lane moving in parallel without anyone touching another's files.
 
 ## Key docs (read when relevant — don't load all of these by default)
 
+- `docs/BEFORE_YOU_PUSH.md` — **the second-glance checklist. Read before every
+  push.** Pre-push commands, git workflow, shared-database rules, the traps that
+  pass review, and the two orderings that actually matter.
 - `docs/FIELD_AGENT_TASKS.md` — **the executable task sheet for this sprint.**
   Per batch: files, numbered steps, done-when checklist, traps. **Read this
   first.** (`FIELD_AGENT_TASKS.pdf` is a generated rendition — edit the `.md`.)
