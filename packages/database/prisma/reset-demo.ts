@@ -22,6 +22,10 @@ const ADMIN_EMAIL = "admin@test"
 // Demo-only password for the seeded agent/admin logins. Not a secret; these
 // accounts exist so the Agent and Admin apps have something to log into.
 const DEMO_PASSWORD = "demo1234"
+// The customer's is different and predates this script — `scripts/smoke.mjs`
+// signs in with it (`defaultUser` in its APPS map). Kept separate rather than
+// unified so a reseed can never rotate the password smoke logs in with.
+const CUSTOMER_PASSWORD = "businesstest"
 
 // Ordered lifecycle, `cancelled` excluded (it leaves the progression rather
 // than sitting on it). Must match `enum PickupStatus` in schema.prisma and
@@ -57,6 +61,49 @@ function demoPublicToken(pickupId: string): string {
   return `00000000-0000-4000-8000-${serial}`
 }
 
+/**
+ * A stable `BatteryItem.id` for a demo item — `PKP-2026-000102` item 1 →
+ * `00000000-0000-4000-8000-000000102001`.
+ *
+ * Last group is 12 hex: 3 padding zeros + the pickup's 6-digit serial + a
+ * 1-based 3-digit item index. Same trick, same reasoning and same v4 shape as
+ * `demoPublicToken` above. `BatteryItem.id` is `@default(uuid())`, so before
+ * this every reseed handed the item screens a different id and
+ * `scripts/smoke.mjs` had nothing it could point at — the agent app's
+ * `/job/[id]/items/[itemId]/…` routes are half its route table.
+ * DEMO ROWS ONLY; real items keep the column default.
+ */
+function demoItemId(pickupId: string, index: number): string {
+  const serial = (pickupId.split("-").pop() ?? "0").padStart(6, "0").slice(-6)
+  return `00000000-0000-4000-8000-000${serial}${String(index + 1).padStart(3, "0")}`
+}
+
+/**
+ * The one seeded hub drop-off. Pinned rather than generated for the same reason
+ * item ids are — `scripts/smoke.mjs` reserves this exact constant for
+ * `/dropoff/[batchId]`.
+ */
+const CUSTODY_BATCH_ID = "00000000-0000-4000-8000-000000000301"
+const CUSTODY_BATCH_NO = "CB-2026-000301"
+
+/**
+ * Pickups already handed in at the hub. Everything past `collected` must have
+ * reached a facility to get there, so "collected but no custodyBatchId" is
+ * exactly the derived "pending drop-off" state (D5) — which is why the ONE
+ * pickup at `collected` deliberately stays out of the batch.
+ */
+const DROPPED_OFF: PickupStatus[] = ["tested", "processed", "recovered", "certified"]
+
+/**
+ * What the agent earns on a job, as a share of the load's value.
+ *
+ * ⚠ SEED PLACEHOLDER. The real rule is D3 and lands in B's Batch 4 — when it
+ * does, this number moves on the agent's "earned today" tile. Flat 10% here
+ * only so the tile has something non-null to render before Batch 4 exists.
+ * Integer paise: `Math.round`, never a float.
+ */
+const agentFee = (quotePaise: number) => Math.round(quotePaise * 0.1)
+
 // Delhi NCR, roughly — the demo pickups all sit in this area.
 const GEO = { lat: 28.5355, lng: 77.391 }
 
@@ -73,13 +120,23 @@ function adminClient() {
   )
 }
 
-/** Creates (or finds) a confirmed auth user and returns its uuid. */
-async function ensureAuthUser(email: string, fullName: string): Promise<string> {
+/**
+ * Creates (or finds) a confirmed auth user and returns its uuid.
+ *
+ * Note the order: create first, look up only on failure. An EXISTING user's
+ * password is therefore never rewritten — which is what lets the customer keep
+ * a different one from the agent and admin.
+ */
+async function ensureAuthUser(
+  email: string,
+  fullName: string,
+  password = DEMO_PASSWORD,
+): Promise<string> {
   const supabase = adminClient()
 
   const { data: created, error } = await supabase.auth.admin.createUser({
     email,
-    password: DEMO_PASSWORD,
+    password,
     email_confirm: true,
     user_metadata: { full_name: fullName },
   })
@@ -113,8 +170,11 @@ async function wipe() {
   await prisma.pickup.deleteMany()
   await prisma.address.deleteMany()
   await prisma.pricingRate.deleteMany()
+  // After pickups (they hold the FK) and before facilities (it holds one).
+  await prisma.custodyBatch.deleteMany()
   await prisma.facility.deleteMany()
   await prisma.recycler.deleteMany()
+  await prisma.marketPrices.deleteMany()
   // Drop the old seed's invented vendor profiles (no matching auth user).
   await prisma.profile.deleteMany({
     where: { id: { in: ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"] } },
@@ -149,7 +209,23 @@ const CONDITION_BP: Record<BatteryCondition, number> = {
   leaking: 5000,
 }
 
+/**
+ * Spot metal prices the decision engine's Layer 2 revenue model reads.
+ *
+ * ⚠ DEMO PLACEHOLDERS, same standing as RATES above — right order of magnitude
+ * for ₹/kg on the Indian market, NOT researched or dated quotes. Do not present
+ * these as market data, and do not let a demo imply we have a price feed.
+ * The engine treats a stale row as low-confidence (B's Batch 4 fixes the
+ * market-freshness defect), which is why the row is seeded with `updatedAt` at
+ * reseed time rather than a fixed date — an old reseed should not silently
+ * degrade every quote in the demo.
+ */
+const MARKET_PRICES = { Li: 1450, Co: 2600, Ni: 1550, Mn: 180, Cu: 780, Al: 240 }
+
+/** @returns the seeded hub facility — CustodyBatch needs its id. */
 async function seedReferenceData() {
+  await prisma.marketPrices.create({ data: MARKET_PRICES })
+
   await prisma.pricingRate.createMany({
     data: RATES.flatMap(([category, chemistry, ratePerKgPaise]) =>
       (Object.keys(CONDITION_BP) as BatteryCondition[]).map((condition) => ({
@@ -162,7 +238,7 @@ async function seedReferenceData() {
     ),
   })
 
-  await prisma.facility.create({
+  const facility = await prisma.facility.create({
     data: {
       name: "CLBIPP Hub — Okhla",
       location: "Okhla Industrial Area Phase II, New Delhi",
@@ -180,6 +256,8 @@ async function seedReferenceData() {
       capacityKg: 250000,
     },
   })
+
+  return facility
 }
 
 // ─── Demo photos ──────────────────────────────────────────────────────────────
@@ -318,21 +396,32 @@ const PICKUPS: PickupSpec[] = [
     ],
   },
   {
+    // ── THE INTAKE DEMO JOB (Batch 0a). `scheduled` + assigned to agent@test,
+    // so it is the one the agent app's day view opens and the one C's Batch 3
+    // multi-item intake is built against. Three items spanning TWO categories
+    // and BOTH chemistry families on purpose: a single-chemistry job never
+    // exercises the "no mixed chemistry" safety item (Batch 2) or the
+    // per-item engine run (D1), and those are the two things this job exists
+    // to prove. Do not simplify it back to one category.
     id: "PKP-2026-000102",
     status: "scheduled",
     category: "automotive",
     location: "Okhla Phase II, New Delhi",
-    notes: "Gate B entry — call on arrival.",
+    notes: "Gate B entry — call on arrival. Mixed load: truck batteries + UPS packs.",
     daysAgo: 2,
     items: [
       { category: "automotive", quantity: 14, weightKg: 196, condition: "healthy", chemistry: "lead_acid" },
       // Deliberately hazardous so the condition path is visible in the demo.
       { category: "automotive", quantity: 2, weightKg: 28, condition: "leaking", chemistry: "lead_acid" },
+      // Li-ion on a lead-acid job — this is what makes the load "mixed".
+      { category: "industrial", quantity: 6, weightKg: 33.5, condition: "healthy", chemistry: "li_ion_lfp" },
     ],
   },
   {
     // Batch 7A — the agent is on site, assessing. No offer yet: the company
     // flow document puts assessment and quoting on site, in that order.
+    // Mixed the same way PKP-2026-000102 is (Batch 0a), so the assessment
+    // screens have a second mixed job to work against.
     id: "PKP-2026-000103",
     status: "arrived",
     category: "portable",
@@ -342,6 +431,7 @@ const PICKUPS: PickupSpec[] = [
     items: [
       { category: "portable", quantity: 18, weightKg: 9.4, condition: "healthy", chemistry: "li_ion_nmc" },
       { category: "portable", quantity: 4, weightKg: 2.1, condition: "swollen", chemistry: "li_ion_nmc" },
+      { category: "automotive", quantity: 1, weightKg: 14, condition: "dead", chemistry: "lead_acid" },
     ],
   },
   {
@@ -472,18 +562,38 @@ function linePrice(item: ItemSpec): number {
 // ─── Seed ─────────────────────────────────────────────────────────────────────
 
 async function seed() {
-  const customer = await prisma.profile.findFirst({ where: { email: CUSTOMER_EMAIL } })
-  if (!customer) throw new Error(`No profile for ${CUSTOMER_EMAIL} — log in once to create it.`)
-  const vendorId = customer.id
-
-  // Agent + admin as REAL auth users, so the Agent and Admin apps have
-  // something to log into on day 3 (BATCH_0B_SCHEMA.md §5).
+  // All three demo accounts as REAL auth users (BATCH_0B_SCHEMA.md §5).
+  //
+  // The customer used to be the odd one out: this script REQUIRED a profiles
+  // row to already exist and threw "log in once to create it" otherwise. That
+  // made a reseed depend on invisible prior state, and on 2026-08-21 the shared
+  // Supabase project turned up with `profiles` empty while all 36 auth users
+  // were intact — which made the seed unrunnable by anyone, and the seed is
+  // what unblocks all three lanes. Creating the row here removes the
+  // precondition entirely; a reseed is now self-sufficient from a wiped DB.
+  const vendorId = await ensureAuthUser(CUSTOMER_EMAIL, "Aarav Sharma", CUSTOMER_PASSWORD)
   const agentId = await ensureAuthUser(AGENT_EMAIL, "Ravi Kumar")
   const adminId = await ensureAuthUser(ADMIN_EMAIL, "Priya Nair")
 
-  await prisma.profile.update({
+  await prisma.profile.upsert({
     where: { id: vendorId },
-    data: { role: "customer", phone: "+91 98110 22334", walletBalancePaise: 0 },
+    // An existing row keeps whatever the account actually filled in at signup —
+    // only the fields this demo depends on are forced.
+    update: { role: "customer", phone: "+91 98110 22334", walletBalancePaise: 0 },
+    create: {
+      id: vendorId,
+      email: CUSTOMER_EMAIL,
+      fullName: "Aarav Sharma",
+      vendorType: "fleet",
+      role: "customer",
+      phone: "+91 98110 22334",
+      companyName: "Sharma Logistics Pvt Ltd",
+      gstNumber: "07AABCS1429B1ZQ",
+      businessAddress: "Plot 14, Okhla Industrial Area Phase II, New Delhi 110020",
+      eprRegId: "CPCB/EPR/PROD/2024/0091",
+      kycStatus: "verified",
+      walletBalancePaise: 0,
+    },
   })
 
   await prisma.profile.upsert({
@@ -516,7 +626,31 @@ async function seed() {
     },
   })
 
-  await seedReferenceData()
+  const facility = await seedReferenceData()
+
+  // The one seeded hub drop-off, created BEFORE the pickup loop because the
+  // pickups in it carry the FK. Weight and count are summed from the specs
+  // rather than counted afterwards, which keeps this a single insert.
+  const droppedOffSpecs = PICKUPS.filter((p) => DROPPED_OFF.includes(p.status))
+  await prisma.custodyBatch.create({
+    data: {
+      id: CUSTODY_BATCH_ID,
+      batchNo: CUSTODY_BATCH_NO,
+      agentId,
+      facilityId: facility.id,
+      totalWeightKg: droppedOffSpecs.reduce((sum, p) => sum + totalWeight(p.items), 0),
+      itemCount: droppedOffSpecs.reduce(
+        (sum, p) => sum + p.items.reduce((n, i) => n + i.quantity, 0),
+        0,
+      ),
+      receivingStaffName: "Sunita Rao",
+      // Agent-attested, no signature or PDF yet — Batches 7a and 7b fill those
+      // in. GPS is the hub's own coordinates, which is where the hand-off is.
+      lat: facility.lat,
+      lng: facility.lng,
+      handedOffAt: day(8),
+    },
+  })
 
   // Storage isn't covered by the database wipe — objects would otherwise pile
   // up across reseeds and the pickup ids they're filed under were renumbered in
@@ -588,6 +722,11 @@ async function seed() {
         notes: spec.notes,
         status: spec.status,
         indicativeQuotePaise: quote,
+        // What the AGENT earns, not what the vendor is paid. Only on jobs an
+        // agent actually has (D3).
+        agentFeePaise: hasAgent ? agentFee(quote) : null,
+        // Null on `collected` is the derived "pending drop-off" state (D5).
+        custodyBatchId: DROPPED_OFF.includes(spec.status) ? CUSTODY_BATCH_ID : null,
         conditionFlags: [...new Set(spec.items.map((i) => i.condition))],
         scheduledSlot: hasAgent ? day(spec.daysAgo - 1) : null,
         etaMinutes: spec.status === "scheduled" ? 45 : null,
@@ -598,6 +737,7 @@ async function seed() {
         photoUrls: [...new Set(itemPhotos.filter((p): p is string => p !== null))],
         items: {
           create: spec.items.map((item, idx) => ({
+            id: demoItemId(spec.id, idx),
             category: item.category,
             quantity: item.quantity,
             weightKg: item.weightKg,
@@ -754,6 +894,15 @@ async function seed() {
             { material: "Copper", weight_kg: Math.round(weight * 0.09) },
           ],
           deductions: [],
+          // D7: the vendor accepting sets ONLY this — the status stays
+          // `offered` until the AGENT collects. So every pickup at `collected`
+          // or beyond must have an accepted offer behind it, and the one
+          // sitting AT `offered` must not: that null is the live "awaiting the
+          // vendor" state Batch 5b writes and Batch 6 reads.
+          acceptedAt:
+            reachedIndex >= LIFECYCLE.indexOf("collected")
+              ? day(Math.max(spec.daysAgo - LIFECYCLE.indexOf("collected"), 0))
+              : null,
           // Dated to the `offered` status event itself rather than a fixed
           // offset from creation. The old `daysAgo - 5` dated the youngest
           // pickup's offer into the FUTURE and had to be clamped; deriving it

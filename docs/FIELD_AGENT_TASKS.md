@@ -100,7 +100,20 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 0a — Schema + seed · **Aamir** *(moved from Khalid 2026-08-20)* · ~0.4d
+## Batch 0a — Schema + seed · **Aamir** *(moved from Khalid 2026-08-20)* · ~0.4d ✅ DONE 2026-08-21
+
+> Shipped straight to `main`. Verified: `npm run build` green (agent app still
+> prints `ƒ Proxy (Middleware)`); lint clean; **142 tests pass**;
+> `npm run smoke` **45/45**; `npm run smoke -- --app=agent` **23/23**; and the
+> role gate holds both ways — `--app=agent --blocked business@test` 23/23 and
+> `--blocked agent@test` 45/45. Plus 30 scripted DB assertions over the fresh
+> seed. **A's Batch 1, A's Batch 2 and C's Batch 3 are all unblocked; B's Batch
+> 4 has its `MarketPrices` row and its persistence columns.**
+>
+> ⚠ **Read "Batch 0a — as built" at the bottom of this file before Batch 1 or
+> Batch 4.** Two deviations, one live incident recovered mid-batch (the shared
+> Supabase project had lost its schema grants *and* every `profiles` row), and a
+> new seeded-id contract that `scripts/smoke.mjs` now depends on.
 
 **Depends on:** nothing. **Blocks:** everything. Do it first, ship it same-day.
 
@@ -140,10 +153,10 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 4. `npm run reset-demo`, then open `npx prisma studio` and eyeball it.
 
 **Done when**
-- [ ] `npm run build` green
-- [ ] `npm run reset-demo` runs clean from a wiped DB
-- [ ] `agent@test` has ≥1 pickup at each of the five stages above
-- [ ] At least one pickup has a mixed-category `BatteryItem` set
+- [x] `npm run build` green
+- [x] `npm run reset-demo` runs clean from a wiped DB
+- [x] `agent@test` has ≥1 pickup at each of the five stages above
+- [x] At least one pickup has a mixed-category `BatteryItem` set
 
 **Watch out**
 - `LIFECYCLE` in `reset-demo.ts` must stay in sync with `enum PickupStatus`,
@@ -739,3 +752,155 @@ hunting a guard bug.**
   customer app did.
 - `(auth)/field.tsx` is now duplicated in both apps. Same TODO as the customer's:
   swap for C's real `<Input>` when it ships, in both at once.
+
+---
+
+## Batch 0a — as built (2026-08-21, Aamir)
+
+Read this before Batch 1 (A) and before Batch 4 (B). The batch shipped as
+specified; below are the two deviations, the live incident it ran into, and the
+contract the next person inherits.
+
+### What exists now
+
+| Thing | Where |
+|---|---|
+| The migration | `packages/database/prisma/migrations/20260821150142_agent_app_v1/` |
+| Schema delta | §3 of the plan, in full — `Pickup.agentFeePaise` + `custodyBatchId`, `Offer.acceptedAt`, `BatteryItem`'s damage rubric + `pathway` + `traceId`, `WalletTxnKind.agent_fee`, new `CustodyBatch` |
+| RLS | `supabase/policies.sql` — `custody_batches` **plus six engine tables** (see deviation 2) |
+| Seed | `packages/database/prisma/reset-demo.ts` — `MarketPrices`, mixed-chemistry intake jobs, deterministic item ids, one `CustodyBatch`, agent fees, offer acceptance |
+| Smoke ids | `scripts/smoke.mjs` — all four agent constants are now real seeded rows |
+
+The nine-stage lifecycle is **unchanged**; the migration adds no `PickupStatus`
+value, and a seeded assertion checks the enum still has exactly 9 + `cancelled`.
+
+### Two deviations from §3
+
+1. **`PathwayDecision.traceId` was added too** (`String? @unique`). §3 gives
+   `BatteryItem.traceId` as "links to PathwayDecision", but `PathwayDecision`
+   had no such column — only a uuid `id` — while the engine mints its own
+   `TRC-YYYY-NNNN` in `decisionEngine/layers/intake.ts:110`. As literally
+   specified the link was a dangling string. Added here rather than in Batch 4
+   so the sprint needs only one migration. **Khalid: the join you want exists.**
+
+2. **RLS was closed on six pre-existing engine tables** — `market_prices`,
+   `pathway_factors`, `pathway_decisions`, `battery_packs`,
+   `battery_inspections`, `battery_diagnostics`. RLS had never been enabled on
+   any of them, so our pricing internals (market rates, cost factors, every
+   computed P_min/P_max) were readable over PostgREST by **any** logged-in
+   session, a vendor's included — the exact inverse of the vendor-visibility
+   rule. Enabled with no policy, which denies `authenticated` and admits only
+   the service role. **Zero behaviour change**: nothing in either app reads
+   these through a Supabase client, only through Prisma, which connects as the
+   table owner and bypasses RLS. Verified end-to-end — a real vendor session
+   now gets `200 []` from `/rest/v1/market_prices`.
+
+### 🔴 The incident — read this one
+
+Mid-batch, `npm run reset-demo` failed with *"No profile for business@test"*.
+The shared Supabase project had lost **every row in `public.profiles`** (all 36
+`auth.users` rows were intact) **and every `GRANT` on schema `public`**. Neither
+was caused by this batch: the migration is additive-only and `wipe()` deletes
+two hard-coded uuids. Most likely a destructive run against the shared project
+by someone else between 2026-08-20 and 2026-08-21.
+
+Three things came out of it, and all three matter more than the batch itself:
+
+- **`npm run reset-demo` no longer requires a pre-existing profile.** It used to
+  throw "log in once to create it" for `business@test` while creating the agent
+  and admin accounts itself. It now creates all three via `ensureAuthUser`, so a
+  reseed is self-sufficient from a wiped database. `CUSTOMER_PASSWORD` is kept
+  separate from `DEMO_PASSWORD` (`businesstest` vs `demo1234`) because
+  `scripts/smoke.mjs` signs in with the former; `ensureAuthUser` creates first
+  and only looks up on failure, so an existing user's password is never rewritten.
+
+- 🔴 **`reset-demo` does NOT restore grants or policies. Reseeding is not
+  recovery.** With the grants gone, the symptom was *not* an obvious failure:
+  the app half-worked. Prisma-backed pages rendered fine, Supabase-client pages
+  rendered **empty with a 200**, API routes 401'd, and `/onboarding` let a fully
+  onboarded session through — because `middleware.ts` deliberately fails **open**
+  on an infrastructure error (`42501`), and "permission denied for schema
+  public" is one. `npm run smoke` read 18/45 failed with no single obvious cause.
+  If you ever see that shape again, check grants **first**:
+
+  ```bash
+  cd packages/database
+  npx prisma db execute --file ../../supabase/grants.sql   --schema prisma/schema.prisma  # order matters
+  npx prisma db execute --file ../../supabase/policies.sql --schema prisma/schema.prisma
+  npx prisma db execute --file ../../supabase/storage-policies.sql --schema prisma/schema.prisma
+  npx prisma db execute --file ../../supabase/realtime.sql --schema prisma/schema.prisma
+  ```
+  All four are re-runnable. `grants.sql` must go first — it says so in its own
+  header, and that is exactly the step that was missing.
+
+- **The database had no Prisma migration history.** `_prisma_migrations` was
+  empty, so `migrate deploy` refused with `P3005`. Confirmed the live schema was
+  byte-identical to migration 8 (`migrate diff` against the datasource returned
+  precisely the agent_app_v1 delta and nothing else), then baselined the eight
+  prior migrations with `migrate resolve --applied` before deploying. **History
+  is now tracked** — the next migration is an ordinary `migrate deploy`.
+
+  ⚠ `prisma migrate dev` cannot run in a non-interactive shell (it needs to
+  prompt). The scriptable equivalent used here was `migrate diff` → write the
+  migration file → `migrate deploy`.
+
+### The seeded-id contract (new — `smoke.mjs` depends on it)
+
+Demo rows now have derivable ids, the same trick `demoPublicToken` already used
+and for the same reason: `@default(uuid())` changed on every reseed, so the
+agent app's `/job/[id]/items/[itemId]/…` routes — half its route table — had
+nothing stable to point at.
+
+| Constant | Value | Minted by |
+|---|---|---|
+| `AGENT_PICKUP` | `PKP-2026-000102` (`scheduled`) | `PICKUPS` fixture |
+| `AGENT_ARRIVED` | `PKP-2026-000103` (`arrived`) | `PICKUPS` fixture |
+| `AGENT_ITEM` | `00000000-0000-4000-8000-000000102001` | `demoItemId(pickupId, idx)` |
+| `AGENT_BATCH` | `00000000-0000-4000-8000-000000000301` | `CUSTODY_BATCH_ID` |
+
+`demoItemId` = 3 padding zeros + the pickup's 6-digit serial + a 1-based 3-digit
+item index. **Change either file and the other must change with it.** Real rows
+keep the column defaults — this is demo-only.
+
+### What the seed now guarantees
+
+- `agent@test` has a pickup at **each** of `scheduled`, `arrived`, `offered`,
+  `collected`, and four beyond it.
+- `PKP-2026-000102` and `PKP-2026-000103` each carry **3 items across 2
+  categories, mixing a li-ion and a lead-acid chemistry**. That is deliberate
+  and load-bearing: a single-chemistry job never exercises the "no mixed
+  chemistry" safety item (Batch 2) or the per-item engine run (D1). **Don't
+  simplify them back.**
+- One `MarketPrices` row (demo placeholders, `updatedAt` at reseed time so an
+  old reseed doesn't silently degrade every quote), one `Facility`, one
+  `CustodyBatch` (`CB-2026-000301`).
+- **`Offer.acceptedAt` encodes the D7 state machine**: every offer at
+  `collected` or beyond is accepted; the one pickup sitting *at* `offered` is
+  deliberately **not** — that null is the live "awaiting the vendor" state
+  Batch 5b writes and Batch 6 reads. Don't "fix" it.
+- **"Pending drop-off" is derived, not a stage** (D5): the one `collected`
+  pickup has `custodyBatchId: null`; the four beyond it point at the batch.
+- Every agent-assigned pickup has a non-null `agentFeePaise`.
+
+### Flagged for later — none of these block anyone
+
+1. 🔴 **Batch 2's chemistry-aware safety checklist has nothing to read.**
+   `BatteryItem`'s customer-declared half has `category` but **no chemistry** —
+   the agent tags chemistry on site in Batch 3, *after* the checklist is meant to
+   gate intake. So "show lithium items only when the pickup has a li-ion item"
+   cannot be answered from declared data. **Decide this at the top of Batch 2**:
+   a heuristic on `category` (`ev`/`portable` ⇒ treat as li-ion), or show every
+   item and let the agent tick N/A. Not resolvable in 0a.
+2. **`agentFeePaise` is seeded at a flat 10%** of the indicative quote. The real
+   rule is D3, in Batch 4. 🔴 That change **moves a number on the agent's home
+   screen** ("earned today") — say so in the commit, per the silent-economics-
+   drift rule.
+3. **`CustodyBatch` has no `publicToken`**, unlike `PickupReceipt` and
+   `Certificate`. §3 didn't ask for one and Batch 7b's PDF is agent-facing, so
+   it's out — but a shareable custody link later means a second migration.
+4. **Drop-off is agent-attested only.** `receivingStaffName` + a signature is
+   the weakest link in the chain of custody until there's a hub-staff app —
+   open question 3 in §7 of the plan.
+5. **The `prisma db execute` route can't print query results**, so the RLS and
+   seed assertions were run through a throwaway `tsx` script (not committed).
+   Re-create it from the "Done when" list if you need to re-verify.

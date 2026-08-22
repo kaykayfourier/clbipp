@@ -1,8 +1,8 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // Explicit output (gitignored): resolves correctly regardless of npm
   // hoisting in the workspace; Prisma 6 deprecates the default path anyway.
-  output   = "../src/generated/client"
+  output        = "../src/generated/client"
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
@@ -103,6 +103,11 @@ model PathwayDecision {
   packId            String            @map("pack_id")
   inspectionId      String            @map("inspection_id")
   factorConfigId    String            @map("factor_config_id")
+  // The engine's own run identifier (TRC-YYYY-NNNN, minted in
+  // decisionEngine/layers/intake.ts). Added agent_app_v1: BatteryItem.traceId
+  // is what an agent screen carries around, and without this column it pointed
+  // at nothing. Nullable because rows predating the agent app have no trace.
+  traceId           String?           @unique @map("trace_id")
   pathway           Pathway
   costBreakdown     Json?             @map("cost_breakdown")
   revenueBreakdown  Json?             @map("revenue_breakdown")
@@ -228,6 +233,9 @@ enum WalletTxnKind {
   payout
   redemption
   adjustment
+  // What the FIELD AGENT earns for a job, not what a vendor is paid (D3).
+  // Appended last so no existing value's ordinal shifts.
+  agent_fee
 }
 
 enum ManifestStatus {
@@ -276,14 +284,15 @@ model Profile {
 
   // Two relations to Pickup (as vendor, as assigned agent) so both MUST be
   // named — Prisma cannot disambiguate them otherwise.
-  pickups         Pickup[]      @relation("VendorPickups")
-  assignedPickups Pickup[]      @relation("AgentPickups")
+  pickups         Pickup[]       @relation("VendorPickups")
+  assignedPickups Pickup[]       @relation("AgentPickups")
   addresses       Address[]
   offers          Offer[]
   certificates    Certificate[]
   payments        Payment[]
   walletTxns      WalletTxn[]
   invoices        Invoice[]
+  custodyBatches  CustodyBatch[]
 
   @@index([role])
   @@map("profiles")
@@ -358,12 +367,22 @@ model Pickup {
 
   status PickupStatus @default(requested)
 
+  // What the AGENT earns for this job, distinct from what the vendor is paid
+  // (D3). Null until the agent's fee is computed — B's Batch 4 owns the rule.
+  agentFeePaise Int? @map("agent_fee_paise")
+
+  // Set when the agent hands this pickup in at a hub. Null on a collected
+  // pickup is exactly what "pending drop-off" means — that wireframe state is
+  // DERIVED from this column, not a tenth lifecycle stage (D5).
+  custodyBatchId String? @map("custody_batch_id")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   vendor          Profile          @relation("VendorPickups", fields: [vendorId], references: [id])
   agent           Profile?         @relation("AgentPickups", fields: [agentId], references: [id])
   address         Address?         @relation(fields: [addressId], references: [id])
+  custodyBatch    CustodyBatch?    @relation(fields: [custodyBatchId], references: [id])
   items           BatteryItem[]
   statusEvents    StatusEvent[]
   offer           Offer?
@@ -376,6 +395,7 @@ model Pickup {
   @@index([vendorId])
   @@index([agentId])
   @@index([status])
+  @@index([custodyBatchId])
   @@index([createdAt(sort: Desc)])
   @@map("pickups")
 }
@@ -401,6 +421,21 @@ model BatteryItem {
   recordedBy         String?           @map("recorded_by") @db.Uuid
   recordedAt         DateTime?         @map("recorded_at")
 
+  // ── Damage rubric, scored by the agent on site (D1 — the engine runs PER
+  // ITEM, so the rubric lives here and not on the Pickup header). The three
+  // sub-scores are the agent's raw input; damageScore is what the engine
+  // derives from them. Decimal(4,2) deliberately matches
+  // BatteryInspection.damageScore — same rubric, same precision. ──
+  damageVisual  Int?     @map("damage_visual")
+  damageLeakage Int?     @map("damage_leakage")
+  damageThermal Int?     @map("damage_thermal")
+  damageScore   Decimal? @map("damage_score") @db.Decimal(4, 2)
+
+  // ── Engine verdict for THIS item. traceId is the engine's own run id
+  // (TRC-YYYY-NNNN) and joins to pathway_decisions.trace_id. ──
+  pathway RecoveryPathway?
+  traceId String?          @map("trace_id")
+
   // ── Pricing (paise, integers only — never floats for money) ──
   unitPricePaise Int? @map("unit_price_paise")
   linePricePaise Int? @map("line_price_paise")
@@ -423,10 +458,10 @@ model PricingRate {
   chemistry BatteryType?
   condition BatteryCondition?
 
-  ratePerKgPaise   Int  @map("rate_per_kg_paise")
-  ratePerUnitPaise Int? @map("rate_per_unit_paise")
+  ratePerKgPaise        Int  @map("rate_per_kg_paise")
+  ratePerUnitPaise      Int? @map("rate_per_unit_paise")
   // Basis points, 10000 = 1.00x. Integer so money math never touches a float.
-  conditionMultiplierBp Int @default(10000) @map("condition_multiplier_bp")
+  conditionMultiplierBp Int  @default(10000) @map("condition_multiplier_bp")
 
   isActive      Boolean   @default(true) @map("is_active")
   effectiveFrom DateTime  @default(now()) @map("effective_from")
@@ -471,6 +506,12 @@ model Offer {
   rationale         String
   materialBreakdown Json            @default("[]") @map("material_breakdown")
   deductions        Json            @default("[]")
+
+  // D7, the cross-app seam. The VENDOR accepting an offer sets this and nothing
+  // else — status stays `offered`. Only the AGENT can move a pickup to
+  // `collected`, because a vendor cannot mark their own battery collected.
+  // Written by the customer app (Batch 5b), read by the agent app (Batch 6).
+  acceptedAt DateTime? @map("accepted_at")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -612,7 +653,8 @@ model Facility {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  manifests DispatchManifest[]
+  manifests      DispatchManifest[]
+  custodyBatches CustodyBatch[]
 
   @@map("facilities")
 }
@@ -657,6 +699,49 @@ model DispatchManifest {
 
   @@index([status])
   @@map("dispatch_manifests")
+}
+
+// One hub drop-off: the agent hands a set of collected pickups to a facility.
+//
+// NOT DispatchManifest. A manifest is facility → recycler (build doc §6); this
+// is agent → facility. Different edge of the chain of custody, different
+// actors, different document — reusing the manifest would make both wrong.
+model CustodyBatch {
+  id         String @id @default(uuid())
+  agentId    String @map("agent_id") @db.Uuid
+  facilityId String @map("facility_id")
+
+  batchNo String @unique @map("batch_no")
+
+  totalWeightKg Decimal @map("total_weight_kg") @db.Decimal(10, 2)
+  itemCount     Int     @map("item_count")
+
+  // Attested by the agent, not by the hub — there is no hub-staff app. This is
+  // the weakest link in the chain of custody and is open question 3 to the
+  // company (PLAN_FIELD_AGENT_APP.md §7).
+  receivingStaffName String @map("receiving_staff_name")
+
+  // Storage object path, not a URL. Every bucket is private; reads go through
+  // createSignedUrl like every other object. Null until Batch 7a captures it.
+  signatureUrl String? @map("signature_url")
+
+  // Nullable for the same reason Address.lat/lng are: the agent can deny
+  // location permission and the hand-off must still be recordable.
+  lat Decimal? @db.Decimal(10, 7)
+  lng Decimal? @db.Decimal(10, 7)
+
+  // Rendered lazily on first download, same as PickupReceipt.pdfUrl (Batch 7b).
+  pdfUrl String? @map("pdf_url")
+
+  handedOffAt DateTime @default(now()) @map("handed_off_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  agent    Profile  @relation(fields: [agentId], references: [id])
+  facility Facility @relation(fields: [facilityId], references: [id])
+  pickups  Pickup[]
+
+  @@index([agentId, handedOffAt(sort: Desc)])
+  @@map("custody_batches")
 }
 
 model SafetyChecklist {

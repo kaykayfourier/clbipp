@@ -259,3 +259,24 @@ alter table facilities enable row level security;
 alter table recyclers enable row level security;
 alter table dispatch_manifests enable row level security;
 alter table safety_checklists enable row level security;
+alter table custody_batches enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Decision-engine tables. RLS was never enabled on these — they predate the
+-- vendor app and were missed when this file was written — which left our
+-- pricing internals (market rates, cost factors, every computed P_min/P_max)
+-- readable over PostgREST by any authenticated session, including a vendor's.
+-- That is the exact inverse of the vendor-visibility rule in CLAUDE.md.
+--
+-- Enabling RLS with no policy changes NO application behaviour: nothing in
+-- either app reads these through a Supabase client. Prisma connects as the
+-- table owner and the agent app's server actions use the service role; both
+-- bypass RLS. Added 2026-08-21 (Batch 0a) ahead of Batch 4, which starts
+-- writing real pathway_decisions rows.
+-- ---------------------------------------------------------------------------
+alter table market_prices enable row level security;
+alter table pathway_factors enable row level security;
+alter table pathway_decisions enable row level security;
+alter table battery_packs enable row level security;
+alter table battery_inspections enable row level security;
+alter table battery_diagnostics enable row level security;

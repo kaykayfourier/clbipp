@@ -376,16 +376,21 @@ const ONBOARDING_ANON = '/onboarding'
 // Content assertions get added per batch as the real screens land, the same way
 // the customer tables above grew.
 //
-// ⚠ The pickup ids below are placeholders until Khalid's Batch 0a assigns
-// `agentId` on the seeded pickups. They 200 today because the stubs query
-// nothing; the moment Batch 1 makes /job/[id] real, these must be ids the seed
-// actually gives agent@test or the run starts failing. Re-check after 0a.
-const AGENT_PICKUP = 'PKP-2026-000102' // seeded `scheduled` — the day-view job
-const AGENT_ARRIVED = 'PKP-2026-000103' // seeded `arrived`
-// Well-formed uuid in the seed's demo shape. BatteryItem.id is a uuid; there is
-// no seeded item to point at until 0a adds them, and a malformed id would fail
-// for the wrong reason once the screen is real.
-const AGENT_ITEM = '00000000-0000-4000-8000-000000000201'
+// All four ids below are REAL seeded rows as of Batch 0a — the placeholders are
+// gone. Every one is assigned to agent@test, so these routes exercise the
+// agent-scoped read, not just the router.
+//
+// ⚠ They are a contract with `packages/database/prisma/reset-demo.ts`. The item
+// and batch ids are minted by `demoItemId()` / `CUSTODY_BATCH_ID` there; change
+// either and this file must change with it.
+const AGENT_PICKUP = 'PKP-2026-000102' // seeded `scheduled` — the day-view job,
+//                                        3 items, mixed lead-acid + li-ion
+const AGENT_ARRIVED = 'PKP-2026-000103' // seeded `arrived`, also mixed
+// demoItemId('PKP-2026-000102', 0) — first item on the scheduled job.
+const AGENT_ITEM = '00000000-0000-4000-8000-000000102001'
+// The one seeded CustodyBatch (CB-2026-000301), holding the four pickups past
+// `collected`. The pickup AT `collected` is deliberately not in it — that is
+// the derived "pending drop-off" state (D5).
 const AGENT_BATCH = '00000000-0000-4000-8000-000000000301'
 
 const AGENT_ROUTES = [

@@ -5,11 +5,13 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-20 — **Field Agent app sprint opened; Batch 0b
-(scaffold + auth gate) is done and merged to `main`.** Two working-practice
-changes the same day: **lanes are no longer a gate** (do it and log it) and
-**we push straight to `main`** — no branches, no PRs. **Batch 0a moved from
-Khalid to Aamir.** See the ▶ READ FIRST section below. Everything under
+**Last updated:** 2026-08-21 — **Field Agent app: Batches 0b and 0a are both
+done.** 0a landed the one migration (`agent_app_v1`) and the extended seed, so
+**every remaining batch is unblocked**; it also recovered a shared-database
+incident (lost `profiles` rows + lost schema grants) worth reading before you
+touch the DB. Working practice as of 2026-08-20 still stands: **lanes are no
+longer a gate** (do it and log it) and **we push straight to `main`** — no
+branches, no PRs. See the ▶ READ FIRST section below. Everything under
 "Historical" describes the customer app and is kept for the record.
 
 Prior entry (2026-08-10): (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
@@ -50,7 +52,7 @@ Admin dashboard
 
 ---
 
-## ▶ READ FIRST — resume point (2026-08-20)
+## ▶ READ FIRST — resume point (2026-08-21)
 
 **Current sprint: the Field Agent app (`apps/agent`). One week, from 2026-08-20.**
 
@@ -74,10 +76,29 @@ the `.md` files are the source of truth.
   stub for all 22 §2 routes plus `/login`. `scripts/smoke.mjs` takes `--app=agent`.
   **C's Batch 3 is unblocked.** Details and traps: "Batch 0b — as built" at the
   bottom of `FIELD_AGENT_TASKS.md`.
-- **Batch 0a blocks everything else and is now A's** (moved from Khalid
-  2026-08-20). Every agent screen is a stub that queries nothing, so nothing has
-  real data yet, and C's Batch 3 needs the seeded multi-item pickups.
+- **Batch 0a done (2026-08-21), pushed to `main`.** The one migration
+  (`agent_app_v1`) is applied and the seed is extended: `agent@test` has a
+  pickup at every stage the app needs, the two intake jobs carry **3 items each
+  across 2 categories mixing li-ion and lead-acid**, and there is a
+  `MarketPrices` row, a `Facility` and a `CustodyBatch`. Demo item and batch ids
+  are now **deterministic**, so all four agent constants in `scripts/smoke.mjs`
+  point at real rows. **A's Batch 1, A's Batch 2 and C's Batch 3 are unblocked;
+  B's Batch 4 has everything it needs.** Two deviations (a
+  `PathwayDecision.traceId` column, and RLS closed on six decision-engine
+  tables) — see "Batch 0a — as built" in `FIELD_AGENT_TASKS.md`.
+- 🔴 **The shared Supabase project lost all `profiles` rows and all schema
+  grants** at some point before 2026-08-21, and it was recovered inside Batch
+  0a. **`npm run reset-demo` does not restore grants** — re-apply
+  `supabase/grants.sql` first, then `policies.sql`, `storage-policies.sql`,
+  `realtime.sql`. Missing grants do **not** look like an outage: the app
+  half-works and `npm run smoke` fails diffusely. Full write-up in the
+  "as built" section and in `LANE_OWNERSHIP.md`. The database also had **no
+  Prisma migration history**; it is baselined and tracked now.
 - **Admin app: untouched.** Not this sprint.
+
+**Next up: Batch 1 — day view + job detail (A).** It writes the first
+service-role agent action (`scheduled → arrived`), which every later batch
+copies.
 
 ### Lanes — as of 2026-08-20
 
@@ -87,7 +108,7 @@ then **Batch 0a moved from B to A** the same day. Both logged in
 
 | | Owner | Batches |
 |---|---|---|
-| **A** | Aamir | ~~**0b** scaffold + auth gate~~ ✅ · **0a** schema + seed *(taken from B 2026-08-20)* · **1** day view + job detail · **2** safety checklist · **5b** cross-app seam · **8** track/history/profile |
+| **A** | Aamir | ~~**0b** scaffold + auth gate~~ ✅ · ~~**0a** schema + seed *(taken from B 2026-08-20)*~~ ✅ · **1** day view + job detail ← **next** · **2** safety checklist · **5b** cross-app seam · **8** track/history/profile |
 | **B** | Khalid | **4** engine + pricing · **7b** custody PDF · **9** deploy **+ the agent app's Vercel project (`DEPLOY.md` §9)** |
 | **C** | Ali | **3** multi-item intake · **5a** quote screens · **6** collect · **7a** hub drop-off |
 

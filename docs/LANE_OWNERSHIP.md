@@ -40,6 +40,59 @@ Still true:
 
 ## Change log
 
+### 2026-08-21 — Batch 0a EXECUTED by A, plus three things taken on the way
+
+Follow-up to the 2026-08-20 entry below, which reassigned Batch 0a from Khalid
+to Aamir. It is **done** — `agent_app_v1` is applied, the seed is extended, and
+`npm run build` / `test` / `smoke` (customer, agent, and the role gate both
+ways) are all green. Three items crossed into B's lane while doing it:
+
+1. **`PathwayDecision.traceId` added** (`packages/database`, B's lane, but it is
+   the same migration 0a already owns). §3 of the plan says
+   `BatteryItem.traceId` "links to PathwayDecision", and there was no column to
+   link to — the engine mints its own `TRC-YYYY-NNNN`. Added now so the sprint
+   needs one migration rather than two. **Khalid: the join exists; no action.**
+
+2. **RLS closed on six decision-engine tables** — `market_prices`,
+   `pathway_factors`, `pathway_decisions`, `battery_packs`,
+   `battery_inspections`, `battery_diagnostics`. RLS is A's lane, the tables are
+   B's. They had RLS **off entirely**, so any logged-in vendor session could
+   read our pricing internals over PostgREST. Enabled with no policy (denies
+   `authenticated`, admits only the service role); nothing reads them through a
+   Supabase client, so behaviour is unchanged. Verified: a real vendor session
+   gets `200 []` from `/rest/v1/market_prices`.
+
+3. **`reset-demo.ts` no longer needs a pre-existing `business@test` profile.**
+   It used to throw "log in once to create it". Forced by the incident below.
+
+**🔴 The incident, which everyone needs to know about.** Mid-batch the shared
+Supabase project turned up with **every row of `public.profiles` gone and every
+`GRANT` on schema `public` gone**, while all 36 `auth.users` rows were intact.
+Not caused by this batch (the migration is additive; `wipe()` deletes two
+hard-coded uuids). Most likely a destructive run against the shared project by
+someone between 2026-08-20 and 2026-08-21 — **if that was you, no blame, but say
+so**, because whatever it was may also have hit Storage.
+
+Two lasting lessons, both written up in "Batch 0a — as built" in
+`docs/FIELD_AGENT_TASKS.md`:
+- **`npm run reset-demo` is not recovery.** It restores rows, not grants or
+  policies. Re-apply `supabase/grants.sql` **first**, then `policies.sql`,
+  `storage-policies.sql`, `realtime.sql`.
+- **Missing grants do not look like an outage.** The app half-works: Prisma
+  pages render, Supabase-client pages render *empty with a 200*, API routes
+  401, and `/onboarding` lets an onboarded session through — because the auth
+  guard deliberately fails **open** on an infrastructure error. `npm run smoke`
+  read 18/45 with no single obvious cause. Check grants first if you see that.
+
+Also fixed while there: the database had **no Prisma migration history**
+(`_prisma_migrations` empty, `migrate deploy` refused with `P3005`). Verified
+the live schema matched migration 8 exactly, then baselined the eight prior
+migrations. **History is tracked now — the next migration is an ordinary
+`migrate deploy`.**
+
+- **Executed by:** Aamir. **Nominal owner of items 1–2:** Khalid.
+- **Under the do-it-and-note-it policy** — no prior agreement sought, logged here.
+
 ### 2026-08-20 — Batch 0a (schema + seed): B → A
 
 - **Whose lane it is normally:** B's (Khalid). `packages/database/prisma/schema.prisma`,
