@@ -6,8 +6,8 @@ import path from "path";
 const nextConfig: NextConfig = {
   // Workspace packages ship raw TypeScript (just-in-time packages) — Next
   // transpiles them; there is no per-package build step to maintain.
-  transpilePackages: ["@clbipp/ui", "@clbipp/core", "@clbipp/auth", "@clbipp/database", "@clbipp/pdf"],
-
+  transpilePackages: ["@clbipp/ui", "@clbipp/core", "@clbipp/auth", "@clbipp/database", "@clbipp/pdf", "@clbipp/decision-engine"],
+  
   // @react-pdf/renderer is left OUT of the bundle and required at runtime
   // instead: it reaches for fs/path to resolve fonts, which the bundler either
   // breaks or drags a shim in for. Batch 7B's chain-of-custody PDF is the only
