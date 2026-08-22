@@ -16,6 +16,73 @@ type GeoState =
   | { kind: 'captured'; lat: number; lng: number; accuracy: number }
   | { kind: 'failed'; message: string }
 
+// All Indian states and union territories, so "State" is a pick rather than a
+// free-text field a customer can misspell or abbreviate differently each time.
+const INDIAN_STATES = [
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chhattisgarh',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
+  'Andaman and Nicobar Islands',
+  'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Jammu and Kashmir',
+  'Ladakh',
+  'Lakshadweep',
+  'Puducherry',
+] as const
+
+// Same label/hint chrome as Field, but a <select> — kept local for the same
+// reason Field above is duplicated rather than shared.
+function StateField({ defaultValue }: { defaultValue?: string }) {
+  return (
+    <label htmlFor="state" className="flex flex-col gap-1.5">
+      <span className="text-[11px] font-bold tracking-wide text-text-secondary">State</span>
+      <select
+        id="state"
+        name="state"
+        required
+        defaultValue={defaultValue ?? ''}
+        className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-green"
+      >
+        <option value="" disabled>
+          Select state
+        </option>
+        {INDIAN_STATES.map((state) => (
+          <option key={state} value={state}>
+            {state}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 // Field is duplicated from (auth)/field.tsx rather than imported across route
 // groups — same reason the original exists: C's shared <Input> never landed.
 // TODO: collapse both into a shared @clbipp/ui <Input> when it does.
@@ -104,7 +171,7 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="City" name="city" type="text" required maxLength={60} placeholder="Bengaluru" />
-        <Field label="State" name="state" type="text" required maxLength={60} placeholder="Karnataka" />
+        <StateField />
       </div>
 
       <Field
@@ -183,3 +250,4 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
     </form>
   )
 }
+

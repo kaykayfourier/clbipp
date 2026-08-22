@@ -11,10 +11,20 @@ import { cancelPickup } from "../handover/actions";
 // which crashed (a server component can't pass an event handler to a client
 // component). This "use client" island fixes that.
 //
-// Reschedule is disabled ("coming soon") — no reschedule flow exists this sprint.
-// Cancel calls the `cancelPickup` service-role server action (owner-checked,
-// pre-collection only), then routes to the cancelled tracking view.
-export function PickupActions({ pickupId }: { pickupId: string }) {
+// Reschedule now routes to the /reschedule/[id] screen. Cancel calls the
+// `cancelPickup` service-role server action (owner-checked, pre-collection
+// only), then routes to the cancelled tracking view.
+//
+// If the pickup is already cancelled, cancelling again is a no-op, so this
+// leads with the one action that actually moves the pickup forward:
+// rescheduling the same request instead of re-offering "Cancel request".
+export function PickupActions({
+  pickupId,
+  status,
+}: {
+  pickupId: string;
+  status: string;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -32,13 +42,29 @@ export function PickupActions({ pickupId }: { pickupId: string }) {
     });
   }
 
+  if (status === "cancelled") {
+    return (
+      <>
+        <p className="text-sm text-text-secondary text-center">
+          This pickup was cancelled.
+        </p>
+        <Button
+          variant="primary"
+          fullWidth
+          onClick={() => router.push(`/reschedule/${pickupId}`)}
+        >
+          Reschedule
+        </Button>
+      </>
+    );
+  }
+
   return (
     <>
       <Button
         variant="secondary"
         fullWidth
-        disabled
-        title="Reschedule is coming soon"
+        onClick={() => router.push(`/reschedule/${pickupId}`)}
       >
         Reschedule
       </Button>
