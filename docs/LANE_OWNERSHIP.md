@@ -40,6 +40,48 @@ Still true:
 
 ## Change log
 
+### 2026-08-23 — 🔴 NOTED, not actioned: reschedule-after-cancel needs the lifecycle contract updated
+
+Spotted while rebasing Batch 1 onto `8d51cbe` / `3470b34` (customer app auth +
+rescheduling). **Not touched — flagging only, per lane policy.** Owner: whoever
+wrote `feature/customer-tweaks`.
+
+`reschedulePickup` in `apps/customer/src/app/(app)/handover/actions.ts` writes
+`cancelled → requested`, reactivating a cancelled pickup instead of making the
+customer file a new request.
+
+**The behaviour is correct — HR asked for it.** The gap is that it is a real
+change to the lifecycle contract and the contract still says otherwise:
+`CLAUDE.md` and `schema.prisma` both describe `cancelled` as the **terminal**
+side-state. Right now the only place the new edge is written down is inside the
+action. Every screen that treats `cancelled` as final is making an assumption
+that no longer holds, and nobody reading the contract would know.
+
+**The fix is documentation, not code:** state in `CLAUDE.md` and in
+`schema.prisma`'s `PickupStatus` comment that `cancelled` is re-enterable via
+reschedule. Still nine stages; no migration.
+
+Three consequences that follow, and are worth a look once the contract says so:
+
+1. **The audit log can go backwards.** A `requested` `status_events` row now
+   lands *after* a `cancelled` one. `buildStages` / `lifecycle-view` (shared,
+   A's) assume monotonic progression — worth checking what a reactivated
+   pickup's timeline actually renders.
+2. **Reactivation clears nothing else.** The row keeps its old `agentId`,
+   `agentFeePaise`, `Offer` and `Offer.acceptedAt`. So a pickup can sit at
+   `requested` while still carrying an accepted offer and an assigned agent.
+   Probably wants the offer voided and the agent unassigned on reactivation —
+   the vendor is re-requesting, not resuming.
+3. **It surfaces in the agent day view.** `isActiveJob('requested', …)` is true,
+   so a reactivated pickup that kept its `agentId` reappears in the agent's
+   active list labelled "In recovery — nothing to do" (`job-nav.ts`).
+   Unreachable until (2) is decided, since nothing else produces a `requested`
+   pickup with an agent — deliberately left alone rather than special-cased
+   around it.
+
+**Nothing here blocks Batch 1, and nothing was changed for it.** (2) is the one
+with teeth; (3) resolves itself once (2) does.
+
 ### 2026-08-22 — Batch 1 (day view + job detail) — A, in lane, one seed edit taken
 
 - **In lane, no shift:** `apps/agent/src/app/(agent)/page.tsx`,
