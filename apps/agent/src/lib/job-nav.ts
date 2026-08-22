@@ -1,4 +1,5 @@
 import type { PickupStatus } from '@clbipp/database'
+import { isLithium } from '@clbipp/core/intake'
 import { isStageBefore } from '@clbipp/ui'
 
 // ─── Where an agent's job row goes, and what it says ─────────────────────────
@@ -100,4 +101,38 @@ export function jobNextStep(status: PickupStatus, custodyBatchId: string | null)
   if (status === 'collected' && custodyBatchId === null) return 'Pending drop-off at the hub'
   if (status === 'cancelled') return 'Cancelled'
   return 'In recovery — nothing to do'
+}
+
+/**
+ * Where ONE ITEM goes once the agent has confirmed it — the D1 branch, as a URL.
+ *
+ * Li-ion (`li_ion_nmc` / `li_ion_lfp` / `li_ion_nca`) takes the full path:
+ * damage rubric → decision engine → pathway + price band. Everything else is
+ * priced straight off `PricingRate` with no rubric and no engine, so it skips
+ * to the result. `isLithium` from @clbipp/core/intake is the one definition of
+ * which is which — never re-list the chemistries here.
+ *
+ * An UNCONFIRMED item (`chemistry === null`) is not lithium, so it falls to the
+ * result href. That never renders: the item list only offers a next step on rows
+ * `itemConfirmationState` calls confirmed.
+ *
+ * 📌 BATCH 5a: both destinations are stubs today, which is why Batch 3's confirm
+ * action redirects back to the item LIST rather than into one of them — landing
+ * an agent on an empty page after every item makes the loop untestable. When 5a
+ * builds the rubric and the result screens, change that one redirect in
+ * `items/actions.ts` to call this function. The branch logic itself does not
+ * move.
+ */
+export function itemNextHref(
+  pickupId: string,
+  itemId: string,
+  chemistry: string | null,
+): string {
+  const base = `/job/${encodeURIComponent(pickupId)}/items/${encodeURIComponent(itemId)}`
+  return isLithium(chemistry) ? `${base}/damage` : `${base}/result`
+}
+
+/** The label on that link, so the list and the item screen word it identically. */
+export function itemNextLabel(chemistry: string | null): string {
+  return isLithium(chemistry) ? 'Continue to damage rubric' : 'Continue to price'
 }

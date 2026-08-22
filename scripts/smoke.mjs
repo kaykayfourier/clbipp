@@ -386,8 +386,20 @@ const ONBOARDING_ANON = '/onboarding'
 const AGENT_PICKUP = 'PKP-2026-000102' // seeded `scheduled` — the day-view job,
 //                                        3 items, mixed lead-acid + li-ion
 const AGENT_ARRIVED = 'PKP-2026-000103' // seeded `arrived`, also mixed
-// demoItemId('PKP-2026-000102', 0) — first item on the scheduled job.
+// demoItemId('PKP-2026-000102', 0) — first item on the scheduled job. 102 has NO
+// safety checklist, so every intake route under it is REJECTED by the gate; that
+// is what it is used for below, not for rendering.
 const AGENT_ITEM = '00000000-0000-4000-8000-000000102001'
+// demoItemId('PKP-2026-000103', …) — the ADMIT side. 103 is seeded WITH a passing
+// checklist, so these are the item ids the built intake screens actually render
+// for. Item 1 is li-ion NMC (declared portable, healthy) and item 3 is lead-acid
+// (declared automotive, dead) — the two sides of the D1 branch, on one job.
+//
+// ⚠ Batch 3 moved the item-confirm routes here from 102. Once /items/[itemId]
+// gained the gate, a route under 102 could only ever redirect, so pointing the
+// render assertions at it would have tested nothing.
+const AGENT_ARRIVED_ITEM = '00000000-0000-4000-8000-000000103001'
+const AGENT_ARRIVED_ITEM_LEAD = '00000000-0000-4000-8000-000000103003'
 // The one seeded CustodyBatch (CB-2026-000301), holding the four pickups past
 // `collected`. The pickup AT `collected` is deliberately not in it — that is
 // the derived "pending drop-off" state (D5).
@@ -405,12 +417,21 @@ const AGENT_ROUTES = [
   // to reject is indistinguishable from a gate that rejects everything.
   `/job/${AGENT_ARRIVED}/safety`,
   `/job/${AGENT_ARRIVED}/items`,
-  // C. Intake & assessment
+  // C. Intake & assessment. The screens Batch 3 built RENDER on 103, the pickup
+  // past the safety gate.
+  `/job/${AGENT_ARRIVED}/items/${AGENT_ARRIVED_ITEM}`,
+  `/job/${AGENT_ARRIVED}/items/${AGENT_ARRIVED_ITEM_LEAD}`,
+  `/job/${AGENT_ARRIVED}/scan`,
+  // …and the SAME three screens on 102, which has no checklist, are the gate's
+  // reject half. They must stay in this list: AGENT_ITEMS_GATE only runs against
+  // routes that are actually fetched, and a rejection asserted nowhere is not
+  // asserted. Batch 3 extended the gate from /items alone to all three.
   `/job/${AGENT_PICKUP}/items`,
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}`,
+  `/job/${AGENT_PICKUP}/scan`,
+  // Batch 5a's screens, still stubs — ungated, so they still render under 102.
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/damage`,
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/computing`,
-  `/job/${AGENT_PICKUP}/scan`,
   // D. Quote
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result`,
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/breakdown`,
@@ -471,7 +492,42 @@ const AGENT_APP_CONTENT = {
   // stored row was read back rather than the screen just rendering blank.
   [`/job/${AGENT_ARRIVED}/safety`]: ['Safety checklist completed', 'Continue to intake'],
   // The gate's ADMIT half: 103 has a passing checklist, so intake renders.
-  [`/job/${AGENT_ARRIVED}/items`]: ['Items'],
+  //
+  // Batch 3 — the real item list. Every string here is the positive twin of one
+  // asserted ABSENT on 102 in AGENT_ITEMS_GATE. 'kg weighed' and '0 of 3
+  // confirmed' are the running total, which only renders off this agent's own
+  // Prisma read: a broken query fails here rather than passing on an empty
+  // layout. 'Quote unlocks once' is the blocked state — 103's items are seeded
+  // unconfirmed (the agent half is only filled from `collected` onward), so a
+  // fresh seed must NOT offer the quote.
+  [`/job/${AGENT_ARRIVED}/items`]: [
+    'Lines on this job',
+    'kg weighed',
+    '0 of 3 confirmed',
+    'Quote unlocks once',
+    'Assess this line',
+  ],
+  // Batch 3 — the per-item confirm. The declared half proves the item was read
+  // scoped to this pickup; the chemistry catalogue and the branch copy prove the
+  // D1 fork is on the screen. Item 1 is declared portable/healthy.
+  [`/job/${AGENT_ARRIVED}/items/${AGENT_ARRIVED_ITEM}`]: [
+    'Customer declared',
+    'Chemistry — read it off the label',
+    'Li-ion NMC',
+    'Lead-acid',
+    'Weighed on site',
+    'Condition you found',
+    'Save this line',
+  ],
+  // The third line on 103 is declared automotive + DEAD, so the same screen must
+  // additionally show the photo-evidence requirement. This is the only route
+  // that asserts it, and it is the reason a second item id is in the table.
+  [`/job/${AGENT_ARRIVED}/items/${AGENT_ARRIVED_ITEM_LEAD}`]: [
+    'Customer declared',
+    'Automotive',
+    'required for this condition',
+  ],
+  [`/job/${AGENT_ARRIVED}/scan`]: ['QR scanning is not in this build'],
   [`/job/${AGENT_PICKUP}/offer`]: ['Offer'],
   '/dropoff/confirm': ['Confirm hand-off'],
 }
@@ -491,14 +547,28 @@ const AGENT_APP_CONTENT = {
 // This also fails if `requireSafetyChecklist` is deleted from items/page.tsx
 // during Ali's Batch 3 rewrite, which is the main thing it is here to catch.
 //
-// 📌 BATCH 3 MAINTENANCE. Both strings below come from the STUB. When the real
-// items screen lands, replace them with something only the built screen renders
-// (a running total, a per-item row) — otherwise this assertion passes by
-// asserting the absence of text that no longer exists anywhere, which is the
-// Batch 10 vacuous-assertion lesson repeating itself. `'Items'` is the AppShell
-// title and is the more durable of the two, so it is listed first.
+// ✅ BATCH 3 MAINTENANCE DONE (2026-08-23). The two strings used to be `'Items'`
+// and `'Batch 3 · Ali'`, both from the stub this batch deleted — the second no
+// longer exists anywhere in the repo, so it had become a vacuous assertion. Each
+// string below is now text that ONLY the built screens render, and every one of
+// them is asserted POSITIVELY on the 103 routes in AGENT_APP_CONTENT. That
+// pairing is the whole design: the same string must appear on the admitted job
+// and be absent on the rejected one, so neither half can pass by accident.
+//
+// 📌 KEEP THAT PAIRING. If you change the copy on the items screen, change it in
+// both places — a string that no longer renders anywhere passes here forever.
 const AGENT_ITEMS_GATE = {
-  [`/job/${AGENT_PICKUP}/items`]: ['Items', 'Batch 3 · Ali'],
+  // The item LIST. `confirmed` / `of` come from the running total, which cannot
+  // render without the Prisma read behind the gate.
+  [`/job/${AGENT_PICKUP}/items`]: ['Lines on this job', 'kg weighed'],
+  // The per-item CONFIRM screen — gated for the first time in Batch 3. The item
+  // id is 102's own, so this is a genuine gate rejection and not a 404.
+  [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}`]: [
+    'Customer declared',
+    'Chemistry — read it off the label',
+  ],
+  // The scan screen inherited the gate too.
+  [`/job/${AGENT_PICKUP}/scan`]: ['QR scanning is not in this build'],
 }
 
 const AGENT_PUBLIC_ROUTES = ['/login']

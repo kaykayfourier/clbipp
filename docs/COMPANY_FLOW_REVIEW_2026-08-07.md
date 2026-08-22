@@ -274,6 +274,27 @@ framing is wrong: two-segment support is a data-model change, not a tweak.
    at booking, the checklist could be driven from real declared data instead.
    Related to the category-vs-chemistry section above.
 
+12. **Chemistry picker wording — same question, different screen.** (added
+   2026-08-23, Field Agent Batch 3.) The agent's per-item confirm screen asks
+   them to read a chemistry off the label and offers six options — NMC, LFP,
+   NCA, lead-acid, NiMH, other — each with a one-line "what this looks like on a
+   shelf" hint we wrote ourselves. Nothing you sent describes how a field agent
+   should identify chemistry in the field. Same standing as questions 7 and 10:
+   defensible, unverified, **and their answer is a text change in one file**
+   (`CHEMISTRY_OPTIONS` in `packages/core/src/intake.ts`). If your operations
+   team has an identification guide, send it.
+
+13. **A mis-declared battery category — how should the agent correct it?**
+   (added 2026-08-23, Field Agent Batch 3.) `BatteryItem.category` is the
+   customer's declaration and there is deliberately no agent-confirmed
+   counterpart, so an agent who finds an industrial pack booked as portable has
+   **nowhere to record it**. Overwriting the declaration is not an option — both
+   halves are evidence, and the disagreement is exactly the kind of thing an
+   auditor would want to see. Options are a correction field, an admin-app
+   review queue, or accepting that chemistry + weight are enough and category is
+   only a booking convenience. **We would like your view before we add a
+   column.**
+
 ---
 
 ## Rule change recorded from this review

@@ -100,6 +100,47 @@ outlive a single sprint.
 
 ## Decisions explicitly deferred (do not build yet)
 
+### Post-sprint productionisation — noted 2026-08-23, not scoped yet
+
+Raised by Aamir during Batch 3. **Recorded, not started** — none of it is in the
+one-week Field Agent sprint, and none of it blocks a batch.
+
+- **Push notifications in both apps.** There is no notification surface anywhere
+  today. The natural triggers already exist as writes we make: a vendor should
+  learn when the agent marks `arrived` and when an offer is presented; an agent
+  should learn when a job is assigned to them and when a vendor accepts. Batch 8
+  of the agent plan explicitly says to **delete** the profile screen's
+  "Notifications" button rather than ship it dead — this is the note that says
+  why it was deleted and what would make it real. Needs: Web Push (VAPID keys, a
+  service worker with a `push` handler, a subscriptions table), or a hosted
+  service. **Web Push on iOS Safari requires the app to be installed to the home
+  screen first**, which ties it to the item below.
+
+- **Real installability, not "open the link and Add to Home Screen".** As of
+  today the two apps are not equal and neither is good:
+  - `apps/customer/` has `manifest.webmanifest`, `sw.js`, `offline.html`,
+    `icon-192/512`, `apple-touch-icon` and a `<ServiceWorkerRegister />`.
+  - **`apps/agent/` has no `public/` directory at all** — no manifest, no service
+    worker, no icons. Its `layout.tsx` says so in a comment and defers it to
+    Batch 8. A field agent on a loading bay is the user who most needs an
+    offline-capable installed app, so this is the wrong way round.
+
+  What "easier to install" actually means, in order of effort: (1) give the agent
+  app parity with the customer app's PWA assets; (2) add an in-app install
+  prompt driven by `beforeinstallprompt` instead of relying on the browser menu
+  — iOS has no such event and needs a short instruction sheet instead; (3) if a
+  real store listing is wanted, the realistic route is a thin wrapper
+  (Capacitor / TWA for Play, Capacitor for App Store) around the same Next app,
+  which needs a paid Apple developer account — the same blocker that dropped
+  Apple sign-in in customer-app Batch 11.
+
+- **Going live properly.** Both apps deploy to Vercel off `main` today, which is
+  a demo posture, not a production one. Not yet decided or done: a custom
+  domain and Supabase redirect URLs to match; separating the demo Supabase
+  project from a production one (**there is one shared project right now, and
+  `npm run reset-demo` wipes it**); real auth email delivery instead of the
+  default; error tracking; and a backup/restore story for the database.
+
 - Green points / coupon / rewards system (future phase). **Update 2026-08-07:** the
   company flow document lists a wallet with cash payout or redeemable rewards
   (green coins, gold/silver, coupons) as a Customer App capability, and scopes

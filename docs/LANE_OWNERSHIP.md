@@ -40,6 +40,33 @@ Still true:
 
 ## Change log
 
+### 2026-08-23 — Batch 3 (multi-item intake): C → A, whole batch
+
+- **Taken by A (Aamir). Was C's (Ali).** The item list, the per-item confirm
+  screen, its client form and the `confirmItem` server action —
+  `apps/agent/src/app/(agent)/job/[id]/items/**` and `…/scan/page.tsx`.
+- **Why:** Batch 3 is the critical path. Batches **5a, 6 and 7a all depend on
+  it** and the sprint ends 2026-08-27; nothing else in the on-site flow can start
+  until it lands. Under the do-it-and-note-it policy that is a do-it, not a wait.
+  Batches 0b, 0a, 1 and 2 were already done and A was otherwise going to start
+  5b, which blocks nobody.
+- **C (Ali) keeps 5a, 6 and 7a** — unchanged. The screens were written to be
+  extended rather than replaced, and "Batch 3 — as built" in
+  `FIELD_AGENT_TASKS.md` names the exact one-line change (`itemNextHref` in the
+  confirm redirect) that hands the flow into 5a.
+- **Two cross-lane one-liners taken with it, both behaviour-preserving:**
+  1. `apps/agent/src/app/api/quote/route.ts` (**B — Khalid**, Batch 4): its local
+     `LI_ION_TYPES` array replaced with `isLithium` from `@clbipp/core/intake`,
+     so the D1 branch has one definition instead of two. **Moves no price.**
+  2. `scripts/smoke.mjs` (shared): the `AGENT_ITEMS_GATE` maintenance note that
+     Batch 2 left came due — its assertion strings came from the stub this batch
+     deleted, one of which no longer exists anywhere in the repo.
+- **New shared file:** `packages/core/src/intake.ts` + 39 tests. Pure and
+  browser-safe, exported as the `@clbipp/core/intake` subpath. It is where the
+  li-ion branch, the confirmation rule and the submission validation live —
+  **not in a screen**, so 5a's roll-up and the admin app read the same answers.
+- **Agreed by:** decided with Aamir at the start of the session, before building.
+
 ### 2026-08-23 — Batch 2 (safety checklist) — A, in lane, two cross-lane edits taken
 
 Batch 2 is A's own lane (W1 — the mandatory safety gate). Two files outside it

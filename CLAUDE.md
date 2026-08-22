@@ -41,7 +41,9 @@ monorepo** (migrated 2026-08-09):
 2. **Field Agent app** — `apps/agent` — **CURRENT SPRINT** (one week, from
    2026-08-20). Runs on **port 3001** (`npm run dev:agent`). Done so far:
    **0b** scaffold + role-gated auth · **0a** schema + seed · **1** day view +
-   job detail · **4** engine + pricing. **Next: Batch 2, the safety checklist.**
+   job detail · **2** safety checklist · **3** multi-item intake · **4** engine +
+   pricing. **Next: Batch 5a (quote screens + offer, Ali); Aamir's own next is
+   Batch 5b, the cross-app seam.**
 3. **Admin dashboard** — `apps/admin` — scaffolded, built last
 
 ```
@@ -99,7 +101,22 @@ Headlines you need even if you read nothing else:
 - **Jobs are pushed, not pulled** (D2) — `Pickup.agentId` is set when scheduled;
   there is no nearby-jobs feed.
 - **A mandatory safety checklist gates intake** (W1). All three HR documents
-  require it; the wireframe omitted it entirely.
+  require it; the wireframe omitted it entirely. It is enforced by
+  `requireSafetyChecklist` in `apps/agent/src/lib/safety-gate.ts`, called
+  server-side from **every** intake screen — `/items`, `/items/[itemId]` and
+  `/scan` today. **Any new screen downstream of intake adds the same two lines**;
+  `/damage`, `/computing`, `/result*` and `/collect` are still stubs and still
+  ungated.
+- **The D1 chemistry branch has one home:** `isLithium` / `LI_ION_CHEMISTRIES` in
+  `packages/core/src/intake.ts`. Never re-list the li-ion chemistries in a screen
+  or an API route — `apps/agent/.../api/quote/route.ts` had a second copy and it
+  was removed in Batch 3.
+- **A `BatteryItem` has two halves and neither overwrites the other.**
+  `category` / `quantity` / `weightKg` / `condition` / `photoUrls` are the
+  customer's declaration; `chemistry` / `confirmedWeightKg` /
+  `confirmedCondition` / `agentPhotoUrls` / `recordedBy` / `recordedAt` are the
+  agent's. They are allowed to disagree — that is a finding, not a bug. There is
+  deliberately **no `confirmedCategory`**.
 - **Chat, VoIP call and turn-by-turn navigation are cut** (D4) — `tel:` link,
   static Leaflet map, Google Maps deep link.
 - **Agents do not self-sign-up** (D6). Login only; accounts come from the seed.

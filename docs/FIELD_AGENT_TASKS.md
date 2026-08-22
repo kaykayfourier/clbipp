@@ -330,7 +330,21 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 3 — Multi-item intake · **Ali** · ~1.0d
+## Batch 3 — Multi-item intake · **Ali's lane, built by Aamir** · ~1.0d ✅ DONE 2026-08-23
+
+> Shipped to `main`. Verified: `npm run build` green (agent app still prints
+> `ƒ Proxy (Middleware)`); lint clean apart from one **pre-existing** warning in
+> Khalid's `api/quote/route.ts`; **213 tests pass** (174 + 39 new in
+> `packages/core/src/intake.test.ts`); `npm run smoke -- --app=agent` **28/28**
+> with the safety gate now asserted in both directions on **three** routes;
+> `npm run smoke` **45/45**; the role gate holds both ways (**28/28** and
+> **45/45**); and 30 scripted checks over the real server action, including a
+> **forged item id from another pickup** and a **photo path under another user's
+> uid**, both turned away.
+>
+> ⚠ **Read "Batch 3 — as built" at the bottom of this file before Batch 5a.**
+> Four deviations, one contradiction in the steps below that had to be resolved,
+> and the one-line change that flips the confirm redirect into 5a's screens.
 
 **Depends on:** 0a + 0b. **The biggest UI batch — start it day 2.**
 
@@ -1210,3 +1224,241 @@ re-rendered and writes nothing, which looks exactly like a broken action. Adding
 a `Next-Action` header instead switches Next to the JS-driven RSC protocol, which
 wants a different body again. Pass a `FormData` to `fetch` and let it set the
 boundary. This cost ~20 minutes.
+
+---
+
+## Batch 3 — as built (2026-08-23, Aamir · Ali's lane)
+
+Read this before Batch 5a. The batch shipped as specified except where the steps
+contradicted themselves or the schema — those are the four deviations below, all
+agreed before building.
+
+### Why Aamir and not Ali
+
+Batch 3 is the critical path: 5a, 6 and 7a all depend on it, and the week ends
+2026-08-27. Taken over under the do-it-and-note-it policy (2026-08-20) rather
+than waiting. Logged in `docs/LANE_OWNERSHIP.md`. **Ali still owns 5a, 6 and 7a**
+and every screen below is written to be extended, not replaced.
+
+### What exists now
+
+| Thing | Where |
+|---|---|
+| Chemistry catalogue, condition catalogue, confirmation rules (pure, tested) | `packages/core/src/intake.ts` |
+| 39 tests | `packages/core/src/intake.test.ts` |
+| Item list — the spine | `apps/agent/src/app/(agent)/job/[id]/items/page.tsx` |
+| Per-item confirm | `…/items/[itemId]/page.tsx` |
+| The form (client, photos + live branch hint) | `…/items/[itemId]/ItemConfirmForm.tsx` |
+| The write | `…/items/actions.ts` |
+| 🔴 **The D1 branch as a URL** | `apps/agent/src/lib/job-nav.ts` → `itemNextHref` |
+| Honest deferral of QR scan, gated | `…/job/[id]/scan/page.tsx` |
+| Gate asserted on 3 routes, both directions | `scripts/smoke.mjs` → `AGENT_ITEMS_GATE` |
+
+### 🔴 ALI — the one line that flips this into your batch
+
+`items/actions.ts` ends with a redirect back to the item **list**:
+
+```ts
+redirect(`${listPath}?confirmed=${encodeURIComponent(itemId)}`)
+```
+
+When your rubric and result screens exist, that becomes:
+
+```ts
+redirect(itemNextHref(pickupId, itemId, value.chemistry))
+```
+
+`itemNextHref` already computes the D1 destination (li-ion → `/damage`,
+everything else → `/result`) and both screens already render it as a link, so
+the branch is live and asserted today — it just doesn't *redirect* into a stub.
+**Don't re-derive the branch in your screens.** `isLithium` from
+`@clbipp/core/intake` is its one home, and `api/quote/route.ts` was pointed at it
+in this batch precisely so a second list can't drift.
+
+### 🔴 Two things that must survive Batch 5a
+
+1. **`requireSafetyChecklist` now runs on three screens** — `/items`,
+   `/items/[itemId]` and `/scan` — not just the entry point. Batch 2 only wired
+   the first and left a note asking for the rest; this is the rest, for the
+   screens that existed. **`/damage`, `/computing`, `/result*` and `/collect` are
+   still ungated stubs.** Add the two lines when you build them:
+
+   ```ts
+   const { data: { user } } = await createClient().auth.getUser()
+   await requireSafetyChecklist(id, user.id)
+   ```
+
+   It enforces ownership as well as the checklist and it *throws*, so once it has
+   run you may treat the pickup as this agent's with no further check.
+
+2. **Ownership on an item read is TWO checks, not one.** The gate proves the
+   *pickup* is this agent's; a `pickupId` filter on the item read proves the
+   *item* belongs to that pickup. Every screen and the action do both. Without
+   the second, an agent can open their own job's URL carrying another job's item
+   id — the item id is a bare uuid and nothing else constrains it. Verified by a
+   scripted forged-id POST.
+
+### The four deviations, and why
+
+1. **Photos upload from the BROWSER, not through a service-role server action.**
+   The steps above say the latter. Next's server actions cap the request body at
+   **`serverActions.bodySizeLimit`, which defaults to 1 MB** and is not raised in
+   either `next.config.ts`; `MAX_FILE_BYTES` is **5 MB**. Three photos of a
+   leaking pack would fail at the framework boundary before Supabase saw them.
+   The browser path needs **no policy change** — `pickup-photos` INSERT already
+   checks `(storage.foldername(name))[1] = auth.uid()` and an agent is an
+   authenticated user — and it is what the customer app's `StepItems.tsx` does.
+   Only the PATHS cross into the server action, which re-checks the uid prefix
+   (`photoPathsBelongTo`) because the service role bypasses RLS.
+
+   > ⚠ Cost: photo capture needs JS. The rest of the form is uncontrolled inputs
+   > and posts fine without it.
+
+2. **The agent does NOT confirm `category`.** Step 2 lists it among the agent's
+   fields *and* says never overwrite the customer-declared ones — and
+   `BatteryItem` has **no `confirmedCategory` column**, so `category` *is* the
+   declaration. It renders read-only. Chemistry is what drives the branch;
+   category is a form factor. **A mis-declared category is now an open item** for
+   the admin app — there is nowhere to record a correction. No migration.
+
+3. **A photo is REQUIRED on a damaged line** (`swollen` / `leaking` / `dead`),
+   optional otherwise. Not specified either way. That line is the one that gets
+   argued about later and the agent is standing in front of it; a healthy line is
+   not worth blocking a job over. `itemConfirmationState` returns a distinct
+   `needs-photo` state so the screen can say *what* is missing rather than just
+   "pending".
+
+   > ⚠ **Wider than the safety checklist's damaged set, deliberately.** Safety
+   > excludes `dead` because it needs no special handling; intake includes it
+   > because it is a valuation claim. The two sets are not interchangeable and
+   > `intake.test.ts` asserts the difference.
+
+4. **Confirming returns to the item list, not into a Batch 5a stub.** See the
+   Ali note above.
+
+### Cross-lane edits, both logged
+
+- `apps/agent/src/app/api/quote/route.ts` (Khalid, Batch 4) — its local
+  `LI_ION_TYPES` array was replaced with `isLithium` from `@clbipp/core/intake`.
+  Behaviour-identical; it removes a second copy of the D1 branch.
+  **This moves no price.**
+- `scripts/smoke.mjs` — see below.
+
+### Smoke: the Batch 3 maintenance note came due
+
+`AGENT_ITEMS_GATE`'s two strings were `'Items'` and `'Batch 3 · Ali'`, both from
+the stub this batch deleted — the second **no longer exists anywhere in the
+repo**, so it had already become a vacuous assertion. Replaced with text only the
+built screens render, and **every one of those strings is now asserted
+POSITIVELY on `PKP-2026-000103`** in `AGENT_APP_CONTENT`. That pairing is the
+design: the same string must render on the admitted job and be absent on the
+rejected one, so neither half can pass by accident. **If you change the copy on
+these screens, change it in both places.**
+
+The item-confirm routes also **moved from `PKP-2026-000102` to
+`PKP-2026-000103`**. Once `/items/[itemId]` gained the gate, a route under 102
+could only ever redirect, so render assertions there would have tested nothing.
+102 keeps three routes as the reject half.
+
+> ⚠ **React splits adjacent JSX expressions with `<!-- -->` in SSR output.**
+> `{a} of {b} confirmed` is unassertable as one string; the running total is
+> emitted as a single template literal for exactly this reason. Cost ~10 minutes.
+> Check any new assertion string is contiguous in the rendered HTML.
+
+### Design decisions taken
+
+1. **Nothing is preselected in the chemistry picker.** Chemistry is the one thing
+   the agent is on site to determine, and a pre-set control with no stated basis
+   reads as fact — the same call the safety screen's lithium toggle documented.
+2. **The weight field starts EMPTY**, with the declared weight beside it for
+   comparison. Prefilling a number whose whole purpose is to record what the
+   scale said gets it accepted unread.
+3. **Condition defaults to the declaration.** Unlike category, it *has* its own
+   confirmed column, so an override is non-destructive — both values survive.
+4. **Re-confirming REPLACES the photo set rather than appending.** A corrected
+   condition ("actually it's healthy") must not keep the photo of the leak that
+   prompted the first attempt.
+5. **An empty pickup is never "fully confirmed."** `intakeTotals` returns
+   `allConfirmed: false` for zero lines — `0 === 0` would otherwise let Batch 5a
+   raise an `Offer` for nothing.
+6. **No lifecycle transition and no `status_events` row.** Intake happens
+   entirely within `arrived`; the pickup moves to `offered` when 5a presents.
+7. **QR scan deferred, honestly.** Step 5 says "last, only if there's time" and
+   it is #2 on the cut list. `/scan` keeps its route, inherits the gate, and says
+   plainly that manual entry is the primary path. **Nothing links to it** — a
+   dead button is worse than an absent one.
+
+### The uuid trap does NOT apply here — and that is not an oversight
+
+Batch 2 found that Prisma's `@default(uuid())` is applied by the *Prisma client*,
+so a service-role insert must generate its own id. **`confirmItem` only ever
+UPDATEs** — `BatteryItem` rows are created by the customer at booking — so there
+is no id to supply. Batches 5a (`Offer`, `PathwayDecision`), 6 (`PickupReceipt`,
+`WalletTxn`) and 7a (`CustodyBatch`) all **insert**, and all still need
+`crypto.randomUUID()`. Check the migration, not `schema.prisma`.
+
+### Flagged for later — none of these block anyone
+
+- **No way to record a mis-declared category** (deviation 2). Needs either a
+  column or an admin-app correction flow. Not this sprint.
+- **Removing a saved photo does not delete the object** from the bucket — it is
+  still referenced by the stored row until the form is submitted, and an agent
+  who taps remove then backs out must not find their evidence gone. Orphans are
+  possible if they remove and then never submit. Cheap to sweep later; wrong to
+  fix by deleting eagerly.
+- **The chemistry catalogue's `help` text is ours, not HR's.** Same standing as
+  the three conditional safety items and the CO₂e factors: defensible, unverified.
+  Grouped with them in the open questions.
+- **`packages/core/src/intake.ts` restates the `BatteryType` and
+  `BatteryCondition` enum values** rather than importing them, because it must
+  stay browser-safe. Nothing checks the two agree at build time — but the server
+  action validates every submitted value against the restated list before
+  writing, so drift fails closed at the write. **Batch 9's verification is where
+  this should be compared**, alongside the CO₂e table.
+
+### Testing notes for the end-of-sprint manual pass
+
+All verified programmatically already. These are the things worth *looking at* on
+a real handset:
+
+1. `/job/PKP-2026-000103/items` — three lines, all Pending, "Quote unlocks once
+   all 3 lines are confirmed". The quote button must not be there.
+2. Assess line 1. Pick a chemistry — the branch hint under the picker should
+   change between "goes through the damage rubric" and "priced straight off the
+   rate card" as you switch between li-ion and lead-acid.
+3. **Take a real photo with the rear camera** (`capture="environment"`). This is
+   the only part of the batch that needs JS and the only part not covered by the
+   scripted run. Watch it upload on mobile data, not wifi.
+4. Line 2 is declared **swollen** — confirm it with no photo. It must come back
+   as "Photo needed", the quote must stay locked, and the row must say why.
+5. Confirm all three; the header should read "3 of 3 confirmed" and the weighed
+   total should differ from the declared total. Both numbers must be labelled.
+6. Go back into a confirmed line. The stored values appear in a card *above* the
+   form, not pre-filled into it; the form is for re-recording.
+7. Type `/job/PKP-2026-000102/items/00000000-0000-4000-8000-000000102001` into
+   the URL bar. It must bounce to `/safety`.
+8. Tap targets with gloves on — the chemistry and condition rows are 44px.
+
+### Verification worth re-running
+
+`verify-batch3.mjs` was written for the "Done when" list and is **not committed**
+(same convention as Batches 0a, 1 and 2). 30 checks over HTTP as `agent@test`,
+restoring `PKP-2026-000103` afterwards:
+
+1. Three mixed lines confirm; the list reaches 3 of 3 and unlocks the quote.
+2. 🔴 **Declared category/quantity/weight/condition/photos byte-identical before
+   and after** — the load-bearing check of the whole batch.
+3. Li-ion routes to `/damage`, lead-acid to `/result`, on both screens.
+4. A forged item id from another pickup is rejected and that item is unchanged.
+5. A photo path under another user's uid prefix is rejected, and nothing written.
+6. Five validation cases: bad chemistry, bad condition, empty / zero / oversized
+   weight.
+7. Re-confirming overwrites, replaces the photo set, moves `recordedAt`, and
+   writes no lifecycle transition.
+8. A damaged line stripped of its photo drops back to 2 of 3 and re-locks the
+   quote.
+
+📌 **The POST must be `multipart/form-data`** and must carry the
+`$ACTION_ID_<id>` field scraped from the rendered form — the Batch 2 lesson,
+unchanged. A urlencoded body returns 200 with the page re-rendered and writes
+nothing.

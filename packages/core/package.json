@@ -6,7 +6,8 @@
     ".": "./src/index.ts",
     "./format": "./src/documents.ts",
     "./market": "./src/market.ts",
-    "./safety": "./src/safety.ts"
+    "./safety": "./src/safety.ts",
+    "./intake": "./src/intake.ts"
   },
   "scripts": {
     "test": "vitest run"

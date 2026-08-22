@@ -5,8 +5,35 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-23 — **Field Agent app: Batches 0b, 0a, 1 and 2 are
-done.** Batch 1 shipped the day view, job detail and the first agent-owned
+**Last updated:** 2026-08-23 — **Field Agent app: Batches 0b, 0a, 1, 2, 3 and 4
+are done.**
+
+> **Batch 3 (multi-item intake) shipped 2026-08-23** — the spine of the on-site
+> flow and the critical path for 5a, 6 and 7a. `/job/[id]/items` lists every
+> `BatteryItem` with a running total; `/job/[id]/items/[itemId]` captures the
+> agent's half (chemistry, weighed kg, condition, photos) **without ever touching
+> the customer-declared half**, which is asserted byte-for-byte. The D1 chemistry
+> branch has one home — `isLithium` in `packages/core/src/intake.ts` (39 tests) —
+> and `api/quote/route.ts` was pointed at it, deleting a second copy.
+> **213 tests.** Built by **Aamir in Ali's lane** to keep the critical path
+> moving (logged in `LANE_OWNERSHIP.md`); Ali still owns 5a, 6 and 7a.
+>
+> ⚠ Three deviations worth knowing: **photos upload from the browser**, not
+> through a server action (Next caps server-action bodies at 1 MB by default,
+> our files are 5 MB); **the agent does not confirm `category`** because there is
+> no `confirmedCategory` column and the declaration must not be overwritten; and
+> **a damaged line requires a photo** before it counts as confirmed. All four
+> deviations and the one-line change that hands the flow to Batch 5a are in
+> "Batch 3 — as built" in `FIELD_AGENT_TASKS.md`.
+>
+> **The safety gate now runs on three screens** (`/items`, `/items/[itemId]`,
+> `/scan`). `/damage`, `/computing`, `/result*` and `/collect` are still ungated
+> stubs — whoever builds them adds the two lines.
+>
+> **Next up: Batch 5a (quote screens + offer) — Ali.** Aamir's own next is
+> **Batch 5b (cross-app seam)**, which depends on nothing and is unblocked now.
+
+Prior entry (2026-08-23): **Batches 0b, 0a, 1 and 2 are done.** Batch 1 shipped the day view, job detail and the first agent-owned
 lifecycle write (`scheduled → arrived`) — that action is the **reference
 service-role action** every later agent batch copies. **Batch 2 shipped the
 mandatory safety checklist (W1)** — the gate between `arrived` and intake, the
@@ -19,9 +46,8 @@ Checklist rules and their 20 tests live in `packages/core/src/safety.ts`
 service-role write** — the id must be generated in the action. It affects every
 uuid-keyed table Batches 3, 5b, 6 and 7a will write; see "Batch 2 — as built" in
 `FIELD_AGENT_TASKS.md`.
-**Next up: Batch 3 (multi-item intake) — Ali**, now unblocked by a seeded
-passing checklist on `PKP-2026-000103`. **A's next is Batch 5b (cross-app
-seam).** Khalid's Batch 4 has landed too. Working practice as of
+~~**Next up: Batch 3 (multi-item intake) — Ali**~~ — **done 2026-08-23, see
+above.** Khalid's Batch 4 has landed too. Working practice as of
 2026-08-20 still stands: **lanes are no longer a gate** (do it and log it) and
 **we push straight to `main`** — no branches, no PRs. See the ▶ READ FIRST
 section below. Everything under "Historical" describes the customer app and is

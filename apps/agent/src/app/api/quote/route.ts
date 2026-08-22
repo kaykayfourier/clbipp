@@ -3,13 +3,18 @@ import { createClient } from "@clbipp/auth/server"
 import { prisma } from "@clbipp/database"
 import { getMarketData } from "@clbipp/core"
 import { getQuote, type BookingLineItem } from "@clbipp/core"
+import { isLithium } from "@clbipp/core/intake"
 import {
   computeQuote,
   EngineValidationError,
   StaleMarketDataError,
 } from "@clbipp/decision-engine"
 
-const LI_ION_TYPES = ["li_ion_nmc", "li_ion_lfp", "li_ion_nca"]
+// The D1 branch — li-ion goes through the engine, everything else is priced off
+// PricingRate. The list of li-ion families lives in @clbipp/core/intake
+// (LI_ION_CHEMISTRIES) so this route and the agent's item screens can never
+// disagree about which chemistry takes which path. A local copy here was
+// replaced in Batch 3; don't reintroduce one.
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -19,7 +24,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
 
   // ── Non-li-ion path — simple pricing via existing estimateQuote ───────────
-  if (!LI_ION_TYPES.includes(body.batteryType)) {
+  if (!isLithium(body.batteryType)) {
     const lineItem: BookingLineItem = {
       category:  body.category,
       quantity:  body.quantity,
