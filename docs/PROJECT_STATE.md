@@ -5,14 +5,15 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-21 — **Field Agent app: Batches 0b and 0a are both
-done.** 0a landed the one migration (`agent_app_v1`) and the extended seed, so
-**every remaining batch is unblocked**; it also recovered a shared-database
-incident (lost `profiles` rows + lost schema grants) worth reading before you
-touch the DB. Working practice as of 2026-08-20 still stands: **lanes are no
-longer a gate** (do it and log it) and **we push straight to `main`** — no
-branches, no PRs. See the ▶ READ FIRST section below. Everything under
-"Historical" describes the customer app and is kept for the record.
+**Last updated:** 2026-08-23 — **Field Agent app: Batches 0b, 0a and 1 are
+done.** Batch 1 shipped the day view, job detail and the first agent-owned
+lifecycle write (`scheduled → arrived`) — that action is the **reference
+service-role action** every later agent batch copies. **A's next is Batch 2
+(safety checklist).** Khalid's Batch 4 has landed too. Working practice as of
+2026-08-20 still stands: **lanes are no longer a gate** (do it and log it) and
+**we push straight to `main`** — no branches, no PRs. See the ▶ READ FIRST
+section below. Everything under "Historical" describes the customer app and is
+kept for the record.
 
 Prior entry (2026-08-10): (**Batches 0A + 0B + B2 + 4 + 5 + 6 + 6.5 + 7A + 7B
 + 8 + 9 + 10 + 11 executed** — repo is now a Turborepo monorepo, schema v2 is live, the
@@ -52,7 +53,7 @@ Admin dashboard
 
 ---
 
-## ▶ READ FIRST — resume point (2026-08-21)
+## ▶ READ FIRST — resume point (2026-08-23)
 
 **Current sprint: the Field Agent app (`apps/agent`). One week, from 2026-08-20.**
 
@@ -94,11 +95,24 @@ the `.md` files are the source of truth.
   half-works and `npm run smoke` fails diffusely. Full write-up in the
   "as built" section and in `LANE_OWNERSHIP.md`. The database also had **no
   Prisma migration history**; it is baselined and tracked now.
+- **Batch 1 done (2026-08-23), pushed to `main`.** The day view (`/`) and job
+  detail (`/job/[id]`) are real screens, plus `job-nav.ts` (row → destination
+  routing, the agent-side mirror of the customer's `pickup-nav.ts`) and
+  **`job/[id]/actions.ts` — the reference service-role action for this app.**
+  Verified: agent smoke **23/23** with real content assertions on both screens,
+  customer smoke **45/45**, role gate both ways, and 12 scripted checks over the
+  `Arrived` write including a **forged `pickupId`**, which is rejected. Two
+  seed lines were edited (B's file, logged) so the day-view stats aren't all
+  zero; it now reads **2 assigned / 1 collected / ₹2,592 earned** today. See
+  "Batch 1 — as built" in `FIELD_AGENT_TASKS.md`.
+- **Batch 4 (engine + pricing) landed from Khalid** (`5e19f02`, fixed in
+  `2e5a5e5`). `packages/core` gained `agent-fee.ts` and `market.ts`, the agent
+  app gained `/api/quote`, and test count is now **154**.
 - **Admin app: untouched.** Not this sprint.
 
-**Next up: Batch 1 — day view + job detail (A).** It writes the first
-service-role agent action (`scheduled → arrived`), which every later batch
-copies.
+**Next up: Batch 2 — the safety checklist (A).** It is the feature HR looks for
+first (W1), and **it opens with an unresolved decision** — see "A's next action"
+below.
 
 ### Lanes — as of 2026-08-20
 
@@ -108,8 +122,8 @@ then **Batch 0a moved from B to A** the same day. Both logged in
 
 | | Owner | Batches |
 |---|---|---|
-| **A** | Aamir | ~~**0b** scaffold + auth gate~~ ✅ · ~~**0a** schema + seed *(taken from B 2026-08-20)*~~ ✅ · **1** day view + job detail ← **next** · **2** safety checklist · **5b** cross-app seam · **8** track/history/profile |
-| **B** | Khalid | **4** engine + pricing · **7b** custody PDF · **9** deploy **+ the agent app's Vercel project (`DEPLOY.md` §9)** |
+| **A** | Aamir | ~~**0b** scaffold + auth gate~~ ✅ · ~~**0a** schema + seed *(taken from B 2026-08-20)*~~ ✅ · ~~**1** day view + job detail~~ ✅ · **2** safety checklist ← **next** · **5b** cross-app seam · **8** track/history/profile |
+| **B** | Khalid | ~~**4** engine + pricing~~ ✅ · **7b** custody PDF · **9** deploy **+ the agent app's Vercel project (`DEPLOY.md` §9)** |
 | **C** | Ali | **3** multi-item intake · **5a** quote screens · **6** collect · **7a** hub drop-off |
 
 **Lane policy changed 2026-08-20: lanes are a default, not a gate.** If a task
@@ -121,46 +135,36 @@ Attribute work to whoever actually did it.
 PRs. Both Vercel projects deploy off `main`, so **a push is a deploy** — run
 `npm run build` and the relevant `npm run smoke` first.
 
-### A's next action — **Batch 0a, then Batch 1**
+### A's next action — **Batch 2, the safety checklist**
 
-**Batch 0a — schema + seed. Taken over from Khalid on 2026-08-20** because it
-blocks A's Batches 1 and 2 *and* C's Batch 3, and waiting was the wrong call with
-a week on the clock. Logged in `LANE_OWNERSHIP.md`. **Not started yet.**
+**Batches 0b, 0a and 1 are done.** Batch 2 is the feature all three HR documents
+call *mandatory* and *pre-pickup* (W1), and the wireframe omitted entirely.
 
-Fully specified — there is nothing to design:
-- §3 of `PLAN_FIELD_AGENT_APP.md` is the schema delta, exactly as written:
-  `Pickup.agentFeePaise` · `Offer.acceptedAt` · `BatteryItem.damageVisual /
-  damageLeakage / damageThermal / damageScore / pathway / traceId` ·
-  `WalletTxnKind + agent_fee` · new `CustodyBatch` · `Pickup.custodyBatchId`.
-- One migration, named `agent_app_v1`.
-- `reset-demo.ts`: `agentId` on pickups so `agent@test` has ≥1 at each of
-  `scheduled`, `arrived`, `offered`, `collected`, plus two further along;
-  2–3 mixed-category `BatteryItem` rows on the `scheduled` and `arrived` ones
-  (≥1 li-ion and ≥1 lead-acid — C cannot build Batch 3 without this); one
-  `MarketPrices` row; one `Facility` row.
-- Read `docs/ai-prompts/database-create-migration.md` before authoring it.
-- ⚠ `packages/database` **must not import `packages/core`** — the cycle breaks
-  the generated client. Restate the CO₂ table if needed; a test already asserts
-  the two agree.
-- ⚠ `LIFECYCLE` in `reset-demo.ts` must stay in sync with `enum PickupStatus`,
-  `LIFECYCLE_STAGES` in `packages/ui/src/tokens.ts` and `pickupstatusSchema` in
-  `packages/core`. **You are not changing the list** — just don't let it drift.
-- **Then re-point the agent smoke ids** — `AGENT_PICKUP` / `AGENT_ARRIVED` /
-  `AGENT_ITEM` / `AGENT_BATCH` in `scripts/smoke.mjs` are placeholders that only
-  200 today because the stubs query nothing.
+**Read first:** "Batch 1 — as built" and "Batch 0a — as built" at the bottom of
+`FIELD_AGENT_TASKS.md`, then §Batch 2 of that file for the steps.
 
-**Then Batch 1 — day view + job detail.** Replaces the `/` and `/job/[id]` stubs:
-assigned jobs, the three home stats (Assigned / Collected / Earned today), and
-job detail with Google Maps + `tel:` + the **Arrived** action that writes
-`scheduled → arrived`.
-- Before writing the screen, read **"Batch 0b — as built"** at the bottom of
-  `FIELD_AGENT_TASKS.md`. The two that will bite: every `(agent)` screen must
-  pass `hideNav` to `AppShell` and add no bottom padding, and the agent smoke
-  pickup ids need re-pointing at whatever 0a actually seeds.
-- Lifecycle writes use the pattern in
-  `apps/customer/src/app/(app)/handover/actions.ts`: `"use server"` +
-  `createAdminClient()` + re-verify `pickup.agentId === user.id` **in code**,
-  because the service role bypasses RLS.
+🔴 **It opens with an unresolved decision, flagged in Batch 0a and still open.**
+The checklist is meant to be *chemistry-aware* ("show lithium-specific items only
+when the pickup has a li-ion item"), but `BatteryItem`'s customer-declared half
+has `category` and **no chemistry** — the agent tags chemistry on site in Batch 3,
+*after* this checklist is supposed to gate intake. So the question cannot be
+answered from declared data. **Decide at the top of Batch 2:** either a heuristic
+on `category` (`ev` / `portable` ⇒ treat as li-ion), or show every item and let
+the agent tick N/A. Not resolvable earlier.
+
+**What Batch 1 already did for you:** `/job/[id]` reads `pickup.safetyChecklist`
+and renders a completed-state banner plus a "Continue to intake" button when
+`passed` is true. So step 4 ("show it as a completed step on the job detail
+screen") is done — Batch 2 only has to write the row.
+
+**The action pattern is now in this repo, not just in the customer app.** Copy
+`apps/agent/src/app/(agent)/job/[id]/actions.ts`: session identity (never a form
+field) + `createAdminClient()` + re-verify `agentId === user.id` **in code** +
+status and `status_events` written together + idempotent + POST, never a GET.
+
+⚠ **The gate is the server-side redirect, not the hidden button.** `/job/[id]/items`
+must redirect back to `/safety` unless a `passed` checklist exists — verify by
+URL, not by clicking.
 
 **Verification commands, now that there are two apps:**
 
@@ -173,7 +177,23 @@ npm run smoke -- --app=agent --blocked business@test businesstest # vendor barre
 npm run smoke -- --blocked agent@test demo1234                    # agent barred from customer app
 ```
 
-The last two are the role gate in both directions. Both were green on 2026-08-20.
+The last two are the role gate in both directions. All four were green on
+2026-08-23.
+
+🔴 **Smoke the CUSTOMER app against a production build, not `npm run dev`.**
+As of 2026-08-23 `npm run smoke` reports 3 false failures against the dev server
+— the three `/api/documents/{certificate,receipt,invoice}/…` routes return
+Next's own HTML 404 instead of a PDF — but is **45/45** against
+`npm run build` + `npx next start` in `apps/customer`. It reproduces on a clean
+tree, so it is not any one batch's; it looks like Turbopack dev failing to match
+the doubly-nested dynamic API route `api/documents/[kind]/[id]`. **Owner:
+Khalid** (PDF templates + deploy). The agent app is unaffected — smoke it against
+`npm run dev:agent` as normal.
+
+```bash
+npm run build && (cd apps/customer && npx next start -p 3002 &)
+SMOKE_BASE_URL=http://localhost:3002 npm run smoke     # 45/45
+```
 
 ⚠ If smoke reports `BOUNCED TO LOGIN` on routes you believe are fine, check the
 dev-server log for `getaddrinfo ENOTFOUND` first. `getUser()` in the shared

@@ -39,8 +39,9 @@ monorepo** (migrated 2026-08-09):
 1. **Customer / Vendor app** — `apps/customer` — **built + deployed** (revamp
    merged to `main` 2026-08-15)
 2. **Field Agent app** — `apps/agent` — **CURRENT SPRINT** (one week, from
-   2026-08-20). Batch 0b (scaffold + role-gated auth) landed 2026-08-20; it runs
-   on **port 3001** (`npm run dev:agent`).
+   2026-08-20). Runs on **port 3001** (`npm run dev:agent`). Done so far:
+   **0b** scaffold + role-gated auth · **0a** schema + seed · **1** day view +
+   job detail · **4** engine + pricing. **Next: Batch 2, the safety checklist.**
 3. **Admin dashboard** — `apps/admin` — scaffolded, built last
 
 ```
@@ -122,6 +123,21 @@ recovered → certified` (plus `cancelled`).
 > `arrived` and `offered` were **added 2026-08-09 (Batch 7A)** and the contract is
 > locked again at nine stages. The Field Agent app is what `arrived` was added
 > for: the agent taps "Arrived" on site.
+
+⚠ **`cancelled` is NOT terminal — it is re-enterable** (changed 2026-08-23). HR
+asked for reschedule-after-cancel, so `reschedulePickup` in the customer app's
+`handover/actions.ts` writes **`cancelled → requested`** to reactivate a pickup
+rather than making the vendor file a new request. Still nine stages, no
+migration. Don't write code that assumes a cancelled pickup is final.
+
+> 🔴 **Two loose ends on that edge, neither resolved.** (1) Reactivation clears
+> nothing else — the row keeps its old `agentId`, `agentFeePaise`, `Offer` and
+> `Offer.acceptedAt`, so a pickup can sit at `requested` while still carrying an
+> accepted offer and an assigned agent. The vendor is re-requesting, not
+> resuming, so that probably wants voiding. (2) The audit log can now go
+> backwards — a `requested` `status_events` row landing after a `cancelled` one,
+> which `buildStages` / `lifecycle-view` assume can't happen. Written up in
+> `docs/LANE_OWNERSHIP.md` (2026-08-23).
 
 **Stage order has one source of truth per layer, and they must agree:**
 `enum PickupStatus` (`schema.prisma`) · `LIFECYCLE_STAGES` + `STAGE_LABELS`
@@ -371,6 +387,15 @@ explicitly asked to.
 - **Pickup row routing lives in `apps/customer/src/lib/pickup-nav.ts`**
   (`pickupHref`, `pickupSubtitle`). The dashboard and `/history` both import it —
   don't re-derive a row's destination inside a screen.
+  **The agent app's mirror is `apps/agent/src/lib/job-nav.ts`** (`jobHref`,
+  `isActiveJob`, `jobSubtitle`, `jobNextStep`). Same rule. The two are separate
+  files on purpose — the same nine statuses map to completely different screens
+  in the two apps, so this is app routing, not a shared UI primitive.
+- **Every agent lifecycle write copies `apps/agent/src/app/(agent)/job/[id]/actions.ts`.**
+  It is the reference service-role action for that app (Batch 1): session
+  identity — never a form field — plus `createAdminClient()`, an in-code
+  `agentId === user.id` re-check standing in for the missing RLS policy, status
+  and `status_events` written together, idempotent, and a POST rather than a GET.
 - **Profile writes go through the server Supabase client, not Prisma**, so
   `supabase/grants.sql`'s column allowlist applies (Prisma bypasses it).
   `updatePhone` in `profile/actions.ts` is the pattern. Use Prisma for profile
