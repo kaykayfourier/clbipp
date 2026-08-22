@@ -155,6 +155,12 @@ function PopulatedDashboardPage({
         <Button variant="primary" fullWidth>Request a pickup</Button>
       </Link>
 
+      {/* Second priority in the post-login flow, right after requesting a
+          pickup — a pickup needs somewhere to collect from. */}
+      <Link href="/addresses/new">
+        <Button variant="secondary" fullWidth>Add address</Button>
+      </Link>
+
       <WalletCard balancePaise={impact.walletBalancePaise} />
 
       <ImpactCard impact={impact} />
@@ -201,6 +207,12 @@ function EmptyDashboardPage({ profileId }: { profileId: string }) {
       <Link href="/book">
         <Button variant="primary" fullWidth className="max-w-[220px]">
           Request a pickup
+        </Button>
+      </Link>
+      {/* Second priority here too, for the same reason as the populated view. */}
+      <Link href="/addresses/new" className="w-full max-w-[220px]">
+        <Button variant="secondary" fullWidth>
+          Add address
         </Button>
       </Link>
       <AddressChip profileId={profileId} />

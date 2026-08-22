@@ -171,7 +171,7 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
             </Link>
           )}
 
-          <PickupActions pickupId={pickup.id} />
+          <PickupActions pickupId={pickup.id} status={pickup.status} />
         </div>
 
       </PagePadding>

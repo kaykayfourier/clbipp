@@ -176,3 +176,70 @@ export async function cancelPickup(
 
   return { error: null }
 }
+
+// ─── reschedulePickup ────────────────────────────────────────────────────────
+// Backs the new /reschedule/[id] screen. Called from two places: the
+// "Reschedule" button on /scheduled (an active, not-yet-collected pickup just
+// wants a new preferred date), and the cancelled view on /track/[id] and
+// /scheduled (a cancelled pickup gets REACTIVATED with the new date instead of
+// making the customer create a brand new request).
+export async function reschedulePickup(
+  pickupId: string,
+  preferredDate: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) return { error: 'Not authenticated.' }
+  if (!preferredDate) return { error: 'Choose a date to reschedule to.' }
+
+  const admin = createAdminClient()
+
+  const { data: pickup, error: readError } = await admin
+    .from('pickups')
+    .select('id, vendor_id, status')
+    .eq('id', pickupId)
+    .single()
+
+  if (readError || !pickup) return { error: 'Pickup not found.' }
+  if (pickup.vendor_id !== user.id) return { error: 'Not authorised for this pickup.' }
+
+  // Reschedulable pre-collection (same window as cancel), OR already
+  // cancelled — that second case is the reactivation path from the "reschedule
+  // the same cancelled pickup instead of a new request" requirement.
+  const reschedulable = isPreCollection(pickup.status) || pickup.status === 'cancelled'
+  if (!reschedulable) {
+    return { error: 'This pickup has already moved past collection and can no longer be rescheduled.' }
+  }
+
+  // A cancelled pickup comes back as a fresh request; an active one keeps
+  // whatever stage it's already at and just gets a new preferred date.
+  const nextStatus = pickup.status === 'cancelled' ? 'requested' : pickup.status
+
+  const { error: updateError } = await admin
+    .from('pickups')
+    .update({ status: nextStatus, preferred_date: preferredDate })
+    .eq('id', pickupId)
+
+  if (updateError) {
+    console.error('[reschedulePickup] update failed:', updateError)
+    return { error: updateError.message }
+  }
+
+  const { error: eventError } = await admin.from('status_events').insert({
+    pickup_id: pickupId,
+    status: nextStatus,
+    actor_id: user.id,
+    actor_role: 'vendor',
+    notes:
+      pickup.status === 'cancelled'
+        ? `Pickup rescheduled by vendor (reactivated from cancelled) to ${preferredDate}`
+        : `Pickup rescheduled by vendor to ${preferredDate}`,
+  })
+  if (eventError) console.error('[reschedulePickup] status_events insert failed:', eventError)
+
+  return { error: null }
+}

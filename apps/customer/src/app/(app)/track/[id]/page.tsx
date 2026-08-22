@@ -132,6 +132,12 @@ export default async function TrackPage({
         <PagePadding className="flex flex-col gap-4">
           <CancelledTimeline lastStage={lastRecordedStage(pickup.statusEvents)} stages={stages} />
           <Banner variant="error">This pickup was cancelled.</Banner>
+          {/* Cancelling isn't a dead end — rescheduling reactivates this same
+              pickup with a new date instead of making the customer start a
+              fresh request. */}
+          <Link href={`/reschedule/${pickup.id}`} className="block">
+            <Button fullWidth>Reschedule this pickup</Button>
+          </Link>
           {/* No partner card — there is nobody coming. The custody log stays:
               what was recorded before the cancellation is still the record. */}
           <CustodyLog entries={custody} />
