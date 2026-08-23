@@ -1300,7 +1300,8 @@ in this batch precisely so a second list can't drift.
 
 ### The four deviations, and why
 
-1. **Photos upload from the BROWSER, not through a service-role server action.**
+1. **Photos upload from the BROWSER, not through a service-role server action,
+   through TWO inputs.**
    The steps above say the latter. Next's server actions cap the request body at
    **`serverActions.bodySizeLimit`, which defaults to 1 MB** and is not raised in
    either `next.config.ts`; `MAX_FILE_BYTES` is **5 MB**. Three photos of a
@@ -1313,6 +1314,14 @@ in this batch precisely so a second list can't drift.
 
    > ⚠ Cost: photo capture needs JS. The rest of the form is uncontrolled inputs
    > and posts fine without it.
+   >
+   > 🔴 **Two inputs, not one** (added on review, same day). `capture="environment"`
+   > opens the rear camera — but when `capture` is present the browser ignores
+   > `multiple` **and offers no other way in**. A denied permission or a
+   > locked-down handset would leave the agent unable to attach evidence at all,
+   > and a damaged line cannot be confirmed without a photo. The second input
+   > drops `capture`, restoring the ordinary picker as a fallback. Anything that
+   > touches this control must keep both.
 
 2. **The agent does NOT confirm `category`.** Step 2 lists it among the agent's
    fields *and* says never overwrite the customer-declared ones — and
@@ -1429,6 +1438,10 @@ a real handset:
 3. **Take a real photo with the rear camera** (`capture="environment"`). This is
    the only part of the batch that needs JS and the only part not covered by the
    scripted run. Watch it upload on mobile data, not wifi.
+   **Then deny the camera permission and use "Choose existing"** — that button
+   exists because `capture` leaves no other way in, and a damaged line cannot be
+   confirmed without a photo, so a failed camera would otherwise be a dead end on
+   site. Added 2026-08-23 after the batch, on review.
 4. Line 2 is declared **swollen** — confirm it with no photo. It must come back
    as "Photo needed", the quote must stay locked, and the row must say why.
 5. Confirm all three; the header should read "3 of 3 confirmed" and the weighed
