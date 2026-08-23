@@ -773,6 +773,12 @@ async function main() {
     })
   }
 
+  // Agent documents — custody PDF
+  if (appName === 'agent') {
+    console.log('\n  — agent documents (must be real PDFs) —')
+    await probeDocument(`/api/documents/custody/${AGENT_BATCH}`, { expectBounce: blocked })
+  }
+
   // The other half of the status guard: these ids are NOT at `offered`, so the
   // offer screen must turn them away. In --blocked mode the role gate gets there
   // first and the expectation is a /login bounce instead.

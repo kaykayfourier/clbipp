@@ -90,3 +90,20 @@ export interface InvoiceDoc {
   paidAt: Date | null
   paymentMethod: string | null
 }
+
+export type CustodyDoc = {
+  batchNo: string
+  agentName: string
+  facilityName: string
+  handedOffAt: Date
+  lat: number | null
+  lng: number | null
+  totalWeightKg: number
+  itemCount: number
+  receivingStaffName: string
+  pickups: Array<{
+    pickupId: string
+    vendorName: string
+    weightKg: number | null
+  }>
+}

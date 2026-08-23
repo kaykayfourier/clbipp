@@ -58,3 +58,12 @@ export function formatPaise(paise: number): string {
 export function rupeesToPaise(rupees: number): number {
   return Math.round(Math.round(rupees * 1000) / 10)
 }
+
+export function custodyBatchNumber(input: {
+  batchId: string
+  handedOffAt: Date
+}): string {
+  const year = input.handedOffAt.getFullYear()
+  const serial = input.batchId.replace(/-/g, "").slice(-6)
+  return `CB-${year}-${serial}`
+}

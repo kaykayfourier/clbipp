@@ -4,6 +4,8 @@ import { CertificateTemplate } from './templates/certificate'
 import { ReceiptTemplate } from './templates/receipt'
 import { InvoiceTemplate } from './templates/invoice'
 import type { CertificateDoc, ReceiptDoc, InvoiceDoc } from './types'
+import { CustodyTemplate } from './templates/custody'
+import type { CustodyDoc } from './types'
 
 // ─── Render entry points ─────────────────────────────────────────────────────
 // "server-only" lives HERE and not in the templates or the types, for the same
@@ -25,4 +27,8 @@ export function renderReceiptPdf(doc: ReceiptDoc): Promise<Buffer> {
 
 export function renderInvoicePdf(doc: InvoiceDoc): Promise<Buffer> {
   return renderToBuffer(<InvoiceTemplate doc={doc} />)
+}
+
+export function renderCustodyPdf(doc: CustodyDoc): Promise<Buffer> {
+  return renderToBuffer(<CustodyTemplate doc={doc} />)
 }
