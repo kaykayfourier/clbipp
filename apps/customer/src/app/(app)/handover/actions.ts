@@ -25,10 +25,50 @@ function isPreCollection(status: string): boolean {
   return isStageBefore(status, 'collected')
 }
 
+// ─── voidOfferAcceptance ─────────────────────────────────────────────────────
+// Clears `Offer.acceptedAt` for a pickup that is leaving the offer flow.
+//
+// Added in Batch 5b, when `acceptedAt` stopped being decorative: the agent app
+// reads it as permission to collect (Batch 6), so it must be null whenever
+// there is no live acceptance behind it. Both callers treat failure as
+// non-fatal — the status write they are attached to is the one that matters,
+// and a stale timestamp on a cancelled pickup is caught by the agent's own
+// status check as well.
+async function voidOfferAcceptance(
+  admin: ReturnType<typeof createAdminClient>,
+  pickupId: string,
+  caller: string
+): Promise<void> {
+  const { error } = await admin
+    .from('offers')
+    .update({ accepted_at: null })
+    .eq('pickup_id', pickupId)
+
+  if (error) console.error(`[${caller}] clearing offer acceptance failed:`, error)
+}
+
 // ─── acceptOffer ─────────────────────────────────────────────────────────────
-// Vendor accepted the offer on /offer or /offer-breakdown. Advances the pickup
-// to "collected" and writes the audit event (which also fires the realtime ping
-// on the tracking screen). Idempotent: re-running once collected is a no-op.
+// Vendor accepted the offer on /offer or /offer-breakdown.
+//
+// ⚠ THIS ACTION NO LONGER ADVANCES THE LIFECYCLE (Batch 5b, decision D7). It
+// used to write `offered → collected`, which meant a vendor marked their own
+// battery collected — the one transition D7 explicitly reserves for the field
+// agent, who is the only party physically holding the load.
+//
+// What it writes now: `Offer.acceptedAt`, and nothing else. The status stays at
+// `offered` until the agent app writes `collected` from the field (Batch 6).
+// So `offered` is now TWO states, distinguished only by `acceptedAt`:
+//
+//   acceptedAt === null  → awaiting the vendor's decision   (/offer renders)
+//   acceptedAt !== null  → accepted, awaiting the agent     (/handover renders)
+//
+// Every screen that switches on `status === 'offered'` has to make that
+// distinction — see /offer, /offer-breakdown, /handover, /track/[id],
+// /t/[token], /scheduled and lib/pickup-nav.ts.
+//
+// Idempotent twice over: an offer that is already accepted is left alone (the
+// timestamp is not re-stamped), and a pickup already past `offered` reports
+// success so a refresh on the confirmation page still renders.
 export async function acceptOffer(
   pickupId: string
 ): Promise<{ error: string | null }> {
@@ -52,38 +92,60 @@ export async function acceptOffer(
   if (readError || !pickup) return { error: 'Pickup not found.' }
   if (pickup.vendor_id !== user.id) return { error: 'Not authorised for this pickup.' }
 
-  // Already past the offer stage → treat as success so the confirmation page
-  // still renders on refresh. Only cancelled is a genuine error.
-  if (!isPreCollection(pickup.status)) {
-    if (pickup.status === 'cancelled') return { error: 'This pickup was cancelled.' }
-    return { error: null }
+  if (pickup.status === 'cancelled') return { error: 'This pickup was cancelled.' }
+
+  // Already past the offer stage → the agent has collected, so the acceptance
+  // that got them there necessarily happened. Treat as success so a refresh on
+  // the confirmation page still renders.
+  if (!isPreCollection(pickup.status)) return { error: null }
+
+  // Exact match, not a pre-collection range — the same guard /offer uses. There
+  // is nothing to accept before the agent has priced the load on site, and the
+  // loose range was only ever reachable because it predated `offered` being a
+  // status of its own (Batch 7A).
+  if (pickup.status !== 'offered') {
+    return { error: 'There is no offer to accept for this pickup yet.' }
   }
 
   // Can't accept an offer that doesn't exist (guards direct /handover?id= hits).
   const { data: offer } = await admin
     .from('offers')
-    .select('pickup_id')
+    .select('pickup_id, accepted_at')
     .eq('pickup_id', pickupId)
     .maybeSingle()
 
   if (!offer) return { error: 'No offer to accept for this pickup yet.' }
 
+  // Idempotent: a double-submit must not re-stamp the acceptance, because the
+  // agent app reads this timestamp as "when the vendor agreed" and Batch 6
+  // gates collection on it.
+  if (offer.accepted_at) return { error: null }
+
   const { error: updateError } = await admin
-    .from('pickups')
-    .update({ status: 'collected' })
-    .eq('id', pickupId)
+    .from('offers')
+    .update({ accepted_at: new Date().toISOString() })
+    .eq('pickup_id', pickupId)
 
   if (updateError) {
-    console.error('[acceptOffer] status update failed:', updateError)
+    console.error('[acceptOffer] offer acceptance failed:', updateError)
     return { error: updateError.message }
   }
 
-  // Audit event — now a real write (service role), no longer RLS-dropped.
-  // Non-fatal: the status already advanced, so a failed event is logged, not
-  // surfaced to the vendor.
+  // Audit event. The status is unchanged, so this is a SECOND `offered` row —
+  // the agent's offer and the vendor's acceptance of it. `buildStages` is
+  // first-wins for exactly this reason, so the timeline keeps showing the date
+  // the offer was made rather than the date it was accepted.
+  //
+  // Non-fatal: the acceptance is already recorded on the offer row, so a failed
+  // event is logged rather than surfaced to the vendor.
+  //
+  // ⚠ No id supplied: `status_events.id` is BIGSERIAL, a real database default.
+  // Do not generalise that to other tables — Prisma's `@default(uuid())` is
+  // applied by the Prisma client, not the database, so a service-role insert
+  // into a uuid-keyed table must generate its own id. See "Batch 2 — as built".
   const { error: eventError } = await admin.from('status_events').insert({
     pickup_id: pickupId,
-    status: 'collected',
+    status: 'offered',
     actor_id: user.id,
     actor_role: 'vendor',
     notes: 'Offer accepted by vendor',
@@ -165,6 +227,12 @@ export async function cancelPickup(
     return { error: updateError.message }
   }
 
+  // Void any acceptance. Since Batch 5b the agent app gates collection on
+  // `Offer.acceptedAt`, so an acceptance that outlives its pickup is an agent
+  // being told to collect a load the vendor has called off. Non-fatal and
+  // unconditional — a pickup with no offer just updates zero rows.
+  await voidOfferAcceptance(admin, pickupId, 'cancelPickup')
+
   const { error: eventError } = await admin.from('status_events').insert({
     pickup_id: pickupId,
     status: 'cancelled',
@@ -227,6 +295,18 @@ export async function reschedulePickup(
   if (updateError) {
     console.error('[reschedulePickup] update failed:', updateError)
     return { error: updateError.message }
+  }
+
+  // Reactivation only. A cancelled pickup coming back as `requested` is the
+  // vendor RE-requesting, not resuming: the old offer was priced against an
+  // assessment that is now stale, so any acceptance of it must not survive.
+  // Rescheduling an ACTIVE pickup is just a new date and leaves the offer alone.
+  //
+  // 🔴 The rest of that loose end is still open — reactivation keeps the row's
+  // `agentId` and `agentFeePaise`, and the audit log can now run backwards (a
+  // `requested` event landing after a `cancelled` one). See LANE_OWNERSHIP.md.
+  if (pickup.status === 'cancelled') {
+    await voidOfferAcceptance(admin, pickupId, 'reschedulePickup')
   }
 
   const { error: eventError } = await admin.from('status_events').insert({

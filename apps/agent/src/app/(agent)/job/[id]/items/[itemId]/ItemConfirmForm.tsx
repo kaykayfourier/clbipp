@@ -19,7 +19,10 @@ import { confirmItem } from '../actions'
 // A client component for two reasons and no others:
 //
 //   1. PHOTOS. They upload from the BROWSER straight to Supabase Storage, not
-//      through the server action. A `File` posted to a server action is capped
+//      through the server action. Captured through TWO file inputs — the rear
+//      camera, and an ordinary picker as a fallback, because `capture` leaves no
+//      other way in when the camera is unavailable and a damaged line cannot be
+//      confirmed without a photo. Reasoning is at the inputs themselves. A `File` posted to a server action is capped
 //      by Next's `serverActions.bodySizeLimit`, which DEFAULTS TO 1 MB and is
 //      not raised in either next.config.ts — while our bucket limit is 5 MB per
 //      file (MAX_FILE_BYTES). Three photos of a leaking pack would fail at the
@@ -344,18 +347,45 @@ export function ItemConfirmForm({
               </div>
             )}
 
-            <label
-              htmlFor="itemPhotos"
-              className="flex h-12 cursor-pointer items-center justify-center rounded-[10px] border-2 border-dashed border-border text-sm font-semibold text-text-primary"
-            >
-              {uploading ? 'Uploading…' : totalPhotos > 0 ? 'Add another photo' : 'Add a photo'}
-            </label>
+            {/* 🔴 TWO INPUTS, NOT ONE, AND THE SECOND IS THE IMPORTANT ONE.
+                `capture="environment"` opens the rear camera directly, which is
+                what an agent wants nine times out of ten — but when `capture` is
+                present the browser IGNORES `multiple` and, more to the point,
+                offers NO other way in. A denied camera permission, a locked-down
+                work handset, or a camera that simply fails would then leave the
+                agent unable to attach evidence at all — and a damaged line
+                CANNOT BE CONFIRMED WITHOUT A PHOTO, so that is a dead end on
+                site, not an inconvenience.
+
+                The second input drops `capture`, which is what makes the
+                ordinary file picker (gallery, Files, a shot taken a minute ago
+                in the native camera app) available as a fallback. It also
+                restores `multiple`, so attaching several existing photos is one
+                action rather than several. */}
+            <div className="flex gap-2">
+              <label
+                htmlFor="itemPhotoCamera"
+                className="flex h-12 flex-1 cursor-pointer items-center justify-center rounded-[10px] border-2 border-dashed border-border px-2 text-center text-sm font-semibold text-text-primary"
+              >
+                {uploading ? 'Uploading…' : totalPhotos > 0 ? 'Take another' : 'Take a photo'}
+              </label>
+              <label
+                htmlFor="itemPhotoLibrary"
+                className="flex h-12 flex-1 cursor-pointer items-center justify-center rounded-[10px] border border-border px-2 text-center text-sm font-semibold text-text-secondary"
+              >
+                Choose existing
+              </label>
+            </div>
+
+            {/* Rear camera. `multiple` is deliberately ABSENT — `capture`
+                overrides it anyway, and claiming otherwise in the markup would
+                mislead whoever reads this next. One shot per tap; "Take another"
+                is right there. */}
             <input
               type="file"
-              id="itemPhotos"
+              id="itemPhotoCamera"
               accept="image/*"
               capture="environment"
-              multiple
               className="hidden"
               onChange={(e) => {
                 void handleFiles(e.target.files)
@@ -363,9 +393,25 @@ export function ItemConfirmForm({
                 e.target.value = ''
               }}
             />
+
+            {/* The fallback. No `capture`, so this is the ordinary picker. */}
+            <input
+              type="file"
+              id="itemPhotoLibrary"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                void handleFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+
             <p className="text-[11px] leading-relaxed text-text-secondary">
               Up to {MAX_PHOTOS} photos, {MAX_FILE_MB} MB each. Photos belong to this
-              line only — never reuse one from another line.
+              line only — never reuse one from another line. Use{' '}
+              <span className="font-semibold">Choose existing</span> if the camera
+              won&rsquo;t open.
             </p>
           </CardContent>
         </Card>

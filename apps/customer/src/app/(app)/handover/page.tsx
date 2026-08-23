@@ -7,11 +7,23 @@ import { Button } from "@clbipp/ui";
 import { Card } from "@clbipp/ui";
 import { Timeline } from "@clbipp/ui";
 import { Banner } from "@clbipp/ui";
-import { isStageBefore } from "@clbipp/ui";
 import { CATEGORY_LABELS } from "../book/copy";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 // The confirmation screen a customer lands on AFTER accepting an offer.
+//
+// ⚠ Batch 5b (D7) changed what "accepted" means. Accepting no longer collects
+// anything: it stamps `Offer.acceptedAt` and leaves the status at `offered`
+// until the field agent writes `collected` from the site. So this screen has
+// two faces, and the status tells them apart:
+//
+//   offered + acceptedAt   → "Offer Accepted" — the agent is still coming
+//   collected and beyond   → "Handover Confirmed" — the batteries are with us
+//
+// 🔴 The guard below keys on `offer.acceptedAt`, and /offer's guard keys on the
+// SAME field in the opposite direction. They must stay symmetrical: if one ever
+// switches back to a status range, the two screens redirect to each other
+// forever.
 //
 // ⚠ It used to be the thing that DID the accepting: it called acceptOffer()
 // during its own render, so a GET advanced the lifecycle. Batch 12 moved that
@@ -53,25 +65,36 @@ export default async function HandoverPage({ searchParams }: PageProps) {
       category: true,
       location: true,
       items: { select: { quantity: true, weightKg: true } },
+      offer: { select: { acceptedAt: true } },
     },
   });
 
   if (!pickup) redirect("/dashboard");
 
-  // Nothing was accepted — either a hand-typed URL or a stale tab. Send them to
-  // the decision instead of confirming one that hasn't been taken.
-  if (isStageBefore(pickup.status, "collected")) {
-    redirect(`/offer?id=${pickup.id}`);
-  }
   if (pickup.status === "cancelled") {
     redirect(`/track/${pickup.id}`);
   }
+
+  // Nothing was accepted — either a hand-typed URL or a stale tab. Send them to
+  // the decision instead of confirming one that hasn't been taken.
+  //
+  // This used to read `isStageBefore(status, "collected")`, which stopped
+  // working the moment accepting left the status at `offered`: an accepted
+  // pickup would have been bounced straight back to the offer it had just
+  // accepted. The acceptance timestamp is the only honest signal.
+  if (!pickup.offer?.acceptedAt) {
+    redirect(`/offer?id=${pickup.id}`);
+  }
+
+  // Accepted, but the agent hasn't collected yet. Everything below branches on
+  // this rather than on a stage comparison, for the reason above.
+  const awaitingCollection = pickup.status === "offered";
 
   const units = pickup.items.reduce((sum, item) => sum + item.quantity, 0);
   const weightKg = pickup.items.reduce((sum, item) => sum + Number(item.weightKg), 0);
 
   return (
-    <AppShell title="Handover Confirmed" hideNav>
+    <AppShell title={awaitingCollection ? "Offer Accepted" : "Handover Confirmed"} hideNav>
       <PagePadding className="flex flex-col gap-5">
 
         {/* Success icon + heading */}
@@ -95,7 +118,7 @@ export default async function HandoverPage({ searchParams }: PageProps) {
           </span>
           <div>
             <h1 className="text-2xl font-semibold text-text-primary">
-              Handover Confirmed
+              {awaitingCollection ? "Offer Accepted" : "Handover Confirmed"}
             </h1>
             <p className="text-sm text-text-secondary mt-1 font-mono">
               {pickup.id}
@@ -103,18 +126,33 @@ export default async function HandoverPage({ searchParams }: PageProps) {
           </div>
         </div>
 
-        {/* Timeline — requested ✓ → scheduled ✓ → collected ● */}
+        {/* Timeline. Truncated at whichever stage the pickup has actually
+            reached — accepting an offer does NOT advance it past `offered`, so
+            showing `collected` here would tell the customer their batteries had
+            been picked up before anyone had been to the site. */}
         <Card variant="default">
           <SectionLabel className="mb-3">Lifecycle</SectionLabel>
-          <Timeline
-            currentStage="collected"
-            endStage="collected"
-            stages={{
-              requested: { sublabel: "Complete" },
-              scheduled: { sublabel: "Complete" },
-              collected: { sublabel: "In progress" },
-            }}
-          />
+          {awaitingCollection ? (
+            <Timeline
+              currentStage="offered"
+              endStage="offered"
+              stages={{
+                requested: { sublabel: "Complete" },
+                scheduled: { sublabel: "Complete" },
+                offered: { sublabel: "Accepted" },
+              }}
+            />
+          ) : (
+            <Timeline
+              currentStage="collected"
+              endStage="collected"
+              stages={{
+                requested: { sublabel: "Complete" },
+                scheduled: { sublabel: "Complete" },
+                collected: { sublabel: "In progress" },
+              }}
+            />
+          )}
         </Card>
 
         {/* Pickup summary. Category comes off the header row; units and weight
@@ -136,17 +174,22 @@ export default async function HandoverPage({ searchParams }: PageProps) {
           <SummaryRow label="Location" value={pickup.location} />
         </Card>
 
-        {/* Next steps */}
+        {/* Next steps. The pre-collection copy is the point of Batch 5b: the
+            batteries are still the vendor's until the agent has them, and
+            saying otherwise here was the visible half of the vendor marking
+            their own load collected. */}
         <Banner variant="success">
-          Your batteries have been collected. Our collection partner will
-          contact you shortly to arrange the final handover details.
+          {awaitingCollection
+            ? "Your offer is accepted. Your collection agent will weigh and load the batteries on site, and confirm the handover from there."
+            : "Your batteries have been collected. Our collection partner will contact you shortly to arrange the final handover details."}
         </Banner>
 
         <Card variant="tinted">
           <SectionLabel className="mb-2">Next Steps</SectionLabel>
           <p className="text-sm text-text-secondary leading-relaxed">
-            Once processed, your EPR certificate will be available under
-            Certificates. You&apos;ll receive a notification at each stage.
+            {awaitingCollection
+              ? "Keep the load accessible and the packaging sealed until the agent arrives. Once collected and processed, your EPR certificate will be available under Certificates."
+              : "Once processed, your EPR certificate will be available under Certificates. You'll receive a notification at each stage."}
           </p>
         </Card>
 

@@ -15,7 +15,10 @@ import { pickupHref, pickupSubtitle } from "@/lib/pickup-nav"
 // @/lib/pickup-nav in Batch 10, when /history became a second list of these
 // same rows — two pickup lists that route or describe differently is a drift
 // bug, and the status routing is a Batch 7A decision that deserves one home.
-type PickupRow = Pickup & { _count: { items: number } }
+type PickupRow = Pickup & {
+  _count: { items: number }
+  offer: { acceptedAt: Date | null } | null
+}
 
 /** How many rows the home screen shows before deferring to /history. */
 const RECENT_LIMIT = 5
@@ -183,7 +186,7 @@ function PopulatedDashboardPage({
 
       <div className="flex flex-col gap-2">
         {pickups.slice(0, RECENT_LIMIT).map((pickup) => (
-          <Link key={pickup.id} href={pickupHref(pickup.status, pickup.id)}>
+          <Link key={pickup.id} href={pickupHref(pickup.status, pickup.id, Boolean(pickup.offer?.acceptedAt))}>
             <ListRow
               id={pickup.id}
               subtitle={pickupSubtitle(pickup)}
@@ -231,7 +234,14 @@ export default async function DashboardPage() {
     prisma.pickup.findMany({
       where: { vendorId },
       orderBy: { createdAt: "desc" },
-      include: { _count: { select: { items: true } } },
+      include: {
+        _count: { select: { items: true } },
+        // Batch 5b: `offered` now means either "awaiting the vendor's decision"
+        // or "accepted, awaiting the agent", and only this timestamp separates
+        // them. pickupHref reads it so an accepted row links to tracking rather
+        // than back to the offer it has already accepted.
+        offer: { select: { acceptedAt: true } },
+      },
     }),
     // Batch 9 (B4): the impact card's whole source. Selected rather than counted
     // now, because the count, the CO₂ total and the material list all come out

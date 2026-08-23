@@ -53,11 +53,22 @@ export default async function OfferPage({ searchParams }: PageProps) {
   // Guard 4 — not priced yet ⇒ back to the scheduled screen.
   const { data: offer } = await supabase
     .from("offers")
-    .select("pathway, estimated_price, rationale")
+    .select("pathway, estimated_price, rationale, accepted_at")
     .eq("pickup_id", id)
     .single();
 
   if (!offer) redirect(`/scheduled?id=${id}`);
+
+  // Guard 5 (Batch 5b) — already accepted. Since D7, accepting stamps
+  // `accepted_at` and leaves the status at `offered`, so the status guard above
+  // no longer closes this screen once the decision is made. Without this the
+  // customer would be shown the Accept button for an offer they had already
+  // accepted, and every press would be a fresh POST.
+  //
+  // 🔴 Symmetrical with /handover's guard, which redirects HERE when
+  // `acceptedAt` is null. Both must key on this same field — swap either for a
+  // status range and the two screens bounce off each other forever.
+  if (offer.accepted_at) redirect(`/handover?id=${id}`);
 
   const pathway = pathwayLabel(offer.pathway);
 

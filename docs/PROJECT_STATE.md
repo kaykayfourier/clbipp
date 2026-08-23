@@ -5,8 +5,40 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-23 — **Field Agent app: Batches 0b, 0a, 1, 2, 3 and 4
-are done.**
+**Last updated:** 2026-08-24 — **Field Agent app: Batches 0b, 0a, 1, 2, 3, 4
+and 5b are done.**
+
+> **Batch 5b (the cross-app seam, D7) shipped 2026-08-24** — the highest-risk
+> correctness item in the plan. `acceptOffer` no longer writes `collected`: a
+> vendor accepting an offer now stamps `Offer.acceptedAt` and **leaves the
+> status at `offered`** until the field agent collects from the site. A vendor
+> can no longer mark their own battery collected, which is what D7 says and what
+> made Batch 6 buildable at all.
+>
+> 🔴 **The consequence to carry into every later batch: `offered` is now TWO
+> states**, and only `Offer.acceptedAt` separates them — "awaiting the vendor"
+> and "accepted, awaiting the agent". Six customer screens learned the
+> difference (`/offer`, `/offer-breakdown`, `/handover`, `/track/[id]`,
+> `/t/[token]`, `/scheduled`, plus `lib/pickup-nav.ts`). `/offer` and
+> `/handover` now redirect to each other off that one field — **they must stay
+> symmetrical or they loop.**
+>
+> Two other things changed with it: **`buildStages` is first-wins** (an accepted
+> pickup has two `offered` events, and the timeline must keep the date the offer
+> was *made*), and **`cancelPickup` / reschedule-after-cancel now void
+> `acceptedAt`** — beyond the sheet, but the timestamp became load-bearing this
+> batch. **No price moved.** 213 tests, `npm run build` + `npm run smoke` green
+> for both apps.
+>
+> 🔴 **Batch 6 needs a seed row that doesn't exist yet:** a pickup at `offered`
+> **with** `acceptedAt` set. `PKP-2026-000104`'s null is the deliberate
+> "awaiting the vendor" fixture and must not be repurposed. Details and the
+> reason it wasn't added here are in "Batch 5b — as built".
+>
+> **Next up: Batch 5a (quote screens + offer) — Ali,** then Batch 6 (collect).
+> Aamir's own next is **Batch 8** (track, history, profile).
+
+Prior entry (2026-08-23): **Batches 0b, 0a, 1, 2, 3 and 4 are done.**
 
 > **Batch 3 (multi-item intake) shipped 2026-08-23** — the spine of the on-site
 > flow and the critical path for 5a, 6 and 7a. `/job/[id]/items` lists every
@@ -30,8 +62,8 @@ are done.**
 > `/scan`). `/damage`, `/computing`, `/result*` and `/collect` are still ungated
 > stubs — whoever builds them adds the two lines.
 >
-> **Next up: Batch 5a (quote screens + offer) — Ali.** Aamir's own next is
-> **Batch 5b (cross-app seam)**, which depends on nothing and is unblocked now.
+> ~~**Next up: Batch 5a — Ali.** Aamir's own next is **Batch 5b**~~ — **5b done
+> 2026-08-24, see the top of this file.**
 
 Prior entry (2026-08-23): **Batches 0b, 0a, 1 and 2 are done.** Batch 1 shipped the day view, job detail and the first agent-owned
 lifecycle write (`scheduled → arrived`) — that action is the **reference

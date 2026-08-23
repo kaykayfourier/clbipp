@@ -42,11 +42,16 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
 
   const { data: offer } = await supabase
     .from("offers")
-    .select("pathway, estimated_price, rationale, material_breakdown")
+    .select("pathway, estimated_price, rationale, material_breakdown, accepted_at")
     .eq("pickup_id", id)
     .single();
 
   if (!offer) redirect(`/scheduled?id=${id}`);
+
+  // Same Batch 5b guard as /offer, and it belongs on both: this screen carries
+  // the same shared <AcceptOfferButton>, so leaving it out would keep a second
+  // accept path open on an offer that has already been accepted.
+  if (offer.accepted_at) redirect(`/handover?id=${id}`);
 
   const pathway = pathwayLabel(offer.pathway);
   // Weight-only — parseMaterialWeights strips the forbidden per-line ₹ values.

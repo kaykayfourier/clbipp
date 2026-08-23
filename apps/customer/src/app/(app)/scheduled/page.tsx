@@ -53,11 +53,16 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
   // row existing, because it is reachable from earlier stages too.
   const { data: offer } = await supabase
     .from("offers")
-    .select("pickup_id")
+    .select("pickup_id, accepted_at")
     .eq("pickup_id", id)
     .maybeSingle();
 
   const hasOffer = Boolean(offer);
+  // Batch 5b (D7): accepting stamps `accepted_at` and leaves the status at
+  // `offered`, so an accepted offer is still reachable from this screen. /offer
+  // redirects an accepted pickup to /handover, so point straight there instead
+  // of sending the customer through the bounce.
+  const offerAccepted = Boolean(offer?.accepted_at);
 
   // This screen's timeline is truncated at `collected`, so any status at or
   // past collection is clamped back to the last stage it can render.
@@ -164,9 +169,16 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
         <div className="flex flex-col gap-3 pt-1">
           {/* Only surfaced once the agent has priced the batteries (offer exists) */}
           {hasOffer && (
-            <Link href={`/offer?id=${pickup.id}`} className="block">
+            <Link
+              href={
+                offerAccepted
+                  ? `/handover?id=${pickup.id}`
+                  : `/offer?id=${pickup.id}`
+              }
+              className="block"
+            >
               <Button variant="primary" fullWidth>
-                View Offer
+                {offerAccepted ? "View Acceptance" : "View Offer"}
               </Button>
             </Link>
           )}

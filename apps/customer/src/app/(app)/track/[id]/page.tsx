@@ -156,11 +156,19 @@ export default async function TrackPage({
     status === 'arrived' ||
     status === 'offered'
   ) {
+    // Batch 5b (D7): accepting an offer leaves the status at `offered`, so this
+    // one stage covers two very different situations — the vendor still has a
+    // decision to make, or they've made it and the agent hasn't arrived to
+    // collect yet. Both are read off the acceptance timestamp, never the status.
+    const offerAccepted = Boolean(pickup.offer?.acceptedAt)
+
     const banner: Record<typeof status, string> = {
       requested: "Your request is in. We'll confirm a collection slot shortly.",
       scheduled: 'Collection is scheduled. Track this screen on the day.',
       arrived: 'Your collection agent is on site and assessing the batteries.',
-      offered: 'Your offer is ready. Review it to confirm handover.',
+      offered: offerAccepted
+        ? 'Offer accepted. Your agent will load the batteries and confirm the handover on site.'
+        : 'Your offer is ready. Review it to confirm handover.',
     }
 
     return (
@@ -177,10 +185,16 @@ export default async function TrackPage({
           {partner}
           {/* Both conditions, not just the status: the offer screen itself
               redirects when no Offer row exists, so linking on status alone
-              would send the customer on a round trip to /scheduled. */}
+              would send the customer on a round trip to /scheduled.
+
+              Once accepted, /offer redirects to /handover anyway — link there
+              directly rather than sending the customer through a bounce. */}
           {status === 'offered' && pickup.offer && (
-            <Link href={`/offer?id=${pickup.id}`} className="block">
-              <Button fullWidth>View offer</Button>
+            <Link
+              href={offerAccepted ? `/handover?id=${pickup.id}` : `/offer?id=${pickup.id}`}
+              className="block"
+            >
+              <Button fullWidth>{offerAccepted ? 'View acceptance' : 'View offer'}</Button>
             </Link>
           )}
           <CustodyLog entries={custody} />
