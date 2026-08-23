@@ -604,7 +604,13 @@ async function seed() {
 
   await prisma.profile.upsert({
     where: { id: agentId },
-    update: { role: "agent" },
+    // `walletBalancePaise: 0` for the same reason the vendor's upsert above
+    // forces it (Batch 8): profiles are NOT wiped — they match real auth users —
+    // but wallet_txns are, and the pickup loop re-credits the agent's fee from
+    // scratch on every run. Without this reset a second `npm run reset-demo`
+    // leaves the cache at double the ledger it is supposed to cache, and the
+    // profile screen reconciles the two.
+    update: { role: "agent", walletBalancePaise: 0 },
     create: {
       id: agentId,
       email: AGENT_EMAIL,
@@ -696,6 +702,11 @@ async function seed() {
     const weight = totalWeight(spec.items)
     const quote = spec.items.reduce((sum, i) => sum + linePrice(i), 0)
     const hasAgent = spec.status !== "requested" && spec.status !== "cancelled"
+    // Hoisted out of the pickup create (Batch 8) so the pickup column and the
+    // agent's ledger entry below are literally the same number — the profile
+    // screen reconciles the two, and computing agentFee(quote) twice is exactly
+    // how they would drift.
+    const agentFeePaise = hasAgent ? agentFee(quote) : null
     // How far along the lifecycle this pickup got. `cancelled` isn't part of
     // the ordered lifecycle — it stops after `requested`.
     const reachedIndex =
@@ -730,7 +741,7 @@ async function seed() {
         indicativeQuotePaise: quote,
         // What the AGENT earns, not what the vendor is paid. Only on jobs an
         // agent actually has (D3).
-        agentFeePaise: hasAgent ? agentFee(quote) : null,
+        agentFeePaise,
         // Null on `collected` is the derived "pending drop-off" state (D5).
         custodyBatchId: DROPPED_OFF.includes(spec.status) ? CUSTODY_BATCH_ID : null,
         conditionFlags: [...new Set(spec.items.map((i) => i.condition))],
@@ -948,6 +959,49 @@ async function seed() {
             issuedAt,
           },
         })
+      }
+
+      // ── The AGENT's fee, as a ledger entry (Batch 8, Aamir) ──────────────
+      // A different person's money from the block above: `payout` credits the
+      // VENDOR for the batteries, `agent_fee` credits the AGENT for the job
+      // (D3). Two profiles, two ledgers, one table — which is why every read on
+      // either side must filter by `profileId`, and why adding these rows moves
+      // no vendor figure anywhere.
+      //
+      // Unconditional within `collected`+, unlike the vendor payout above:
+      // the agent is paid ON collection (the job screen's own copy says so),
+      // so it does not wait on the vendor's payout settling. The one pickup
+      // still at `collected` has an unsettled vendor payment AND a paid agent —
+      // that combination is correct, not an inconsistency.
+      //
+      // ⚠ Batch 6 writes exactly this row for real at collection time. When it
+      // does, it must produce the SAME shape — the day view's "earned today"
+      // tile derives from `agentFeePaise` on the pickup, and this ledger is
+      // what funds it; the two disagreeing is a bug on the profile screen.
+      if (agentFeePaise !== null) {
+        const agentBalance = await prisma.profile
+          .findUniqueOrThrow({ where: { id: agentId }, select: { walletBalancePaise: true } })
+          .then((p) => p.walletBalancePaise + agentFeePaise)
+
+        // Same rule as the vendor block: WalletTxn is the source of truth,
+        // profiles.wallet_balance_paise is a cache, always written together.
+        await prisma.$transaction([
+          prisma.walletTxn.create({
+            data: {
+              profileId: agentId,
+              deltaPaise: agentFeePaise,
+              kind: "agent_fee",
+              balanceAfterPaise: agentBalance,
+              pickupId: spec.id,
+              note: `Collection fee for ${spec.id}`,
+              createdAt: day(spec.daysAgo - 2),
+            },
+          }),
+          prisma.profile.update({
+            where: { id: agentId },
+            data: { walletBalancePaise: agentBalance },
+          }),
+        ])
       }
     }
 

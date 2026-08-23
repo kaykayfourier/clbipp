@@ -126,6 +126,29 @@ All three of us point at **one Supabase project**. The two apps are separated by
 - Fix defects; don't refactor it because it could be nicer. Where the engine and
   the HR documents disagree, **the HR documents win.**
 
+**RLS (added 2026-08-24, Batch 8)**
+- 🔴 **A policy that sub-selects from another table is filtered by *that*
+  table's policies.** So a perfectly-written policy can match zero rows because
+  the table it joins to has no policy for that role — and it fails **silently**:
+  the query succeeds, returns nothing, and a Realtime channel still reports
+  `SUBSCRIBED`. Measured on the agent app: 44 rows vs 0.
+- **Verify every new policy under a real JWT for that role.** A `service_role`
+  query proves nothing — it bypasses the exact layer you are testing.
+
+**Smoke assertions (added 2026-08-24, Batch 8)**
+- ⚠ **React splits adjacent text nodes with `<!-- -->` in server HTML.** So
+  `{n} load to drop off` written as JSX text is never a contiguous string and
+  `body.includes(...)` silently never matches. Any string `scripts/smoke.mjs`
+  asserts on must be **one template literal inside a single `{}`**.
+
+**Dev server (added 2026-08-24, Batch 8)**
+- ⚠ **`npm run build` then `npm run dev` on the same app 404s every dynamic
+  route** (`/job/[id]`, `/pickups/[id]`, …) while static routes serve 200, with
+  no Prisma query logged. It looks exactly like a seed or ownership bug and is
+  neither: it is a stale `.next`. `rm -rf apps/<app>/.next` and restart. This
+  bites hardest when you run `build` and `smoke` back to back — which is the
+  pre-push sequence.
+
 ---
 
 ## 5. Ordering that actually matters

@@ -136,3 +136,78 @@ export function itemNextHref(
 export function itemNextLabel(chemistry: string | null): string {
   return isLithium(chemistry) ? 'Continue to damage rubric' : 'Continue to price'
 }
+
+// ─── History buckets ─────────────────────────────────────────────────────────
+// The agent-side mirror of `historyBucket` in the customer app's pickup-nav.ts,
+// and it splits differently ON PURPOSE. The vendor cares whether their pickup is
+// finished (`certified`) or not; the agent cares where THEIR part of it ended —
+// which is at drop-off, four stages before the vendor's story finishes.
+
+export const AGENT_HISTORY_FILTERS = ['all', 'open', 'handed_over', 'cancelled'] as const
+export type AgentHistoryFilter = (typeof AGENT_HISTORY_FILTERS)[number]
+
+export const AGENT_HISTORY_FILTER_LABELS: Record<AgentHistoryFilter, string> = {
+  all: 'All',
+  open: 'Still open',
+  handed_over: 'Handed over',
+  cancelled: 'Cancelled',
+}
+
+/**
+ * Which history bucket a job falls in.
+ *
+ * Derived from `isActiveJob` rather than a hard-coded status set, so a job can
+ * never fall into neither bucket — the same reasoning that shape has in
+ * `isActiveJob` itself, and the mistake the customer app's filters were written
+ * to avoid.
+ *
+ * ⚠ `cancelled` is re-enterable (2026-08-23): a cancelled pickup can go back to
+ * `requested` when the vendor reschedules. So this is "where is it now", not a
+ * permanent filing — a row can legitimately move out of `cancelled` later.
+ */
+export function agentHistoryBucket(
+  status: PickupStatus,
+  custodyBatchId: string | null,
+): Exclude<AgentHistoryFilter, 'all'> {
+  if (status === 'cancelled') return 'cancelled'
+  return isActiveJob(status, custodyBatchId) ? 'open' : 'handed_over'
+}
+
+// ─── Directions ──────────────────────────────────────────────────────────────
+
+/**
+ * Google Maps deep link for a job's address.
+ *
+ * Lifted out of `/job/[id]/page.tsx` in Batch 8 so the job screen and the map
+ * screen build the identical URL. Two screens with a "get me there" button that
+ * disagree on where "there" is would be a genuinely dangerous kind of drift.
+ *
+ * ⚠ `Address.lat` and `Address.lng` are BOTH nullable — manual address entry has
+ * to stay possible when a vendor denies location permission at booking, so a
+ * coordinate pair is never guaranteed. Falling back to a text destination keeps
+ * the button working instead of sending the agent to 0°N 0°E.
+ *
+ * Turn-by-turn navigation in-app is CUT (D4); this link and a static map are
+ * what replaced it.
+ */
+export function mapsHref(
+  lat: number | null,
+  lng: number | null,
+  textAddress: string,
+): string {
+  const destination = lat !== null && lng !== null ? `${lat},${lng}` : textAddress
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
+}
+
+/**
+ * Prisma `Decimal | null` → `number | null`, for the coordinate pair above.
+ *
+ * Returns null rather than NaN for anything unparseable, so a corrupt value
+ * degrades to "no coordinates" (address text + working deep link) instead of
+ * rendering a marker in the Gulf of Guinea.
+ */
+export function toCoord(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}

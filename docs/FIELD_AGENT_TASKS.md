@@ -623,7 +623,7 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 8 — Track, history, profile · **Aamir** · ~0.75d
+## Batch 8 — Track, history, profile · **Aamir** · ~0.75d ✅ DONE 2026-08-24
 
 **Depends on:** 0a (seeded data — **not** on C's batches).
 
@@ -656,12 +656,16 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
    are worse than absent ones.
 
 **Done when**
-- [ ] Timeline renders through the shared component, not a local copy
-- [ ] An agent receives a realtime ping on their own pickup's new event
-- [ ] The new policy is in `supabase/policies.sql`, not only in the dashboard
-- [ ] History rows open a real detail view
-- [ ] Wallet balance matches the sum of the agent's `WalletTxn` rows
-- [ ] Routes in `smoke.mjs`, `npm run smoke` green
+- [x] Timeline renders through the shared component, not a local copy
+- [~] An agent receives a realtime ping on their own pickup's new event — **the
+  RLS half is proved** (an agent JWT now reads 44 `status_events` where it read
+  0; see "as built"). The browser ping itself needs two devices and is in
+  `MANUAL_TEST_QUEUE.md`.
+- [x] The new polic**ies** are in `supabase/policies.sql` — **two, not one.**
+  Read the "as built" section below before touching them.
+- [x] History rows open a real detail view (`/pickups/[id]`)
+- [x] Wallet balance matches the sum of the agent's `WalletTxn` rows
+- [x] Routes in `smoke.mjs`, `npm run smoke` green (agent 28/28, customer 46/46)
 
 ---
 
@@ -1599,3 +1603,170 @@ fixture and re-checks that `/offer` is reachable again:
 **Not covered by any script:** `voidOfferAcceptance` on cancel and on
 reschedule-after-cancel. Both are server actions and need a real click-through —
 they are in `docs/MANUAL_TEST_QUEUE.md`.
+
+---
+
+## Batch 8 — as built (2026-08-24, Aamir)
+
+Read this before Batch 9, before touching `supabase/policies.sql`, and before
+anyone writes another Realtime subscription in either app.
+
+### The one thing to take away
+
+**The Realtime fix needed TWO policies, and the one this sheet specified would
+have failed silently.**
+
+Step 3 above said "~6 lines, mirroring the vendor one but joining on
+`pickups.agent_id`". That policy on its own returns **nothing**, because
+Postgres applies row security to tables referenced *inside* a policy expression
+as well. The vendor's `status_events` policy sub-selects from `pickups` and
+works only because `pickups` already carries a vendor SELECT policy for that
+sub-select to see rows through. `pickups` had **no agent SELECT policy**, so the
+agent-scoped sub-select was filtered to zero rows and the outer policy matched
+nothing.
+
+Measured against the shared project, as `agent@test`'s own JWT:
+
+| State | `status_events` rows visible |
+|---|---|
+| Both policies present | **44** |
+| `pickups` policy dropped (= this sheet's version) | **0** |
+| Both restored | **44** |
+
+Nothing about the middle row looks broken from the outside: the subscription
+still reports `SUBSCRIBED`, the screen still renders, it just never updates. So
+`supabase/policies.sql` now carries **two** agent policies, both SELECT-only,
+with those numbers written into the header comment so nobody "simplifies" it
+back.
+
+**D10 is not contradicted.** It says agents get no **UPDATE** policy on
+`pickups` — still true — and it explicitly authorised the `status_events` read
+for Realtime. The `pickups` SELECT is the prerequisite that authorisation
+implies. Every Prisma read in the app is unaffected either way: Prisma connects
+as the table owner and never consults a policy, which is why the in-code
+`agentId === user.id` check is still the entire access boundary on every screen.
+The stale "there is no agent SELECT policy" comments in `job/[id]/page.tsx`,
+`job/[id]/safety/page.tsx` and `(agent)/page.tsx` were corrected to say so.
+
+### What was built
+
+| Screen | Notes |
+|---|---|
+| `/pickups` | Two groups off `isActiveJob` — **Needs you** (routed by `jobHref`, same as the day view) and **Handed over — in recovery** (routed to the timeline; nothing left to resume). `certified`/`cancelled` are excluded — they are `/history`'s. Plus the **pending drop-off** card, rendered only when a job is `collected` with a null `custodyBatchId` (the derived D5 state, not a tenth stage). |
+| `/pickups/[id]` | `buildStages` + `LifecycleHeader` + `Timeline` from `@clbipp/ui`. `CancelledTimeline` for the cancelled branch. `CustodyLog` with photos. Realtime. The "your role ends at drop-off" lock banner. |
+| `/pickups/[id]/map` | Leaflet + OSM, fully static. `Address.lat/lng` are both nullable → no pin means no map, address text + a working deep link, never a marker at 0°N 0°E. |
+| `/history` | Server reads + hands down plain JSON, client filters. Chips derived from the rows present. **Rows link to `/pickups/[id]`** — the wireframe's self-link defect, fixed. |
+| `/profile` | Identity, jobs/weight stats, the agent's own ledger, read-only `safetyTrainedAt`, log out. **No "Cash out", no "Notifications"** — nothing writes `WalletTxnKind.redemption` and there is no notification pipeline. |
+
+### Three things that are not where you would guess
+
+1. **`CustodyLog` grew a `roleLabels` prop** (`packages/ui`, lane C — logged in
+   `LANE_OWNERSHIP.md`). Its copy was hardcoded to the customer's perspective:
+   "Recorded by you" for the vendor, "Recorded by the collection partner" for
+   the agent. On the agent's own screen that is exactly backwards. The agent
+   passes `AGENT_ROLE_LABELS` from `@/lib/custody`.
+   📌 The smoke table asserts `'Recorded by you'` **present** and
+   `'Recorded by the collection partner'` **absent** on the same route. Both are
+   needed: drop the prop and the first string still renders (for the vendor's
+   `requested` event) while every agent action is mislabelled. Same lesson as
+   Batch 5b's two-heading assertion.
+2. **`mapsHref` moved from `job/[id]/page.tsx` into `lib/job-nav.ts`**, with
+   `toCoord` beside it. Two screens with a "get me there" button that disagree
+   about where *there* is would be a genuinely dangerous kind of drift.
+3. **`apps/agent/src/lib/custody.ts` is a near-twin of the customer's** and is
+   deliberately not shared yet. The blocker is placement, not effort: a shared
+   version needs `createSignedUrls` (packages/auth) **and** `STAGE_LABELS`
+   (packages/ui), and neither package may depend on the other. The fix is to make
+   the label map a parameter, which turns it into a pure function that belongs in
+   `packages/core`. That is a refactor across two apps and a shared package —
+   not something to start with Batches 5a/6/7a still open. The TODO is in the
+   file header.
+
+### 🔴 The seed grew an agent ledger — and one trap with it
+
+`reset-demo.ts` now writes one `agent_fee` `WalletTxn` per pickup at `collected`
+or later, on the **agent's** profile (5 rows, ₹28,308.42 total). Blast radius
+was checked and is nil: the vendor's rows are keyed `profileId = vendorId`, so
+`/wallet` and `/dashboard` are untouched, and the day view's "earned today"
+reads `agentFeePaise` off `status_events`, not the ledger. **No price moved.**
+
+⚠ **The trap:** profiles are NOT wiped by `wipe()` — they match real auth users
+— but `wallet_txns` **is**, and the loop re-credits from scratch every run. The
+agent's upsert therefore had to gain `walletBalancePaise: 0` in its `update`
+clause, exactly as the vendor's already had. Without it a second
+`npm run reset-demo` leaves the cache at double the ledger. The profile screen
+reconciles the two and shows a red banner when they disagree, which is how this
+was caught.
+
+`agentFeePaise` is also now hoisted into a local in the pickup loop and used by
+both the column and the ledger row — computing `agentFee(quote)` twice is
+exactly how those two numbers would drift apart.
+
+### Smoke changes
+
+- `'My pickups'` / `'History'` / `'Profile'` — the three Batch-0b stub strings —
+  are gone. Every replacement is anchored on something that can only render off
+  the agent-scoped Prisma read (seeded ids, `Ravi Kumar`, `Delhi NCR — South`,
+  the ledger's `₹`), not on static JSX.
+- New `AGENT_BATCH8_REJECTS`, wired through the existing `appIsolation` hook.
+  Asserts absent: the customer's custody wording, the "your part is done" lock
+  on a pre-collection job, the D5/W4 invented stages, and `Cash out` /
+  `Notifications` / `recovery rate` / `Avg margin` on the profile.
+- ⚠ **A React SSR gotcha cost time and will again.** `{n} load to drop off`
+  written as JSX text is **not** a contiguous string in the server HTML — React
+  separates adjacent text nodes with `<!-- -->` markers, so `body.includes(...)`
+  never matches. Any string smoke asserts on must be built as **one template
+  literal** inside a single `{}`. There is a comment saying so in
+  `pickups/page.tsx`.
+
+### ⚠ A dev-server trap worth knowing before Batch 9
+
+Running `npm run build` and then `npm run dev` against the same app makes
+**every dynamic route 404** — `/job/[id]`, `/pickups/[id]`, `/dropoff/[batchId]`
+— while every static route serves 200. No Prisma query is logged, because the
+404 fires before the page code runs. It looks exactly like a seed or an
+ownership bug and it is neither. `rm -rf apps/<app>/.next` and restart. Cost
+about fifteen minutes here; it will cost Batch 9 more, because that batch runs
+`build` and `smoke` back to back.
+
+### Verification
+
+`npm run build` green · **213 tests** (22 engine + 39 auth + 152 core, unchanged
+— Batch 8 added no pure logic; `agentHistoryBucket` lives in the app beside
+`isActiveJob`, and apps hold no tests) · lint clean (2 pre-existing warnings
+from Batch 7b's PDF route) · `npm run smoke` **46/46** · `--app=agent`
+**28/28** · `--app=agent --blocked business@test` **28/28** ·
+`--blocked agent@test` **46/46**.
+
+Plus `batch8-check.mjs`, **not committed** (same convention as Batches 0a, 1, 2,
+3 and 5b). **21 checks, all passing:**
+
+1. 🔴 Under a real **agent JWT** — not the service role, which bypasses the layer
+   under test — the agent reads 8 pickups and 44 `status_events`; every row
+   belongs to them; an unassigned pickup (`PKP-2026-000101`) is invisible.
+2. `/pickups/<not yours>` and its `/map` both **404**, proving the in-code
+   ownership check independently of RLS.
+3. The ledger reconciles three ways: 5 rows, all `agent_fee`, sum === the cached
+   `wallet_balance_paise`, and === the sum of `agent_fee_paise` on the agent's
+   `collected`+ pickups.
+4. 🔴 `offered` × `acceptedAt` on the agent's timeline: unaccepted says
+   "Offer is with the vendor", stamping `accepted_at` flips it to
+   "The vendor accepted", and the fixture is restored to null afterwards —
+   `PKP-2026-000104`'s null is Batch 5b's deliberate "awaiting the vendor"
+   fixture and must not be "fixed".
+5. D5/W4 holds: no `Refurb` / `In transit` / `Warehouse stage` / `QA stage` on
+   the timeline, and `Offer made` proves the labels come from `STAGE_LABELS`.
+
+### Not covered by any script — for the end-of-sprint pass
+
+- **The Realtime ping itself.** The RLS half is proved above; the browser half
+  needs the vendor advancing a pickup on :3000 while the agent watches
+  `/pickups/[id]` on :3001.
+- **The map actually drawing.** `MapCanvas` is loaded via `next/dynamic` with
+  `ssr: false`, so it is *absent by design* from the server HTML that
+  `npm run smoke` reads. Smoke proves the page renders, the placeholder is
+  wired, the coordinates reach the deep link, and no Leaflet leaked into the
+  server pass — it cannot prove a tile ever painted.
+- **Log out**, which is a POST server action.
+
+All three are in `docs/MANUAL_TEST_QUEUE.md`.

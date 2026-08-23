@@ -101,7 +101,10 @@ export default async function Page() {
   // ── The agent's jobs ───────────────────────────────────────────────────────
   // Scoped by `agentId` IN CODE. Prisma connects as the table owner and bypasses
   // RLS by design (D10), so this where-clause is the whole of the access
-  // control on this read — there is no policy behind it to catch a mistake.
+  // control on this read. Batch 8 added an agent SELECT policy on `pickups`,
+  // but ONLY so the browser's Realtime subscription can see rows — Prisma
+  // connects as the table owner and never consults it, so this where-clause is
+  // still the only thing standing between an agent and someone else's jobs.
   const [profile, jobs, collectedToday, assignedToday] = await Promise.all([
     prisma.profile.findUnique({
       where: { id: user.id },

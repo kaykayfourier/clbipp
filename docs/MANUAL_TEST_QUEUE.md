@@ -79,6 +79,62 @@ These are the only untested writes in the batch.
 
 ---
 
+## Batch 8 — track, history, profile (2026-08-24)
+
+Three things here genuinely cannot be scripted; the rest of the batch is covered
+by 28/28 smoke plus 21 scripted checks.
+
+### The Realtime ping — two devices, the whole point of the batch
+
+The RLS half is already proved (an agent JWT reads 44 `status_events` where it
+read 0). What is unproven is that the browser channel actually fires.
+
+1. Log in as **agent@test** on :3001, open `/pickups/PKP-2026-000103`. Leave it
+   on screen. **Do not touch it.**
+2. On a second device (or a private window) as **business@test** on :3000,
+   advance that same pickup — accepting an offer or cancelling both write a
+   `status_events` row.
+3. ✅ Within a second or two the agent's timeline updates **with no reload and no
+   tap**. A new entry appears in the chain of custody.
+4. ✅ If nothing happens: it is the policies. Check `supabase/policies.sql` has
+   **both** the `pickups` and `status_events` agent policies, and that they are
+   actually applied to the project — the file being right is not the same as the
+   database being right.
+
+### The map — a real handset, a real finger
+
+`MapCanvas` is client-only by design (`next/dynamic`, `ssr: false`), so no
+server-side check can see it. Open `/pickups/PKP-2026-000103/map` on a phone.
+
+5. ✅ Tiles actually paint, and the green pin sits on the Okhla warehouse — not
+   in the sea, which is what a broken coordinate looks like.
+6. ✅ The map does **not** pan, pinch or scroll-zoom. Dragging it should scroll
+   the page underneath, not move the map. This is deliberate (D4) — a map that
+   pans is a map a gloved thumb pans by accident.
+7. ✅ "Open in Google Maps" opens the Maps **app**, already routing to the
+   address. ✅ "Call" opens the dialler with the vendor's number.
+8. ✅ Nothing sits under the bottom tab bar, and the page doesn't double-pad.
+
+### Log out
+
+9. `/profile` → **Log out** → ✅ lands on `/login`, and pressing **back** does
+   not return you to a logged-in screen.
+
+### Reading, not just rendering
+
+10. On `/pickups/[id]` for a job past collection, read the lock banner. ✅ Does it
+    make clear the agent's part is finished — without implying they can still do
+    something about it? There is deliberately no control on that screen that
+    advances anything.
+11. On `/profile`, read the earnings copy. ✅ Is it unmistakable that this is the
+    **agent's fee**, not what the vendor was paid? The two numbers are easy to
+    confuse on site and the copy is the only thing separating them.
+12. ✅ The custody log says "Recorded by you" against the agent's own actions and
+    "Recorded by the vendor" against the vendor's — **not** the customer app's
+    "Recorded by the collection partner".
+
+---
+
 ## Carried over from earlier batches
 
 Each batch's "as built" section in `FIELD_AGENT_TASKS.md` ends with its own
@@ -91,6 +147,8 @@ the ones already written up are:
 - **Batch 3** — multi-item intake. Its list is the longest (8 items, at the
   bottom of that section) and includes the gloves-on tap-target check and the
   declared-vs-confirmed disagreement display.
+- **Batch 8** — written up in full above rather than left in the task sheet,
+  because two of its three items need a second device or a real handset.
 
 ## Standing checks for the end-of-sprint pass
 

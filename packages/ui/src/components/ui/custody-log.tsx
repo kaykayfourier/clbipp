@@ -36,6 +36,20 @@ export interface CustodyLogProps {
   entries: CustodyEntry[];
   /** Set false on the public view — see the note in t/[token]/page.tsx. */
   showPhotos?: boolean;
+  /**
+   * Attribution copy, keyed by `actorRole`. Defaults to the CUSTOMER's
+   * perspective (added Batch 8, 2026-08-24).
+   *
+   * ⚠ This prop exists because "Recorded by you" is a claim about **who is
+   * reading**, not about who acted, and the two apps have opposite answers. The
+   * default below is right on /track/[id] and /t/[token] and exactly backwards
+   * on the agent's /pickups/[id] — it would have credited the agent's own
+   * arrival to "the collection partner" and the vendor's booking to "you".
+   *
+   * Pass AGENT_ROLE_LABELS from the agent app rather than adding a second
+   * component.
+   */
+  roleLabels?: Record<string, string>;
   className?: string;
 }
 
@@ -46,7 +60,12 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Recorded by CLBIPP",
 };
 
-function CustodyLog({ entries, showPhotos = true, className }: CustodyLogProps) {
+function CustodyLog({
+  entries,
+  showPhotos = true,
+  roleLabels = ROLE_LABELS,
+  className,
+}: CustodyLogProps) {
   if (entries.length === 0) return null;
 
   return (
@@ -78,9 +97,9 @@ function CustodyLog({ entries, showPhotos = true, className }: CustodyLogProps) 
               </span>
             </div>
 
-            {entry.actorRole && ROLE_LABELS[entry.actorRole] && (
+            {entry.actorRole && roleLabels[entry.actorRole] && (
               <span className="text-xs text-text-secondary">
-                {ROLE_LABELS[entry.actorRole]}
+                {roleLabels[entry.actorRole]}
               </span>
             )}
 

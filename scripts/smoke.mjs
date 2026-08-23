@@ -482,9 +482,77 @@ const AGENT_APP_CONTENT = {
     'Your fee for this job',
     'Declared load',
   ],
-  '/pickups': ['My pickups'],
-  '/history': ['History'],
-  '/profile': ['Profile'],
+  // ── Batch 8 — real screens. Every string below is chosen the same way the
+  // Batch 3 ones were: it can only render if the agent-scoped Prisma read ran
+  // AND returned this agent's own rows, so a broken query fails here instead of
+  // passing on a layout that rendered an empty list.
+  //
+  // 📌 The seeded ids are the load-bearing part. A heading like 'My pickups' is
+  // in the static JSX and would keep passing with the database unplugged.
+  '/pickups': [
+    'My pickups',
+    // The two-group split. 'Needs you' always renders; 'Handed over — in
+    // recovery' only renders when this agent has a job past collection, which
+    // on a fresh seed they do.
+    'Needs you',
+    'Handed over — in recovery',
+    // The derived pending-drop-off card (D5). The seed has exactly one pickup
+    // at `collected` with no custody batch, so this must say "1 load".
+    '1 load to drop off',
+    AGENT_PICKUP,
+  ],
+  // The lifecycle timeline. 103 is `arrived`, so it is pre-collection: the
+  // Handed-over lock must NOT be on it (asserted absent in AGENT_PICKUP_REJECTS
+  // below), and the custody log must carry the agent-perspective attribution.
+  [`/pickups/${AGENT_ARRIVED}`]: [
+    'Lifecycle',
+    'Chain of custody',
+    // 🔴 The roleLabels prop, asserted. The shared CustodyLog defaults to the
+    // CUSTOMER's copy ('Recorded by the collection partner'), which is exactly
+    // backwards on this app. If someone drops the prop, this flips to that
+    // string and this line catches it.
+    'Recorded by you',
+    'Your fee',
+    'See the collection point',
+    // Stage labels come from STAGE_LABELS, never a local copy.
+    'Agent arrived',
+  ],
+  [`/pickups/${AGENT_ARRIVED}/map`]: [
+    'Open in Google Maps',
+    // The seeded warehouse address — proves the address relation was read
+    // through this agent's own pickup, not just that the shell rendered.
+    'Okhla Industrial Area',
+    'Sharma Logistics',
+  ],
+  '/history': [
+    'History',
+    'Every job you have been assigned',
+    // Filter chips are derived from the rows PRESENT, so these two only render
+    // because this agent genuinely has jobs in both buckets.
+    'Still open',
+    'Handed over',
+    AGENT_PICKUP,
+  ],
+  '/profile': [
+    'Profile',
+    // Seeded agent identity — the Prisma read, not the layout.
+    'Ravi Kumar',
+    'Delhi NCR — South',
+    'Tata Ace · DL 1LR 4471',
+    'Jobs collected',
+    'Weight collected',
+    // 🔴 The agent's own ledger (Batch 8 seeds `agent_fee` rows). '₹' only
+    // renders here if walletTxn.aggregate returned something; the D3 line is
+    // what stops this screen ever being mistaken for the vendor's payout.
+    'Earnings',
+    'Balance',
+    '₹',
+    'what you earn for the job, not what the vendor is paid',
+    // Read-only safety training (D6).
+    'Safety training',
+    'Trained',
+    'Log out',
+  ],
   // Batch 2 — real screen. 102 has NO seeded checklist, so this is the blank
   // checklist. The lithium question is the load-bearing string: it only renders
   // if the declared categories were read off this agent's own pickup, and the
@@ -587,6 +655,43 @@ const AGENT_ITEMS_GATE = {
   [`/job/${AGENT_PICKUP}/scan`]: ['QR scanning is not in this build'],
 }
 
+// 🔴 Batch 8 — the strings that must NOT be on these screens.
+//
+// Every entry here is the ABSENT twin of something asserted PRESENT in
+// AGENT_APP_CONTENT above. That pairing is the whole design, and it is the
+// Batch 5b lesson applied one screen later: a positive assertion on its own can
+// pass vacuously when the failure mode renders a DIFFERENT string rather than
+// nothing at all.
+const AGENT_BATCH8_REJECTS = {
+  [`/pickups/${AGENT_ARRIVED}`]: [
+    // 🔴 The reason 'Recorded by you' above is not enough on its own. Drop the
+    // `roleLabels` prop and CustodyLog falls back to the CUSTOMER's map — which
+    // still renders 'Recorded by you' (for the vendor's own `requested` event)
+    // while mislabelling every agent action as somebody else's. The positive
+    // assertion would sail through; this is the one that catches it.
+    'Recorded by the collection partner',
+    // 103 is `arrived` — pre-collection. The "your part is done" lock must not
+    // appear on a job the agent has not even quoted yet.
+    'your part is done',
+    // D5/W4: the wireframe's invented parallel timeline. None of these are
+    // lifecycle stages and no screen may re-declare the stage list.
+    'Refurb',
+    'In transit',
+  ],
+  '/profile': [
+    // The task sheet is explicit: delete these unless they work. Nothing writes
+    // WalletTxnKind.redemption and there is no notification pipeline in this
+    // build, so both would be buttons that do nothing.
+    'Cash out',
+    'Notifications',
+    // The vendor-visibility rule's inverse has a limit: the agent sees their
+    // OWN money, never the business's economics. These belong to the admin app,
+    // and the wireframe's 'Avg recovery rate' row is stale on both sides.
+    'recovery rate',
+    'Avg margin',
+  ],
+}
+
 const AGENT_PUBLIC_ROUTES = ['/login']
 
 const AGENT_CONTENT = {
@@ -629,7 +734,7 @@ const APPS = {
     defaultUser: ['agent@test', 'demo1234'],
     routes: AGENT_ROUTES,
     appContent: AGENT_APP_CONTENT,
-    appIsolation: (route) => AGENT_ITEMS_GATE[route] ?? [],
+    appIsolation: (route) => AGENT_ITEMS_GATE[route] ?? AGENT_BATCH8_REJECTS[route] ?? [],
     publicRoutes: AGENT_PUBLIC_ROUTES,
     content: AGENT_CONTENT,
     publicIsolation: AGENT_LOGIN_ISOLATION,

@@ -251,6 +251,16 @@ pressure, the agent app follows the customer app's proven pattern:
   so an **agent's browser subscription will silently receive nothing**. Either
   add one agent-scoped SELECT policy on `status_events`, or poll on that one
   screen. Decided in Batch 8; the policy is ~6 lines and is the better answer.
+  > 📌 **Footnote, added 2026-08-24 (Batch 8, as built).** It took **two**
+  > policies, not one. Postgres applies row security to tables referenced
+  > *inside* a policy expression, so a `status_events` policy sub-selecting from
+  > `pickups` sees nothing unless `pickups` also has an agent SELECT policy —
+  > measured at **44 rows vs 0**. Both are SELECT-only and are in
+  > `supabase/policies.sql`. **This does not widen D10:** agents still get no
+  > INSERT/UPDATE/DELETE anywhere, and neither policy is ever consulted by
+  > Prisma, so in-code `agentId` scoping remains the entire access boundary on
+  > every screen. The `pickups` SELECT is the prerequisite this bullet's
+  > authorisation implied without saying.
 
 **Any new SQL lands in a versioned file under `supabase/`, never only in the
 dashboard.**

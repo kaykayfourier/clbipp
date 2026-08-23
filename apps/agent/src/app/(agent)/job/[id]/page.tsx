@@ -29,6 +29,8 @@ import {
   isStageBefore,
 } from '@clbipp/ui'
 
+import { mapsHref, toCoord } from '@/lib/job-nav'
+
 import { markArrivedAndContinue } from './actions'
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -43,23 +45,6 @@ const CONDITION_LABELS: Record<string, string> = {
   swollen: 'Swollen',
   leaking: 'Leaking',
   dead: 'Dead',
-}
-
-/**
- * Google Maps deep link for the job.
- *
- * ⚠ `Address.lat` and `Address.lng` are BOTH nullable — manual address entry
- * has to stay possible when a vendor denies location permission at booking, so
- * a coordinate pair is never guaranteed. Falling back to a text destination
- * keeps the button working instead of sending the agent to 0°N 0°E.
- */
-function mapsHref(
-  lat: number | null,
-  lng: number | null,
-  textAddress: string,
-): string {
-  const destination = lat !== null && lng !== null ? `${lat},${lng}` : textAddress
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
 }
 
 export default async function Page({
@@ -109,8 +94,9 @@ export default async function Page({
     },
   })
 
-  // 🔴 Ownership is enforced HERE, in code — Prisma bypasses RLS (D10) and there
-  // is no agent SELECT policy behind this read. `notFound()` rather than a
+  // 🔴 Ownership is enforced HERE, in code — Prisma bypasses RLS (D10), so the
+  // agent SELECT policy Batch 8 added for Realtime does NOT back this read up.
+  // In-code scoping is the whole boundary. `notFound()` rather than a
   // "not yours" message so the screen doesn't confirm that a given pickup id
   // exists to an agent who has no business knowing.
   if (!pickup || pickup.agentId !== user.id) notFound()
@@ -174,11 +160,7 @@ export default async function Page({
 
             <div className="flex gap-2">
               <a
-                href={mapsHref(
-                  address?.lat === null || address?.lat === undefined ? null : Number(address.lat),
-                  address?.lng === null || address?.lng === undefined ? null : Number(address.lng),
-                  textAddress,
-                )}
+                href={mapsHref(toCoord(address?.lat), toCoord(address?.lng), textAddress)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1"

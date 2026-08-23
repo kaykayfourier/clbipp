@@ -42,8 +42,10 @@ monorepo** (migrated 2026-08-09):
    2026-08-20). Runs on **port 3001** (`npm run dev:agent`). Done so far:
    **0b** scaffold + role-gated auth · **0a** schema + seed · **1** day view +
    job detail · **2** safety checklist · **3** multi-item intake · **4** engine +
-   pricing · **5b** cross-app seam (D7). **Next: Batch 5a (quote screens +
-   offer, Ali), then Batch 6 (collect, Ali). Aamir's own next is Batch 8.**
+   pricing · **5b** cross-app seam (D7) · **7b** chain-of-custody PDF · **8**
+   track, history, profile. **Next: Batch 5a (quote screens + offer, Ali), then
+   Batch 6 (collect) and 7a (drop-off UI), both Ali. Aamir's lane is clear
+   through to Batch 9 (deploy).**
 3. **Admin dashboard** — `apps/admin` — scaffolded, built last
 
 ```
@@ -106,7 +108,9 @@ Headlines you need even if you read nothing else:
   server-side from **every** intake screen — `/items`, `/items/[itemId]` and
   `/scan` today. **Any new screen downstream of intake adds the same two lines**;
   `/damage`, `/computing`, `/result*` and `/collect` are still stubs and still
-  ungated.
+  ungated. ⚠ The Batch 8 screens (`/pickups*`, `/history`, `/profile`) are
+  **watch-only and deliberately ungated** — they are downstream of nothing and
+  gating a read of finished work would be wrong.
 - **The D1 chemistry branch has one home:** `isLithium` / `LI_ION_CHEMISTRIES` in
   `packages/core/src/intake.ts`. Never re-list the li-ion chemistries in a screen
   or an API route — `apps/agent/.../api/quote/route.ts` had a second copy and it
@@ -120,6 +124,15 @@ Headlines you need even if you read nothing else:
 - **Chat, VoIP call and turn-by-turn navigation are cut** (D4) — `tel:` link,
   static Leaflet map, Google Maps deep link.
 - **Agents do not self-sign-up** (D6). Login only; accounts come from the seed.
+
+> ⚠ **"The agent app has no RLS" is no longer strictly true** (changed
+> 2026-08-24, Batch 8). It has exactly **two** policies, both SELECT-only, both
+> on `supabase/policies.sql`, and both existing solely so the agent's *browser*
+> Realtime subscription can see its own rows. **Nothing the agent app reads
+> through Prisma is affected** — Prisma connects as the table owner and never
+> consults them — so D10 stands and in-code `agentId === user.id` scoping is
+> still the entire access boundary on every screen. Agents still get no
+> INSERT/UPDATE/DELETE policy anywhere.
 
 **The agent app's auth guard is `apps/agent/src/proxy.ts`** (live since Batch
 0b), exporting `proxy`, with `allowRoles: ['agent']` and no `onboardingPath`
@@ -328,6 +341,16 @@ Realtime / Storage · Tailwind + shadcn/ui · Vercel · Vitest
 **Prisma manages table structure. RLS is written separately as raw SQL** —
 Prisma has no concept of row-level security; different layer, same database,
 no conflict.
+
+🔴 **RLS policy expressions are themselves subject to RLS.** A policy that
+sub-selects from another table sees that table through *its* policies — so a
+policy can be syntactically perfect and match zero rows because the table it
+joins to has no policy for that role. It fails **silently**: the query succeeds
+and returns nothing. Batch 8 hit this exactly (agent Realtime: 44 rows vs 0);
+the write-up and the measured numbers are in the header of `supabase/policies.sql`.
+**Whenever you add a policy that references another table, verify it under a real
+JWT for that role — never under the service role, which bypasses the layer you
+are testing.**
 
 ## Stub-data pattern (use when a dependency isn't ready yet)
 

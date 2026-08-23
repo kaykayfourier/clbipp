@@ -40,6 +40,42 @@ Still true:
 
 ## Change log
 
+### 2026-08-24 — Batch 8 (track, history, profile) — A, in lane, two cross-lane edits taken
+
+- **Done by:** Aamir (A). Batch 8 is A's own lane — tracking/realtime, history,
+  profile, and the RLS that goes with them. Nothing was reassigned.
+- **Cross-lane edit 1 — `packages/database/prisma/reset-demo.ts` (B's file).**
+  Added the agent's `agent_fee` `WalletTxn` ledger (5 rows on the agent's
+  profile), hoisted `agentFeePaise` into a local so the pickup column and the
+  ledger row cannot drift, and added `walletBalancePaise: 0` to the agent's
+  upsert `update` clause.
+  - **Why taken:** the profile screen's whole earnings section reads that
+    ledger, and no writer for it exists until Ali's Batch 6 collects a job. The
+    alternative was shipping a profile screen that reads ₹0 on a fresh seed and
+    a "done when" that passes vacuously at 0 === 0.
+  - **For Khalid:** the balance-reset line is the one to keep. Profiles are not
+    wiped (they match real auth users) but `wallet_txns` is, so without it a
+    second `reset-demo` leaves the agent's cache at double their ledger. The
+    vendor's upsert already had the equivalent.
+  - **For Ali (Batch 6):** write the *same shape* at collection — same kind,
+    same `pickupId`, `balanceAfterPaise` running, and the profile cache in the
+    same transaction. The profile screen reconciles ledger vs cache and shows a
+    red banner when they disagree.
+- **Cross-lane edit 2 — `packages/ui/src/components/ui/custody-log.tsx` (C's
+  package).** Added an optional `roleLabels` prop, ~6 lines, default unchanged.
+  - **Why taken:** the component's attribution copy was hardcoded to the
+    customer's perspective — "Recorded by you" for the vendor, "Recorded by the
+    collection partner" for the agent — which is exactly backwards on an agent
+    screen. It was a correctness bug on A's screen living in C's file.
+  - **For Ali:** the default is untouched, so `/track/[id]` and `/t/[token]`
+    behave identically. Nothing to redo.
+- **Also touched (A's own):** `supabase/policies.sql` (two agent SELECT
+  policies, applied to the shared project), `supabase/realtime.sql` (header
+  comment only), `scripts/smoke.mjs`, and stale RLS comments in three existing
+  agent screens.
+- **Announce-worthy:** `npm run reset-demo` was run against the **shared**
+  Supabase project during this batch, and `policies.sql` was applied to it.
+
 ### 2026-08-24 — Batch 5b (cross-app seam) — A, in lane, one cross-lane edit taken
 
 Batch 5b is A's own (the cross-app seam is explicitly in A's lane). Logging it

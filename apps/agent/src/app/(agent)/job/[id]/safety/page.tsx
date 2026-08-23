@@ -86,8 +86,9 @@ export default async function Page({
     },
   })
 
-  // 🔴 Ownership enforced in code — Prisma bypasses RLS (D10) and there is no
-  // agent SELECT policy behind this read. `notFound()` rather than a "not
+  // 🔴 Ownership enforced in code — Prisma bypasses RLS (D10), so Batch 8's
+  // Realtime-only agent SELECT policy does not back this read up. `notFound()`
+  // rather than a "not
   // yours" message, so the screen doesn't confirm a pickup id exists to an
   // agent with no business knowing. Same call as job detail makes.
   if (!pickup || pickup.agentId !== user.id) notFound()

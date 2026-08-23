@@ -280,3 +280,64 @@ alter table pathway_decisions enable row level security;
 alter table battery_packs enable row level security;
 alter table battery_inspections enable row level security;
 alter table battery_diagnostics enable row level security;
+
+-- ===========================================================================
+-- Agent app (Batch 8, 2026-08-24) — the ONLY two agent policies in this file.
+-- ===========================================================================
+-- D10 stands: the agent app reads through Prisma, scoped by `agentId` IN CODE,
+-- and writes through service-role server actions that re-verify ownership in
+-- code. Prisma connects as the table owner and the service role bypasses RLS,
+-- so NEITHER of the policies below affects a single existing screen.
+--
+-- They exist for exactly one thing: **Realtime**. The agent's watch-only
+-- timeline (`/pickups/[id]`) subscribes to `status_events` from the BROWSER,
+-- with the agent's own JWT, and that path does not go through Prisma. Without
+-- these, the subscription connects, reports SUBSCRIBED, and silently never
+-- fires — the failure mode D10 called out and deferred to this batch.
+--
+-- 🔴 WHY THERE ARE TWO POLICIES AND NOT ONE.
+--
+-- The task sheet specified one policy on `status_events` "mirroring the vendor
+-- one but joining on pickups.agent_id". That alone does NOT work, and it fails
+-- silently, which is worse than failing loudly.
+--
+-- Postgres applies row security to tables referenced INSIDE a policy
+-- expression as well. The vendor's status_events policy sub-selects from
+-- `pickups`, and it works only because `pickups` already carries a vendor
+-- SELECT policy for that sub-select to see rows through. `pickups` has no
+-- agent SELECT policy — so an agent-scoped sub-select would be filtered to
+-- zero rows, the outer policy would match nothing, and the file would look
+-- correct while changing nothing at all.
+--
+-- MEASURED, 2026-08-24, against the shared project as agent@test's own JWT:
+--   both policies present ............ 44 status_events rows
+--   pickups policy dropped ...........  0 status_events rows
+--   both policies restored ........... 44 status_events rows
+-- The middle line is what the task sheet's one-policy version would have
+-- shipped, and nothing about it looks broken from the outside.
+--
+-- Hence the `pickups` SELECT policy below. It is the prerequisite the
+-- status_events one implies, not a widening of the agent's surface: an agent
+-- can already read every one of these rows through the app.
+--
+-- Both are SELECT-ONLY. Agents still get no INSERT/UPDATE/DELETE anywhere —
+-- D10's "agents get no UPDATE policy on pickups" is untouched.
+-- ---------------------------------------------------------------------------
+
+drop policy if exists "Agents can read their assigned pickups" on pickups;
+create policy "Agents can read their assigned pickups"
+on pickups
+for select
+to authenticated
+using ((select auth.uid()) = agent_id);
+
+drop policy if exists "Agents can read status events for their pickups" on status_events;
+create policy "Agents can read status events for their pickups"
+on status_events
+for select
+to authenticated
+using (
+  pickup_id in (
+    select id from pickups where agent_id = (select auth.uid())
+  )
+);

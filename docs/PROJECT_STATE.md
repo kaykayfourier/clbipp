@@ -5,8 +5,46 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-24 — **Field Agent app: Batches 0b, 0a, 1, 2, 3, 4
-and 5b are done.**
+**Last updated:** 2026-08-24 — **Field Agent app: Batches 0b, 0a, 1, 2, 3, 4,
+5b, 7b and 8 are done.**
+
+> **Batch 8 (track, history, profile) shipped 2026-08-24.** The last five
+> Batch-0b stubs are real screens: `/pickups` (two groups + the pending
+> drop-off card), `/pickups/[id]` (the shared `lifecycle-view` timeline, custody
+> log, Realtime, and the "your role ends at drop-off" lock), `/pickups/[id]/map`
+> (Leaflet + OSM, static), `/history` (filterable, **rows open a real detail
+> view** — the wireframe's self-link defect), and `/profile` (identity, stats,
+> the agent's own ledger, read-only training status, log out).
+>
+> 🔴 **The finding to carry forward: the Realtime RLS fix needed TWO policies,
+> not the one the task sheet specified — and the one-policy version fails
+> silently.** Postgres applies row security to tables referenced inside a policy
+> expression, so an agent-scoped sub-select on `pickups` (which had no agent
+> SELECT policy) was filtered to zero rows. Measured as `agent@test`'s own JWT:
+> **44 `status_events` rows with both policies, 0 with only the one, 44 again
+> when restored.** The subscription still reports `SUBSCRIBED` in the broken
+> state — it just never fires. Both policies are in `supabase/policies.sql` with
+> those numbers in the header, and **applied to the shared project**. D10 is
+> intact: agents still get no UPDATE anywhere, and Prisma never consults either
+> policy, so in-code `agentId` scoping is still the whole access boundary.
+>
+> Two other things came with it: **`CustodyLog` gained a `roleLabels` prop**
+> (its copy was hardcoded to the customer's perspective and read backwards on an
+> agent screen), and **the seed now writes the agent's `agent_fee` ledger** —
+> which required adding `walletBalancePaise: 0` to the agent's upsert, or a
+> second `reset-demo` doubles the cache. **No price moved.** 213 tests,
+> `npm run build`, `npm run smoke` 46/46 + 28/28 and both role-gate directions
+> green, plus 21 scripted checks.
+>
+> ⚠ **Before Batch 9:** running `npm run build` then `npm run dev` on the same
+> app makes **every dynamic route 404** while static ones serve 200, with no
+> Prisma query logged. It is a stale `.next`, not a data bug — `rm -rf
+> apps/<app>/.next`. Batch 9 runs build and smoke back to back, so it will hit
+> this.
+>
+> **Next up: Batch 5a (quote screens + offer) — Ali,** then Batch 6 (collect)
+> and Batch 7a (hub drop-off UI). **Aamir's lane is now clear through to Batch
+> 9.**
 
 > **Batch 5b (the cross-app seam, D7) shipped 2026-08-24** — the highest-risk
 > correctness item in the plan. `acceptOffer` no longer writes `collected`: a
@@ -35,8 +73,8 @@ and 5b are done.**
 > "awaiting the vendor" fixture and must not be repurposed. Details and the
 > reason it wasn't added here are in "Batch 5b — as built".
 >
-> **Next up: Batch 5a (quote screens + offer) — Ali,** then Batch 6 (collect).
-> Aamir's own next is **Batch 8** (track, history, profile).
+> ~~**Next up: Batch 5a — Ali.** Aamir's own next is **Batch 8**~~ — **Batch 8
+> done 2026-08-24, see the top of this file.**
 
 Prior entry (2026-08-23): **Batches 0b, 0a, 1, 2, 3 and 4 are done.**
 

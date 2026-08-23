@@ -10,20 +10,23 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@clbipp/decision-engine": "*",
     "@clbipp/auth": "*",
     "@clbipp/core": "*",
     "@clbipp/database": "*",
+    "@clbipp/decision-engine": "*",
     "@clbipp/pdf": "*",
     "@clbipp/ui": "*",
+    "leaflet": "^1.9.4",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
     "@clbipp/eslint-config": "*",
     "@clbipp/tsconfig": "*",
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
