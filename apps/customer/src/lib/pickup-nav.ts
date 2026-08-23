@@ -24,10 +24,24 @@ export type PickupRowLike = {
  * `requested` → the request confirmation screen; `offered` → straight to the
  * offer, because it is the one stage waiting on the CUSTOMER and the row should
  * land on the decision rather than on tracking; everything else → tracking.
+ *
+ * ⚠ `offerAccepted` is the Batch 5b (D7) split. Accepting an offer no longer
+ * advances the status — it stamps `Offer.acceptedAt` and leaves the pickup at
+ * `offered` until the field agent collects — so `offered` alone no longer means
+ * "waiting on the customer". An accepted row goes to tracking like any other
+ * in-flight pickup; sending it to `/offer` would land it on a decision already
+ * taken, and `/offer` would immediately redirect it away again.
+ *
+ * Callers pass `Boolean(pickup.offer?.acceptedAt)`. It defaults to false so a
+ * caller that genuinely has no offer data still gets the old behaviour.
  */
-export function pickupHref(status: PickupStatus, id: string): string {
+export function pickupHref(
+  status: PickupStatus,
+  id: string,
+  offerAccepted = false
+): string {
   if (status === 'requested') return `/scheduled?id=${id}`
-  if (status === 'offered') return `/offer?id=${id}`
+  if (status === 'offered' && !offerAccepted) return `/offer?id=${id}`
   return `/track/${id}`
 }
 

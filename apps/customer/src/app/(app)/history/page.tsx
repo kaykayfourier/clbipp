@@ -31,6 +31,11 @@ export default async function HistoryPage() {
       approxQuantity: true,
       createdAt: true,
       _count: { select: { items: true } },
+      // Batch 5b: `offered` split into "awaiting the vendor" and "accepted,
+      // awaiting the agent", and only the acceptance timestamp tells them
+      // apart. pickupHref needs it to stop routing an accepted row back to a
+      // decision it has already taken.
+      offer: { select: { acceptedAt: true } },
     },
   })
 
@@ -38,7 +43,7 @@ export default async function HistoryPage() {
     id: pickup.id,
     status: pickup.status,
     subtitle: pickupSubtitle(pickup),
-    href: pickupHref(pickup.status, pickup.id),
+    href: pickupHref(pickup.status, pickup.id, Boolean(pickup.offer?.acceptedAt)),
     bucket: historyBucket(pickup.status),
     createdAt: pickup.createdAt.toLocaleDateString('en-IN', {
       day: '2-digit',

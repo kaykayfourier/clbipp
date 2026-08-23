@@ -40,6 +40,38 @@ Still true:
 
 ## Change log
 
+### 2026-08-24 — Batch 5b (cross-app seam) — A, in lane, one cross-lane edit taken
+
+Batch 5b is A's own (the cross-app seam is explicitly in A's lane). Logging it
+for the one file outside it and for one thing done beyond the task sheet.
+
+**Taken from C's lane:** `packages/ui/src/components/ui/lifecycle-view.tsx` —
+`buildStages` changed from last-wins to **first-wins**. Not optional and not
+cosmetic: an accepted pickup now carries **two `offered` status events** (the
+agent's offer and the vendor's acceptance of it, because the acceptance advances
+no stage), and last-wins relabelled the timeline's "Offered" row with the
+acceptance date. Three lines including the comment. C keeps the component.
+
+**Done beyond the task sheet:** `voidOfferAcceptance` in
+`handover/actions.ts` — `cancelPickup` and reschedule-after-cancel now clear
+`Offer.acceptedAt`. The sheet's Batch 5b has three steps and this is not one of
+them, but the batch is what makes that timestamp load-bearing (Batch 6 gates the
+agent's Collect button on it), so shipping the field without the hygiene would
+have handed Batch 6 a hole to guard against. Written up against the
+2026-08-23 entry below, which is where the loose end was first flagged.
+
+**Not done, and deliberately left for C's Batch 6:** the seed row for a pickup
+at `offered` **with** `acceptedAt` set. It is Batch 6's admit fixture more than
+it is 5b's, and adding an eleventh pickup shifts the dashboard counts, "earned
+today" and the compliance export totals that existing smoke assertions depend
+on — a cost worth paying once, by the batch that needs it. Flagged in
+"Batch 5b — as built" and in `PROJECT_STATE.md`.
+
+**Two steps of the sheet were already done** by the customer app's Batch 12
+(`/handover` as a POST, and back in `smoke.mjs`). No work, no ownership question.
+
+---
+
 ### 2026-08-23 — Batch 3 (multi-item intake): C → A, whole batch
 
 - **Taken by A (Aamir). Was C's (Ali).** The item list, the per-item confirm
@@ -143,6 +175,22 @@ Three consequences that follow, and are worth a look once the contract says so:
 
 **Nothing here blocks Batch 1, and nothing was changed for it.** (2) is the one
 with teeth; (3) resolves itself once (2) does.
+
+> **UPDATE 2026-08-24 (Batch 5b, A).** Partly actioned, because (2) stopped
+> being theoretical: `Offer.acceptedAt` is now what the agent app reads as
+> permission to collect.
+>
+> - **(2) half-fixed.** `cancelPickup` and the reactivation path in
+>   `reschedulePickup` now null out `Offer.acceptedAt` via a shared
+>   `voidOfferAcceptance` helper. **Still open:** the row keeps its `agentId`
+>   and `agentFeePaise`, so (3) is unchanged too.
+> - **(1) improved, not fixed.** `buildStages` is now first-wins, so a
+>   reactivated pickup's timeline keeps the date it *first* reached each stage
+>   instead of being relabelled by the later event. The underlying "the audit log
+>   can go backwards" fact is untouched.
+> - **The documentation gap this entry is really about is still open** —
+>   `schema.prisma`'s `PickupStatus` comment still describes `cancelled` as
+>   terminal. `CLAUDE.md` says otherwise. One of them should move.
 
 ### 2026-08-22 — Batch 1 (day view + job detail) — A, in lane, one seed edit taken
 

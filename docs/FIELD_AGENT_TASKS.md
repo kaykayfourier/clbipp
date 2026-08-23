@@ -490,7 +490,12 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 5b — Cross-app seam · **Aamir** · ~0.4d
+## Batch 5b — Cross-app seam · **Aamir** · ~0.4d ✅ DONE 2026-08-24
+
+> ⚠ **Read "Batch 5b — as built" at the bottom of this file before Batch 6.**
+> Steps 2 and 3 below were already shipped by the customer app's Batch 12; the
+> real work was step 1 plus a fan-out across six screens the sheet did not
+> anticipate.
 
 **Depends on:** 0a. **Highest-risk correctness item in the plan (D7/W9).**
 
@@ -1475,3 +1480,122 @@ restoring `PKP-2026-000103` afterwards:
 `$ACTION_ID_<id>` field scraped from the rendered form — the Batch 2 lesson,
 unchanged. A urlencoded body returns 200 with the page re-rendered and writes
 nothing.
+
+---
+
+## Batch 5b — as built (2026-08-24, Aamir)
+
+Read this before Batch 6 (C) — it changes what "the vendor accepted" means and
+Batch 6's collect gate is built on it. Also read it before touching any customer
+screen that switches on `status === 'offered'`.
+
+### The one thing to take away
+
+**`offered` is now two states, and only `Offer.acceptedAt` tells them apart.**
+
+| `acceptedAt` | Means | Vendor screen |
+|---|---|---|
+| `null` | Awaiting the vendor's decision | `/offer` renders; `/handover` bounces to it |
+| set | Accepted, awaiting the agent | `/handover` renders "Offer Accepted"; `/offer` bounces to it |
+
+The status stays `offered` through both. `acceptOffer` no longer writes
+`collected` — the agent app does, in Batch 6, from the field. That was the whole
+of D7 and it is now live.
+
+### Two steps were already done
+
+The sheet's steps 2 and 3 above were shipped by the customer app's **Batch 12**,
+before this sprint: `/handover` is already a pure read behind the
+`acceptOfferAndConfirm` POST action, and it is already back in `smoke.mjs`
+`ROUTES`. Nothing to do for either. What was left was step 1 plus the fan-out
+below, which the sheet did not anticipate.
+
+### What actually changed
+
+| File | Change |
+|---|---|
+| `handover/actions.ts` | `acceptOffer` stamps `offers.accepted_at`, writes a `status_events` row, and **does not touch `pickups.status`**. Guard tightened from a pre-collection range to `status === 'offered'` exactly. Idempotent on re-submit — an already-accepted offer is not re-stamped. |
+| `handover/page.tsx` | Guard keys on `offer.acceptedAt`, not a stage comparison. Two faces: "Offer Accepted" (timeline truncated at `offered`) and the original "Handover Confirmed" for `collected`+. |
+| `offer/page.tsx`, `offer-breakdown/page.tsx` | New guard: an accepted offer redirects to `/handover`. **Both**, because they share `AcceptOfferButton` — one alone leaves a second accept path open. |
+| `lib/pickup-nav.ts` | `pickupHref(status, id, offerAccepted = false)`. Callers `dashboard/page.tsx` and `history/page.tsx` now select `offer.acceptedAt`. |
+| `track/[id]/page.tsx`, `t/[token]/page.tsx` | The `offered` banner branches on acceptance. The authenticated CTA becomes "View acceptance" → `/handover`. |
+| `scheduled/page.tsx` | Same, for its "View Offer" button. |
+| `packages/ui/.../lifecycle-view.tsx` | `buildStages` is **first-wins**, see below. |
+
+### 🔴 The trap, and why the two guards are symmetrical
+
+`/offer` redirects to `/handover` when `acceptedAt` is set; `/handover`
+redirects to `/offer` when it is not. **Both must key on that same field.** Swap
+either one back to a status range and the two screens redirect to each other
+forever — there is no status that distinguishes them any more. There is a
+comment saying so at the top of both files; leave it there.
+
+### 🔴 `buildStages` changed from last-wins to first-wins
+
+An accepted pickup now has **two `offered` status events** — the agent's offer
+and the vendor's acceptance of it, because the acceptance advances nothing.
+Last-wins relabelled the timeline's "Offered" row with the date it was
+*accepted*, which is a different fact. It is now `!map[event.status]` guarded.
+
+This is shared by `/track/[id]` and `/t/[token]`. It also nudges the known
+"audit log can go backwards after a cancelled → requested reschedule" problem in
+the right direction, but **does not fix it** — that stays open in
+`LANE_OWNERSHIP.md`.
+
+### Beyond the sheet: `acceptedAt` hygiene
+
+`cancelPickup` and `reschedulePickup` (reactivation path only) now null out
+`offers.accepted_at` via a shared `voidOfferAcceptance` helper. Once Batch 6
+gates collection on that timestamp, an acceptance outliving its pickup is an
+agent being sent to collect a load the vendor called off. This closes half of
+loose end (1) in `CLAUDE.md`; the other half — reactivation keeping `agentId`
+and `agentFeePaise` — is still open.
+
+### 🔴 What Batch 6 needs from the seed, and does not have
+
+**There is no seeded pickup at `offered` WITH `acceptedAt` set.** That is
+deliberate — the seed comment on `PKP-2026-000104` says its null is the live
+"awaiting the vendor" fixture and must not be "fixed" — but it means the accepted
+branch of every screen above has **no permanent smoke assertion**, and Batch 6's
+collect gate has nothing to render its admit path against.
+
+Batch 6 should add an **eleventh pickup** at `offered`, assigned to `agent@test`,
+with `acceptedAt` set. It was not added here because a new row shifts the
+dashboard counts, "earned today" and the compliance export totals that other
+smoke assertions already depend on — that is Batch 6's cost to pay, alongside
+the gate it unblocks. Until then the state is verified by the throwaway script
+below.
+
+### Smoke changes
+
+- `/track/PKP-2026-000104` added to `ROUTES` + `APP_CONTENT` — the *un*-accepted
+  half, which the seed can express.
+- 📌 `APP_REJECTS['/handover?id=PKP-2026-000104']` now asserts the absence of
+  **both** `'Handover Confirmed'` and `'Offer Accepted'`. Asserting only the
+  first would pass vacuously the moment the acceptance guard broke, because the
+  page would render the *other* heading. Same lesson as Batch 10, one heading
+  later. **If you add a third heading to that page, add it here too.**
+- `OFFER_SURVIVED_GET` unchanged and still passing — no GET advances anything.
+
+### Verification worth re-running
+
+`seam-check.mjs`, **not committed** (same convention as Batches 0a, 1, 2 and 3).
+15 checks over HTTP as `business@test`. It stamps `accepted_at` on
+`PKP-2026-000104`, asserts the accepted branch everywhere, then restores the
+fixture and re-checks that `/offer` is reachable again:
+
+1. 🔴 The pickup status is **still `offered`** after acceptance — the load-bearing
+   check of the whole batch.
+2. `/handover` says "Offer Accepted", and never "have been collected".
+3. `/offer` and `/offer-breakdown` both close — no Accept button, no price hero.
+4. `/track` shows the accepted banner, the "View acceptance" CTA, and the
+   acceptance entry in the custody log.
+5. The timeline's Offered date is still the date the offer was **made**
+   (first-wins). Worth noting the run that verified this had a genuine 3-day gap
+   between the two — the assertion was not vacuous.
+6. The dashboard row links an accepted pickup to `/track`, not back to `/offer`.
+7. `accepted_at` is null again afterwards and the `status_events` count matches.
+
+**Not covered by any script:** `voidOfferAcceptance` on cancel and on
+reschedule-after-cancel. Both are server actions and need a real click-through —
+they are in `docs/MANUAL_TEST_QUEUE.md`.

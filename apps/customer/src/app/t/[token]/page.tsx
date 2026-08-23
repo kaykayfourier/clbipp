@@ -106,11 +106,20 @@ export default async function PublicTrackPage({
     status === 'arrived' ||
     status === 'offered'
   ) {
+    // Batch 5b (D7): `offered` covers both "awaiting the vendor" and "the
+    // vendor has accepted, awaiting collection". Read off the acceptance
+    // timestamp, same as the authenticated screen. No new data reaches this
+    // page — `offer` was already in the query — and a boolean "did they say
+    // yes" is not a price, so the no-value-to-strangers rule is untouched.
+    const offerAccepted = Boolean(pickup.offer?.acceptedAt)
+
     const banner: Record<typeof status, string> = {
       requested: 'This pickup is confirmed. Collection will be arranged shortly.',
       scheduled: 'Collection is scheduled.',
       arrived: 'The collection agent is on site.',
-      offered: 'An offer has been made and is awaiting the vendor.',
+      offered: offerAccepted
+        ? 'The offer has been accepted. The agent will collect the batteries on site.'
+        : 'An offer has been made and is awaiting the vendor.',
     }
 
     return (

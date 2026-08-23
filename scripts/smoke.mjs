@@ -59,6 +59,10 @@ const ROUTES = [
   // ETA) and 109 is `certified` (terminal, full custody chain).
   '/track/PKP-2026-000103',
   '/track/PKP-2026-000109',
+  // Batch 5b. 104 is the one pickup at `offered` with its offer NOT yet
+  // accepted — the "awaiting the vendor" half of the D7 seam. The accepted half
+  // has no seeded pickup on purpose (see the note on APP_REJECTS below).
+  '/track/PKP-2026-000104',
   '/profile',
   '/compliance',
   // The offer flow. These take an ?id= and are status-guarded — since Batch 7A
@@ -168,7 +172,14 @@ const APP_REJECTS = {
   // confirmation. Paired with OFFER_SURVIVED_GET below, which is the half that
   // proves nothing was WRITTEN — this one alone would still pass if the page
   // advanced the pickup and then redirected.
-  '/handover?id=PKP-2026-000104': ['Handover Confirmed'],
+  //
+  // ⚠ Batch 5b added the SECOND string, and it is not decorative. /handover now
+  // has two headings: 'Handover Confirmed' once the agent has collected, and
+  // 'Offer Accepted' while the pickup is still at `offered` with a stamped
+  // `acceptedAt`. Asserting only the first would pass vacuously the moment the
+  // acceptance guard broke, because the page would render the OTHER heading —
+  // the Batch 10 vacuous-assertion lesson, one heading later.
+  '/handover?id=PKP-2026-000104': ['Handover Confirmed', 'Offer Accepted'],
 }
 
 // The other half, and the load-bearing one. Re-fetched AFTER the /handover probe
@@ -208,6 +219,11 @@ const APP_CONTENT = {
     'token=',
   ],
   '/track/PKP-2026-000109': ['Chain of custody', 'Certified', 'Collected', 'token='],
+  // Batch 5b — the "awaiting the vendor" half of the split `offered` stage.
+  // Both strings come from the NOT-accepted branch; the accepted branch says
+  // 'Offer accepted' and 'View acceptance' instead, so a guard that inverted
+  // would fail here rather than render a plausible-looking screen.
+  '/track/PKP-2026-000104': ['Your offer is ready', 'View offer'],
   // Batch 8. The ₹ figures here are the D6 relaxation made visible — if the
   // "no value to the vendor" default ever gets re-applied wholesale, these fail
   // rather than the screens quietly going blank.

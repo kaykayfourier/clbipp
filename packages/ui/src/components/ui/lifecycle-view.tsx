@@ -38,13 +38,24 @@ export interface LifecycleEvent {
  * Non-lifecycle statuses (`cancelled`, and anything unrecognised) are skipped
  * rather than coerced, via `isLifecycleStage` — the same narrowing both track
  * screens already used.
+ *
+ * ⚠ FIRST WRITE WINS, and that is load-bearing as of Batch 5b. A stage can now
+ * legitimately have more than one event: the vendor accepting an offer (D7)
+ * writes a second `offered` row, because the acceptance advances nothing — it
+ * stamps `Offer.acceptedAt` and leaves the status where it was. Last-wins would
+ * have relabelled the timeline's "Offered" with the date it was ACCEPTED, which
+ * is a different fact.
+ *
+ * The rule generalises: a timeline entry answers "when did this pickup first
+ * reach this stage", so the earliest event is always the right answer. Callers
+ * pass events ordered by `occurredAt` ascending.
  */
 export function buildStages(
   events: LifecycleEvent[],
 ): Partial<Record<LifecycleStage, { timestamp: string }>> {
   const map: Partial<Record<LifecycleStage, { timestamp: string }>> = {};
   for (const event of events) {
-    if (isLifecycleStage(event.status)) {
+    if (isLifecycleStage(event.status) && !map[event.status]) {
       map[event.status] = {
         timestamp: new Date(event.occurredAt).toLocaleDateString("en-IN", {
           day: "2-digit",

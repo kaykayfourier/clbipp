@@ -42,8 +42,8 @@ monorepo** (migrated 2026-08-09):
    2026-08-20). Runs on **port 3001** (`npm run dev:agent`). Done so far:
    **0b** scaffold + role-gated auth · **0a** schema + seed · **1** day view +
    job detail · **2** safety checklist · **3** multi-item intake · **4** engine +
-   pricing. **Next: Batch 5a (quote screens + offer, Ali); Aamir's own next is
-   Batch 5b, the cross-app seam.**
+   pricing · **5b** cross-app seam (D7). **Next: Batch 5a (quote screens +
+   offer, Ali), then Batch 6 (collect, Ali). Aamir's own next is Batch 8.**
 3. **Admin dashboard** — `apps/admin` — scaffolded, built last
 
 ```
@@ -147,14 +147,16 @@ asked for reschedule-after-cancel, so `reschedulePickup` in the customer app's
 rather than making the vendor file a new request. Still nine stages, no
 migration. Don't write code that assumes a cancelled pickup is final.
 
-> 🔴 **Two loose ends on that edge, neither resolved.** (1) Reactivation clears
-> nothing else — the row keeps its old `agentId`, `agentFeePaise`, `Offer` and
-> `Offer.acceptedAt`, so a pickup can sit at `requested` while still carrying an
-> accepted offer and an assigned agent. The vendor is re-requesting, not
-> resuming, so that probably wants voiding. (2) The audit log can now go
-> backwards — a `requested` `status_events` row landing after a `cancelled` one,
-> which `buildStages` / `lifecycle-view` assume can't happen. Written up in
-> `docs/LANE_OWNERSHIP.md` (2026-08-23).
+> 🔴 **Two loose ends on that edge — both narrowed by Batch 5b, neither closed.**
+> (1) Reactivation now voids `Offer.acceptedAt` (`voidOfferAcceptance` in
+> `handover/actions.ts`, added 2026-08-24 because Batch 6 gates collection on
+> that timestamp), but the row **still keeps its old `agentId` and
+> `agentFeePaise`** — so a pickup can sit at `requested` with an agent still
+> assigned to it. (2) The audit log can still go backwards — a `requested`
+> `status_events` row landing after a `cancelled` one. `buildStages` is
+> first-wins now, which stops a later event *relabelling* an earlier stage, but
+> the ordering fact is unchanged. Written up in `docs/LANE_OWNERSHIP.md`
+> (2026-08-23, updated 2026-08-24).
 
 **Stage order has one source of truth per layer, and they must agree:**
 `enum PickupStatus` (`schema.prisma`) · `LIFECYCLE_STAGES` + `STAGE_LABELS`
@@ -166,13 +168,30 @@ migration. Don't write code that assumes a cancelled pickup is final.
 
 | Transition | Written by |
 |---|---|
-| `scheduled → arrived` | agent app |
-| `arrived → offered` | agent app (creates the `Offer`) |
-| vendor accepts | customer app — sets `Offer.acceptedAt`, **status stays `offered`** |
-| `offered → collected` | agent app |
+| `scheduled → arrived` | agent app ✅ built (Batch 1) |
+| `arrived → offered` | agent app (creates the `Offer`) — Batch 5a |
+| vendor accepts | customer app — sets `Offer.acceptedAt`, **status stays `offered`** ✅ built (Batch 5b) |
+| `offered → collected` | agent app — Batch 6 |
 
 ⚠ A vendor cannot mark their own battery collected. `acceptOffer` in the
-customer app used to write `collected`; Batch 5b changes that.
+customer app used to write `collected`; **Batch 5b changed that on 2026-08-24.**
+
+🔴 **The consequence: `offered` is TWO states, separated only by
+`Offer.acceptedAt`** — *awaiting the vendor's decision* (null) and *accepted,
+awaiting the agent* (set). The status is identical in both. Any screen that
+switches on `status === 'offered'` must read the timestamp too, or it will show
+a vendor the Accept button for an offer they already accepted. Seven places
+already do: `/offer`, `/offer-breakdown`, `/handover`, `/track/[id]`,
+`/t/[token]`, `/scheduled` and `lib/pickup-nav.ts`.
+
+⚠ **`/offer` and `/handover` redirect to each other off that one field** —
+`/offer` sends an accepted pickup to `/handover`, `/handover` sends an
+unaccepted one back to `/offer`. Change one guard to a status range and they
+loop forever. Both files carry a comment saying so.
+
+⚠ **`buildStages` is first-wins** (`packages/ui/.../lifecycle-view.tsx`) because
+an accepted pickup has two `offered` events. A timeline entry answers "when did
+this pickup *first* reach this stage".
 
 ## Vendor-visibility rules (still live — the agent app is their inverse)
 
@@ -340,6 +359,10 @@ keeps every lane moving in parallel without anyone touching another's files.
   of the detail below that predates the monorepo migration and schema v2.
 - `docs/CONTEXT.md` — decisions made and why, conventions, deferred items.
 - `docs/LANE_OWNERSHIP.md` — lane policy (**do-it-and-note-it since 2026-08-20**) + the log of who actually did what.
+- `docs/MANUAL_TEST_QUEUE.md` — the running list of things a script can't check
+  (POST form actions, camera, "does this read right"), collected per batch for
+  **one sitting at the end of the sprint**. Batches are verified programmatically
+  as they land; add to this file rather than testing by hand as you go.
 - `docs/markdown-preview.pdf` — **the company's flow document** (sent by HR after
   they reviewed our first draft). The company's intended flow for the app. It is
   an image-only PDF — render the pages to read it, there is no text layer.
