@@ -440,6 +440,30 @@ model BatteryItem {
   unitPricePaise Int? @map("unit_price_paise")
   linePricePaise Int? @map("line_price_paise")
 
+  // ⚠ WORKAROUND (Batch 5a, Ali — 2026-08-23), not in the original plan.
+  // computeQuote() requires a full BMSData object — soh_nominal, capacity_kWh,
+  // age_years, cycle_count, plus four BMS diagnostic readings — and NO screen
+  // in the corrected screen map (plan §2) collects them; Entroview sync is out
+  // for v1 and no manual-BMS-entry screen was ever specced. Team direction
+  // (2026-08-23): collect the four decision-relevant fields (SoH/capacity/
+  // age/cycles) on the damage rubric screen and default the four diagnostic-
+  // only fields to "no anomaly detected" until Entroview or the admin
+  // dashboard supplies real readings — see DamageRubricForm.tsx.
+  //
+  // PathwayDecision (packId/inspectionId/factorConfigId) is the schema's real
+  // audit table for an engine run, but those three FKs point at BatteryPack /
+  // BatteryInspection / PathwayFactor — the OLD single-pack test harness, with
+  // zero seeded rows and no defined mapping onto Pickup → BatteryItem. Rather
+  // than mint throwaway pack/inspection/factor rows just to satisfy those FKs,
+  // this column stores the full { input: QuoteInput, output: QuoteOutput }
+  // pair straight from the engine, so /result, /result/breakdown and
+  // /result/why can re-render after navigation without recomputing.
+  //
+  // TODO: replace with the real PathwayDecision audit trail once the admin
+  // dashboard defines the pack/inspection/factor-config linkage for the agent
+  // app. This column is a stand-in, not the intended long-term record.
+  quoteData Json? @map("quote_data")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -583,6 +607,17 @@ model PickupReceipt {
   agentId     String?  @map("agent_id") @db.Uuid
   capturedLat Decimal? @map("captured_lat") @db.Decimal(10, 7)
   capturedLng Decimal? @map("captured_lng") @db.Decimal(10, 7)
+
+  // ⚠ WORKAROUND (Batch 6, Ali — 2026-08-23). The collect screen (D7) captures
+  // a vendor signature at the moment of collection — a different signature,
+  // from a different person, at a different stage than
+  // CustodyBatch.signatureUrl (that one is the HUB's, at Batch 7a drop-off).
+  // Hand-off photos and location use the columns already meant for them —
+  // StatusEvent.photoUrls / lat / lng, "where + photo proof per transition" —
+  // written onto the `collected` status_events row instead of duplicated here.
+  // Storage object path, not a URL — same reason as every other photo field:
+  // the bucket is private and reads go through createSignedUrl.
+  signatureUrl String? @map("signature_url")
 
   collectedAt DateTime @default(now()) @map("collected_at")
 
