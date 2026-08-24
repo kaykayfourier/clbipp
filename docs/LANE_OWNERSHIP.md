@@ -40,6 +40,30 @@ Still true:
 
 ## Change log
 
+### 2026-08-24 — `smoke.mjs` agent probe count + Batch 7b done-when wording — A, into B's lane
+
+- **Done by:** Aamir (A). Both files are Khalid's (B) — deployment/CI owns
+  `scripts/smoke.mjs`, and Batch 7b is his batch on the task sheet.
+- **What:** the agent run's `total` omitted the custody-PDF probe. `total` added
+  the customer-only sections behind `isCustomer` and nothing for agent, so
+  `npm run smoke -- --app=agent` executed 29 probes and printed "All 28" (27
+  `AGENT_ROUTES` + 1 `AGENT_PUBLIC_ROUTES`). One line: `(appName === 'agent' ? 1 : 0)`.
+- **Severity:** cosmetic, not a coverage hole. `probeDocument` shares the
+  `failures` counter and the exit code is `failures === 0`, so a broken custody
+  route always failed the run. The wrong total is the problem — 28 was being
+  read as proof the document section ran.
+- **Also:** corrected the Batch 7b done-when line, which said the route belongs
+  in `DOCUMENT_ROUTES`. It doesn't — that array is inside the `isCustomer` gate
+  and is fetched against :3000, so an agent route there would be skipped for
+  agent and fail against customer. Khalid's separate `appName === 'agent'` block
+  is the correct shape; the checklist wording predates the two-app split and had
+  already cost one review round-trip.
+- **Why taken:** two one-line fixes found while reviewing Khalid's reply on that
+  exact question. Handing them back would have cost another round-trip each.
+- **For Khalid:** nothing to redo. Your Batch 7b block stands as written — only
+  the denominator and the stale checklist line changed. An agent run now reports
+  29.
+
 ### 2026-08-24 — Batch 8 (track, history, profile) — A, in lane, two cross-lane edits taken
 
 - **Done by:** Aamir (A). Batch 8 is A's own lane — tracking/realtime, history,

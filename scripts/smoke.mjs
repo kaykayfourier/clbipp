@@ -1083,6 +1083,11 @@ async function main() {
   const total =
     cfg.routes.length +
     cfg.publicRoutes.length +
+    // The agent custody PDF probe runs above but was never added here, so an
+    // agent run executed 29 probes and printed "All 28". The exit code was
+    // always right — probeDocument shares `failures` — but the total is what
+    // gets read as proof the document section ran at all.
+    (appName === 'agent' ? 1 : 0) +
     (isCustomer
       ? Object.keys(APP_REJECTS).length +
         Object.keys(OFFER_SURVIVED_GET).length +

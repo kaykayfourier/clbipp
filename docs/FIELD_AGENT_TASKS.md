@@ -619,7 +619,10 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 - [ ] The PDF renders for a seeded batch
 - [ ] Another agent's batch is rejected
 - [ ] Second download serves the cached copy
-- [ ] Route in `smoke.mjs`'s `DOCUMENT_ROUTES`, `npm run smoke` green
+- [x] Route in `smoke.mjs` — as its own `appName === 'agent'` document block,
+      **not** in `DOCUMENT_ROUTES`. That array sits inside the `isCustomer` gate
+      and is fetched against :3000, so the agent route would never run there.
+      This line predates the two-app split. `npm run smoke -- --app=agent` green.
 
 ---
 
