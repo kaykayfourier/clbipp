@@ -420,6 +420,14 @@ const AGENT_ARRIVED_ITEM_LEAD = '00000000-0000-4000-8000-000000103003'
 // `collected`. The pickup AT `collected` is deliberately not in it — that is
 // the derived "pending drop-off" state (D5).
 const AGENT_BATCH = '00000000-0000-4000-8000-000000000301'
+// The `offered` demo pickup — seeded WITH a passing safety checklist and with an
+// Offer row, so /job/<id>/offer is the one id that renders the offer screen
+// rather than bouncing off the gate.
+const AGENT_OFFERED = 'PKP-2026-000104'
+// The one pickup at `collected` with a NULL custodyBatchId — the derived
+// "pending drop-off" state (D5). /dropoff/confirm is meaningless without a
+// selection, so this is what it is given.
+const AGENT_COLLECTED = 'PKP-2026-000105'
 
 const AGENT_ROUTES = [
   // A. Entry & day view
@@ -445,19 +453,28 @@ const AGENT_ROUTES = [
   `/job/${AGENT_PICKUP}/items`,
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}`,
   `/job/${AGENT_PICKUP}/scan`,
-  // Batch 5a's screens, still stubs — ungated, so they still render under 102.
+  // D. Quote. ⚠ These five were described here as "still stubs — ungated" until
+  // 2026-08-24. Batch 5a built them AND put them behind the safety gate, so
+  // every one now redirects under 102 — and because they carried no assertions,
+  // a 307 scored a bare "ok" and these five routes were checking nothing at all.
+  // They are the gate's REJECT half now, asserted by content in AGENT_ITEMS_GATE.
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/damage`,
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/computing`,
-  // D. Quote
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result`,
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/breakdown`,
   `/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/why`,
+  // The offer screen inherited the gate too (it is downstream of intake), so
+  // 102 is its reject half...
   `/job/${AGENT_PICKUP}/offer`,
+  // ...and 104, which is `offered` and has a checklist, is the render half.
+  `/job/${AGENT_OFFERED}/offer`,
   // E. Collect & hand off
   `/job/${AGENT_ARRIVED}/collect`,
   `/job/${AGENT_ARRIVED}/receipt`,
   '/dropoff',
-  '/dropoff/confirm',
+  // Needs a selection — it is the confirm step for a batch, and redirects to
+  // /dropoff without one. Fetching it bare asserted nothing.
+  `/dropoff/confirm?pickups=${AGENT_COLLECTED}`,
   `/dropoff/${AGENT_BATCH}`,
   // F. Track, history, profile
   '/pickups',
@@ -612,8 +629,20 @@ const AGENT_APP_CONTENT = {
     'required for this condition',
   ],
   [`/job/${AGENT_ARRIVED}/scan`]: ['QR scanning is not in this build'],
-  [`/job/${AGENT_PICKUP}/offer`]: ['Offer'],
-  '/dropoff/confirm': ['Confirm hand-off'],
+  // The offer roll-up, on the one pickup that has an Offer. 'Offer presented'
+  // is the `acceptedAt === null` half of the split `offered` stage (Batch 5b) —
+  // it can only render off the real Prisma read, unlike the bare 'Offer' title
+  // this used to assert, which was the AppShell heading and would have passed
+  // on an empty screen.
+  [`/job/${AGENT_OFFERED}/offer`]: ['Offer presented', '₹'],
+  // Batch 7a. The vendor name and the running totals come from the batch read;
+  // the agent-attested wording is the honesty requirement in step 5 of the
+  // task sheet, asserted so it cannot quietly disappear.
+  [`/dropoff/confirm?pickups=${AGENT_COLLECTED}`]: [
+    'Confirm hand-off',
+    'Receiving staff',
+    'Agent-attested only',
+  ],
 }
 
 // 🔴 Batch 2 — THE SAFETY GATE, asserted by URL.
@@ -653,6 +682,17 @@ const AGENT_ITEMS_GATE = {
   ],
   // The scan screen inherited the gate too.
   [`/job/${AGENT_PICKUP}/scan`]: ['QR scanning is not in this build'],
+  // Batch 5a's six screens, gated 2026-08-24. Each string is one that only the
+  // real screen renders, so a gate that stopped rejecting would surface here as
+  // a leak rather than as a silently-passing redirect.
+  [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/damage`]: ['Leakage', 'Thermal'],
+  [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/computing`]: ['Computing'],
+  [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result`]: ['Back to items'],
+  [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/breakdown`]: ['Revenue'],
+  [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/why`]: ['Audit footer', 'Market snapshot'],
+  // 🔴 The offer screen is a money surface: if the gate ever stopped rejecting,
+  // the thing that leaks is a total in ₹ on a job with no safety checklist.
+  [`/job/${AGENT_PICKUP}/offer`]: ['Present offer to vendor', 'Total offer'],
 }
 
 // 🔴 Batch 8 — the strings that must NOT be on these screens.

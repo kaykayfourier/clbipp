@@ -38,10 +38,20 @@ export const proxy = createAuthMiddleware({
 
 export const config = {
   matcher: [
-    // Run on everything except static assets. The PWA files (manifest, sw.js,
-    // offline.html, icons/) are excluded ahead of Batch 8 for the same reason
-    // as on the customer side — they must load logged-out for install/offline
-    // to work — even though none of them exist yet.
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline.html|icons/).*)',
+    // Run on everything except static assets and the PWA files, which must load
+    // LOGGED OUT for install and offline to work.
+    //
+    // 🔴 The icon filenames are listed one by one, and that is not tidiness.
+    // Until 2026-08-24 this pattern excluded a directory `icons/` that has
+    // never existed, while the real files sit at the public root — so every
+    // icon 307'd to /login. Chrome's install criteria require it to FETCH a
+    // 192px and a 512px icon, so `beforeinstallprompt` never fired and the app
+    // was not installable; iOS fell back to a screenshot of the page instead of
+    // apple-touch-icon.png. Nothing looked broken — the manifest itself was
+    // public and returned 200, so the only symptom was an install prompt that
+    // never appeared. The customer app had the identical bug.
+    //
+    // ⚠ Add any new public-root asset here, or it will be behind the auth gate.
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline.html|icons/|icon-192\\.png|icon-512\\.png|icon\\.svg|apple-touch-icon\\.png).*)',
   ],
 }

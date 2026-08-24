@@ -512,6 +512,53 @@ migrations. **History is tracked now — the next migration is an ordinary
 
 ---
 
+## 2026-08-24 — dispatch script, PWA + install prompt (Aamir)
+
+Done under the do-it-and-note-it rule. Four things, three of which crossed a
+lane.
+
+1. **`npm run assign-job`** (`packages/database/prisma/assign-job.ts`) — B's
+   lane (seed/scripts), built by A. **It closes a hole nobody had noticed: no
+   code anywhere wrote `requested → scheduled` or set `Pickup.agentId`.** Only
+   the seed did. So a pickup booked in the customer app was invisible to the
+   agent app forever, and the whole cross-app journey worked *only* on seeded
+   rows. That transition belongs to the admin app (still a scaffold), so this is
+   a CLI stopgap rather than a screen — putting it in the customer app would
+   cross the D7 seam, and putting it in the agent app would contradict D2.
+   When the admin surface exists, lift `assignJob` into a server action; the
+   logic transfers unchanged.
+
+2. **Agent PWA** (`apps/agent/public/*`, `ServiceWorkerRegister`, layout
+   metadata) — A's own lane. **This was Batch 8's and was silently dropped**;
+   the layout still carried "PWA + offline is Batch 8" as a comment. The agent
+   app had no `public/` directory at all. Icon is deliberately the inverse of
+   the customer's (black "FA" on lime vs lime "B2" on black) because the
+   two-device demo puts both on one home screen.
+
+3. **`<InstallPrompt />`** (`packages/ui`) — C's lane (component library), built
+   by A, and wired into **both** apps' home screens. Neither app had one, which
+   is why installing meant finding "Add to Home Screen" in a browser menu.
+   Chromium gets a real one-tap install dialog; iOS gets the Share-sheet
+   instructions, because Safari has no install API and never has.
+
+4. 🔴 **A live bug in the deployed customer app, found while testing the above.**
+   Both apps' proxy matchers excluded a directory `icons/` that has never
+   existed, while the real icon files sit at the public root — so
+   `icon-192.png`, `icon-512.png`, `icon.svg` and `apple-touch-icon.png` all
+   **307'd to /login**. Chrome must be able to fetch the 192 and 512 icons
+   before it will offer an install, so the customer app was **not installable at
+   all**, and iOS used a screenshot of the page as the home-screen icon. The
+   manifest itself was public and returned 200, so nothing looked wrong. Fixed
+   in both `src/proxy.ts` files by naming the four files explicitly; the
+   comments there say why, at length, so nobody "tidies" them back.
+
+Also fixed the agent smoke table, which had gone stale when Batches 5a/6/7a
+landed: two routes were failing, and five more were passing vacuously (a 307
+with no assertions scores "ok"). Agent is 30/30 now, asserted in both
+directions.
+
+---
+
 ## Superseded policy (2026-06-27 → 2026-08-20) — kept for the record
 
 Entries logged above under dates before 2026-08-20 were made under this rule,

@@ -42,10 +42,16 @@ monorepo** (migrated 2026-08-09):
    2026-08-20). Runs on **port 3001** (`npm run dev:agent`). Done so far:
    **0b** scaffold + role-gated auth · **0a** schema + seed · **1** day view +
    job detail · **2** safety checklist · **3** multi-item intake · **4** engine +
-   pricing · **5b** cross-app seam (D7) · **7b** chain-of-custody PDF · **8**
-   track, history, profile. **Next: Batch 5a (quote screens + offer, Ali), then
-   Batch 6 (collect) and 7a (drop-off UI), both Ali. Aamir's lane is clear
-   through to Batch 9 (deploy).**
+   pricing · **5a** quote screens + offer · **5b** cross-app seam (D7) · **6**
+   collect · **7a** hub drop-off · **7b** chain-of-custody PDF · **8** track,
+   history, profile · **PWA + install prompt** (deferred out of 8, built
+   2026-08-24). **Everything except Batch 9 (deploy) is built.**
+
+   🔴 **One hole the batches never covered: nothing writes `requested →
+   scheduled` or sets `Pickup.agentId`.** That transition belongs to the admin
+   app, which is a scaffold — so a pickup booked in the customer app is
+   invisible to the agent app. `npm run assign-job` (2026-08-24) is the CLI
+   stopgap; see "Dispatch" below.
 3. **Admin dashboard** — `apps/admin` — scaffolded, built last
 
 ```
@@ -139,6 +145,18 @@ Headlines you need even if you read nothing else:
 (D6). Same rule as the customer app: **it must stay under `src/`** — Next's dev
 bundler silently never registers it at the project root when `src/app` is in
 use, and an unregistered auth guard fails **OPEN**.
+
+**Both apps are installable PWAs** (agent's built 2026-08-24). Manifest, icons,
+`sw.js` and `offline.html` live in each app's `public/`; `<InstallPrompt />`
+from `@clbipp/ui` is on both home screens and gives Chromium a real one-tap
+install dialog (iOS gets Share → Add to Home Screen — Safari has no install
+API). ⚠ **Anything you add to an app's `public/` root must also be excluded in
+that app's `src/proxy.ts` matcher**, or the auth guard 307s it to `/login`.
+That is not hypothetical: it silently made the customer app un-installable
+until 2026-08-24, because the matcher excluded an `icons/` directory that never
+existed while the real icons sat at the root. The service worker is
+production-only, so **install and offline cannot be tested on `npm run dev`** —
+use `npm run build && npm start`.
 
 **Every agent screen must pass `hideNav` to `AppShell`.** `apps/agent/src/app/(agent)/layout.tsx`
 renders the agent's own `<AgentTabBar />` and owns the clearance under it;
@@ -319,6 +337,14 @@ cd packages/core && npx vitest run src/booking.test.ts
 # Database
 npm run db:migrate --workspace=@clbipp/database        # Apply schema changes
 npm run reset-demo                                     # Wipe + reseed the demo data
+
+# Dispatch: assign a `requested` pickup to an agent, i.e. `requested →
+# scheduled` + set agentId. Nothing in either app does this — it is the admin
+# app's job and the admin app is a scaffold — so without it a pickup booked in
+# the customer app never reaches the agent's day view. Idempotent.
+npm run assign-job                    # every `requested` pickup → agent@test
+npm run assign-job -- PKP-2026-000101 # just this one
+npm run assign-job -- --agent=other@test
 npm run create-buckets --workspace=@clbipp/database    # Storage buckets (idempotent)
 cd packages/database && npx prisma studio              # Visual DB editor
 

@@ -8,6 +8,7 @@ export * from "./components/ui/button";
 export * from "./components/ui/card";
 export * from "./components/ui/custody-log";
 export * from "./components/ui/detail-row";
+export * from "./components/ui/install-prompt";
 export * from "./components/ui/lifecycle-view";
 export * from "./components/ui/partner-card";
 export * from "./components/ui/list-row";

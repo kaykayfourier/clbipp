@@ -10,7 +10,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "reset-demo": "tsx prisma/reset-demo.ts",
-    "create-buckets": "tsx prisma/create-buckets.ts"
+    "create-buckets": "tsx prisma/create-buckets.ts",
+    "assign-job": "tsx prisma/assign-job.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -14,7 +14,7 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
-import { AppShell, Card, CardContent, ListRow, PagePadding, SectionLabel } from '@clbipp/ui'
+import { AppShell, Card, CardContent, InstallPrompt, ListRow, PagePadding, SectionLabel } from '@clbipp/ui'
 
 import { isActiveJob, jobHref, jobNextStep, jobSubtitle } from '@/lib/job-nav'
 
@@ -176,6 +176,15 @@ export default async function Page() {
               : `${active.length} job${active.length === 1 ? '' : 's'} still open.`}
           </p>
         </div>
+
+        {/* Renders only when the browser says the app is installable and the
+            agent hasn't dismissed it — see the component. An agent working a
+            round is exactly who benefits from a home-screen icon. */}
+        <InstallPrompt
+          appName="Field Agent"
+          mark="FA"
+          blurb="Add it to your home screen — one tap to today's jobs, no browser in the way."
+        />
 
         {/* Assigned / Collected / Earned. No "Avg margin" — the wireframe puts
             it here but it is a business figure, and an agent's own margin is an

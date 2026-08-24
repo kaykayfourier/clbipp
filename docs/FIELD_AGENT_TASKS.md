@@ -390,7 +390,7 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 4 — Engine + pricing · **Khalid** · ~1.2d
+## Batch 4 — Engine + pricing · **Khalid** · ~1.2d ✅ DONE
 
 **Depends on:** 0a. Pure logic — **no UI, no app files.**
 
@@ -445,7 +445,7 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 5a — Quote screens + offer · **Ali** · ~0.75d
+## Batch 5a — Quote screens + offer · **Ali** · ~0.75d ✅ DONE 2026-08-24
 
 **Depends on:** 3. **Not on Batch 4** — build against `mock-data.ts`.
 
@@ -527,7 +527,7 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 6 — Collect · **Ali** · ~0.75d
+## Batch 6 — Collect · **Ali** · ~0.75d ✅ DONE 2026-08-24
 
 **Depends on:** 5a + 5b.
 
@@ -566,7 +566,7 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 7a — Hub drop-off UI · **Ali** · ~0.6d
+## Batch 7a — Hub drop-off UI · **Ali** · ~0.6d ✅ DONE 2026-08-24
 
 **Depends on:** 6.
 
@@ -595,7 +595,7 @@ commands above are no longer a pre-PR courtesy — they are the only gate left.
 
 ---
 
-## Batch 7b — Chain-of-custody PDF · **Khalid** · ~0.4d
+## Batch 7b — Chain-of-custody PDF · **Khalid** · ~0.4d ✅ DONE
 
 **Depends on:** 0a (the `CustodyBatch` model). Pure render — no UI.
 
@@ -1773,3 +1773,75 @@ Plus `batch8-check.mjs`, **not committed** (same convention as Batches 0a, 1, 2,
 - **Log out**, which is a POST server action.
 
 All three are in `docs/MANUAL_TEST_QUEUE.md`.
+
+---
+
+## PWA + dispatch — as built (2026-08-24, Aamir)
+
+Read this before Batch 9. It changes what "deployed" has to mean.
+
+### 🔴 The gap no batch owned: nothing assigned an agent
+
+D2 says jobs are pushed — `Pickup.agentId` is set when the pickup is scheduled.
+No batch was ever given the job of *doing* that, because it belongs to the admin
+app, and the admin app is a scaffold. The result: **`requested → scheduled` and
+`agentId` were written by the seed and by nothing else.** A pickup booked in the
+customer app sat at `requested` with a null `agentId` forever and never appeared
+on any agent's day view, so the entire cross-app journey worked only on seeded
+rows. `npm run assign-job` is the stopgap — a CLI, deliberately not a screen in
+either app (the customer app would cross the D7 seam; the agent app would make
+jobs pull-able, contradicting D2). Lift `assignJob` into an admin server action
+when that surface exists.
+
+### 🔴 The customer app was not installable, and had not been for a while
+
+Both `src/proxy.ts` matchers excluded a directory `icons/` that has never
+existed. The actual icons are at the public root, so `icon-192.png`,
+`icon-512.png`, `icon.svg` and `apple-touch-icon.png` were all behind the auth
+guard and **307'd to `/login`**.
+
+Chromium will not fire `beforeinstallprompt` unless it can fetch a 192px and a
+512px icon, so the customer app offered no install at all; iOS, unable to read
+`apple-touch-icon.png`, used a screenshot of the page as the home-screen icon.
+**Nothing looked broken** — `manifest.webmanifest` was in the exclusion list and
+returned 200, so the only symptom was an install prompt that never appeared.
+
+⚠ **Anything added to an app's `public/` root must be added to that app's
+matcher.** Both files now name the four icons explicitly and say why.
+
+### What was built
+
+| Thing | Where |
+|---|---|
+| Agent PWA | `apps/agent/public/` — manifest, `sw.js`, `offline.html`, icons — plus `ServiceWorkerRegister` and the metadata block in `app/layout.tsx`. Mirrors the customer app. Icon is the deliberate inverse (black "FA" on lime) so both apps are tellable apart when installed together. |
+| `<InstallPrompt />` | `packages/ui`, on **both** apps' home screens. Captures `beforeinstallprompt` and re-fires it from our own button — a real one-tap install on Chromium. iOS gets the Share-sheet wording instead, because Safari implements no install API. Hides when already installed; remembers dismissal. |
+| `npm run assign-job` | `packages/database/prisma/assign-job.ts`. Idempotent — the `status: "requested"` in its updateMany WHERE means a repeat run never re-stamps a job in progress. |
+
+### Smoke: the agent table had gone stale
+
+Batches 5a/6/7a landed without it being updated, and it was **red at 2 of 29**.
+Worse than the two failures were five routes that were passing vacuously: once
+the Batch 5a screens went behind the safety gate they returned 307, and a 307
+with no assertions scores a bare "ok". Those five were asserting nothing at all.
+
+- `/job/<102>/offer` and the four result/damage/computing routes are now the
+  gate's **reject** half, asserted on absent content.
+- `/job/<104>/offer` — the one pickup with an `Offer` — is the **render** half.
+- `/dropoff/confirm` is fetched with `?pickups=<105>`; bare, it just redirects.
+
+Agent is **30/30**, customer **46/46**, both `--blocked` runs green.
+
+⚠ **A stale Turbopack dev server will 404 `result/breakdown` and `result/why`**
+and the safety gate never runs. It is not an app bug — `rm -rf apps/agent/.next`
+and restart. Half an hour went into that; don't repeat it.
+
+### Not done, and deliberately
+
+- **No offline write queue.** The service worker caches the shell and no data,
+  on purpose: agent screens carry full revenue, margins and the price band, and
+  a cached response has no session attached to it. The offline page therefore
+  promises nothing about unsent work.
+- **No store listing.** Play Store via a TWA is straightforward whenever it is
+  wanted; the App Store is not, because these are server-rendered apps and a
+  webview wrapper is what Apple rejects under 4.2. Raised with the company as
+  open question 14 in `COMPANY_FLOW_REVIEW_2026-08-07.md`.

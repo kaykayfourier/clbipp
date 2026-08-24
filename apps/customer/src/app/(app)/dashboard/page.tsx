@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 import { prisma } from "@clbipp/database"
 import { getCurrentProfile } from "@clbipp/auth"
 import { aggregateMaterials, formatPaise, type RecoveredMaterial } from "@clbipp/core"
-import { ListRow } from "@clbipp/ui"
+import { InstallPrompt, ListRow } from "@clbipp/ui"
 import { Button } from "@clbipp/ui"
 import { Card, CardContent, DetailRow, SectionLabel } from "@clbipp/ui"
 import type { Pickup } from "@clbipp/database"
@@ -131,6 +131,17 @@ function PopulatedDashboardPage({
         </div>
         <AddressChip profileId={profileId} />
       </div>
+
+      {/* Renders only when the browser reports the app installable and the
+          vendor hasn't dismissed it. Added 2026-08-24: without it the only way
+          in was the browser's own "Add to Home Screen" menu item, which nobody
+          finds. iOS gets the Share-sheet instructions instead — Safari has no
+          install API. */}
+      <InstallPrompt
+        appName="Back2Basics"
+        mark="B2"
+        blurb="Add it to your home screen — track pickups and offers without hunting for the link."
+      />
 
       <div className="grid grid-cols-3 gap-2">
         <Card variant="elevated">

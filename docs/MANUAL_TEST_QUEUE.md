@@ -150,6 +150,28 @@ the ones already written up are:
 - **Batch 8** — written up in full above rather than left in the task sheet,
   because two of its three items need a second device or a real handset.
 
+## Install / PWA (added 2026-08-24)
+
+Only the last item genuinely needs a handset; the rest are a laptop and Chrome.
+**None of this works on `npm run dev`** — the service worker is production-only,
+so use `npm run build && npm start` (or the deployed URL).
+
+- **Android / desktop Chrome:** load the app logged in and confirm the "Install
+  app" bar appears on the home screen, that tapping **Install app** opens the
+  browser's own install dialog, and that accepting produces a windowed app with
+  the right icon. Dismissing must keep it dismissed across a reload.
+- **Both apps installed side by side** — the whole point of the two icons being
+  inverses. Confirm they are tellable apart in the launcher and that each opens
+  its own app, not the other.
+- **iPhone / Safari:** the bar must show the *Share → Add to Home Screen*
+  wording instead of an Install button, and the installed icon must be the "FA"
+  / "B2" icon and **not a screenshot of the page** — that was the symptom of the
+  proxy bug fixed on 2026-08-24, and it is the fastest way to spot a regression.
+- **Offline:** with the app installed, turn the network off and open it. The
+  offline card should render rather than the browser's dinosaur.
+- **Already-installed state:** opening the installed app must NOT show the
+  install bar again.
+
 ## Standing checks for the end-of-sprint pass
 
 - **Every agent screen passes `hideNav`.** `npm run smoke` fails on anything but

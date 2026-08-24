@@ -295,6 +295,27 @@ framing is wrong: two-segment support is a data-model change, not a tweak.
    only a booking convenience. **We would like your view before we add a
    column.**
 
+14. **Do you expect a native App Store / Play Store app?** (added 2026-08-24,
+   PWA work.) Both apps are installable Progressive Web Apps. On Android and
+   desktop that now means a genuine one-tap install prompt and a real
+   home-screen app. **On iPhone it cannot**: Safari does not implement the
+   install-prompt API, so an iOS user installs via Share → Add to Home Screen —
+   two extra taps, once. Everything else on iOS is identical, and an installed
+   PWA is also exempt from Safari's 7-day data eviction.
+
+   Getting onto the **Play Store** is straightforward whenever you want it (a
+   TWA wrapper around the deployed app, Play Console account, ~half a day).
+   Getting onto the **App Store** is not: our apps are server-rendered, so a
+   wrapper would be the thin-webview kind Apple rejects under guideline 4.2, and
+   doing it properly means rebuilding the client against an API. The server,
+   schema, pricing engine, PDFs and auth would all carry over — it is the
+   screens that would be rebuilt.
+
+   **We need to know if a store listing is expected**, because it changes the
+   client architecture and is not a one-week-sprint item. If PWA install is
+   acceptable — and for a contractor-facing field tool it usually is, since it
+   means no store review and instant updates — nothing further is needed.
+
 ---
 
 ## Rule change recorded from this review
