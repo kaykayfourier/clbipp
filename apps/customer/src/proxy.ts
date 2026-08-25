@@ -30,6 +30,6 @@ export const config = {
     // silently made the app un-installable (Chrome must be able to fetch the
     // 192px and 512px icons before it will offer an install) and gave iOS a
     // page screenshot instead of apple-touch-icon.png. See apps/agent/src/proxy.ts.
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline.html|icons/|icon-192\\.png|icon-512\\.png|icon\\.svg|apple-touch-icon\\.png).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline.html|\\.well-known|icons/|icon-192\\.png|icon-512\\.png|icon\\.svg|apple-touch-icon\\.png).*)',
   ],
 }

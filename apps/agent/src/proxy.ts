@@ -52,6 +52,6 @@ export const config = {
     // never appeared. The customer app had the identical bug.
     //
     // ⚠ Add any new public-root asset here, or it will be behind the auth gate.
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline.html|icons/|icon-192\\.png|icon-512\\.png|icon\\.svg|apple-touch-icon\\.png).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline.html|\\.well-known|icons/|icon-192\\.png|icon-512\\.png|icon\\.svg|apple-touch-icon\\.png).*)',
   ],
 }

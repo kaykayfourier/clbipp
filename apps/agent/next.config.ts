@@ -27,6 +27,20 @@ const nextConfig: NextConfig = {
   // search once the client is bundled — the build goes green and every query
   // 500s. See the script's header, and the customer-side confirmation from
   // Vercel runtime logs, 2026-08-15.
+  // Serves the Digital Asset Links file at the exact path Android looks for.
+  // It cannot be an app/ route folder: Next ignores directories beginning with
+  // a dot, so `app/.well-known/` is never registered. The handler lives at
+  // /api/assetlinks and is rewritten here.
+  //
+  // ⚠ `/.well-known` is also excluded in src/proxy.ts. Android fetches this
+  // anonymously at install time — behind the auth guard it would 307 to /login
+  // and verification would fail. Same trap that made the icons un-fetchable.
+  async rewrites() {
+    return [
+      { source: "/.well-known/assetlinks.json", destination: "/api/assetlinks" },
+    ];
+  },
+
   outputFileTracingIncludes: {
     "/**": ["./src/generated/client/**/*"],
   },

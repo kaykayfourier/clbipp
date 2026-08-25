@@ -389,6 +389,11 @@ keeps every lane moving in parallel without anyone touching another's files.
 
 ## Key docs (read when relevant — don't load all of these by default)
 
+- `docs/NATIVE_APP_HANDOVER.md` — **why these are PWAs and not store apps, what
+  a native rebuild would reuse, and the honest iOS answer.** Read before
+  discussing distribution with the company. Companion:
+  `docs/ANDROID_TWA_BUILD.md`, the runbook that turns a deployed app into a
+  signed Play Store package (~half a day, post-deploy).
 - `docs/BEFORE_YOU_PUSH.md` — **the second-glance checklist. Read before every
   push.** Pre-push commands, git workflow, shared-database rules, the traps that
   pass review, and the two orderings that actually matter.
