@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { describeOtpError, sendEmailOtp, signIn } from '@clbipp/auth'
+import { authCallbackUrl } from '../request-origin'
 
 // Password login. Kept as the primary path deliberately: Supabase's built-in
 // SMTP rate-limits at roughly 2–4 mails/hour, which is not enough to demo
@@ -25,7 +26,7 @@ export async function requestOtp(formData: FormData) {
     redirect('/login?error=Enter+your+email+to+get+a+code.')
   }
 
-  const { error } = await sendEmailOtp(email)
+  const { error } = await sendEmailOtp(email, await authCallbackUrl())
   if (error) {
     redirect(`/login?error=${encodeURIComponent(describeOtpError(error.message))}`)
   }

@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { describeOtpError, sendEmailOtp, verifyEmailOtp } from '@clbipp/auth'
+import { authCallbackUrl } from '../request-origin'
 
 // Codes are 6 digits; Supabase sends them as a plain numeric string.
 const CODE_PATTERN = /^\d{6}$/
@@ -38,7 +39,7 @@ export async function resendCode(formData: FormData) {
   const email = String(formData.get('email') ?? '').trim()
   if (!email) redirect('/login?error=Start+again+—+we+lost+track+of+your+email.')
 
-  const { error } = await sendEmailOtp(email)
+  const { error } = await sendEmailOtp(email, await authCallbackUrl())
   if (error) backToVerify(email, { error: describeOtpError(error.message) })
 
   backToVerify(email, { sent: true })

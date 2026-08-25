@@ -172,6 +172,100 @@ so use `npm run build && npm start` (or the deployed URL).
 - **Already-installed state:** opening the installed app must NOT show the
   install bar again.
 
+## Deploy verification — both apps live (2026-08-25)
+
+Both apps are deployed and were checked against production:
+**clbipp-customer.vercel.app** and **clbipp-agent.vercel.app**.
+
+`SMOKE_BASE_URL` points the smoke script at a deployed app, which is how this
+was done and how it should be re-done after any deploy:
+
+```bash
+SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke
+SMOKE_BASE_URL=https://clbipp-agent.vercel.app    npm run smoke -- --app=agent
+SMOKE_BASE_URL=https://clbipp-agent.vercel.app    npm run smoke -- --app=agent --blocked business@test businesstest
+SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke -- --blocked agent@test demo1234
+```
+
+152/152 route checks passed in production, both directions of the role gate,
+PWA assets public, real PDFs streaming, demo data one row per lifecycle stage.
+**What follows is only what that run could not reach.**
+
+### 🔴 Nothing below has been exercised by a POST
+
+`scripts/smoke.mjs` is read-only by design — it never POSTs, so it cannot press
+a button. **Every form action in both apps is therefore unverified against
+production**, not just the items listed elsewhere in this file. The Batch 5b and
+Batch 8 lists above are the detailed versions; this is the reminder that the
+green smoke run says nothing about them.
+
+1. **Log in for real, on both apps.** The smoke script forges the
+   `@supabase/ssr` session cookie directly against the Supabase token endpoint —
+   it never touches the login form. So `login()` in each app's
+   `(auth)/login/actions.ts` has never been run against production.
+   ✅ Both apps, correct credentials → lands on the app.
+   ✅ Wrong password → the error renders, and does not leak whether the account
+   exists.
+   ✅ **Vendor credentials on the agent app** → bounced with "That account cannot
+   access this app." (the role gate's own message, not a generic auth error).
+
+### Show / hide password (added 2026-08-25)
+
+The agent app's `(auth)/field.tsx` was a copy of the customer's made *before* the
+toggle landed and had drifted. The two files are now identical below the header
+comment — **change them together**.
+
+Only verified to *render* (the button is in the served HTML). Clicking it is not
+covered by anything:
+
+2. **Agent `/login`** — type a password, press **Show**. ✅ Text becomes visible,
+   the label flips to **Hide**, pressing again re-masks it.
+3. ✅ Tabbing from the email field goes email → password → **Log in**, skipping
+   the toggle (`tabIndex={-1}`, deliberate — a thumb-reachable button that steals
+   focus on a phone keyboard is worse than no button).
+4. ✅ The toggle does not overlap the text when the password is long — it sits in
+   the `pr-14` gutter.
+5. ✅ Same three checks on the customer app's `/login`, `/signup/individual` and
+   `/signup/fleet`, which share the component.
+6. ✅ On a real handset: the button is big enough to hit, and revealing the
+   password does not trigger the browser's own password manager to re-fill.
+
+### Security headers (added 2026-08-25)
+
+`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: strict-origin-when-cross-origin` are now sent on every
+response from both apps (`headers()` in each `next.config.ts`).
+
+There is **deliberately no CSP** — Next injects inline hydration scripts, so a
+real one needs nonces threaded through the document and is its own change.
+
+Verified locally against production builds: headers present, PWA assets still
+public, 46/46 + 30/30 smoke both directions. Left to check by eye:
+
+7. ✅ After the deploy, confirm on the live URLs:
+   `curl -sI https://clbipp-agent.vercel.app/login | grep -i x-frame`
+8. ✅ Open both apps in a browser with the **console visible** and click through
+   a few screens. Nothing new in the console — `nosniff` is the one that would
+   surface as a blocked stylesheet or script if a MIME type were ever wrong.
+9. ✅ The Leaflet map still paints tiles (`/pickups/[id]/map`). It loads external
+   images; no CSP is set, so this should be unaffected — confirm rather than
+   assume.
+
+### Before any live demo
+
+10. 🔴 **Run `npm run assign-job`.** A pickup booked in the customer app during
+    the demo lands at `requested` with no `agentId` and is **invisible to the
+    agent app** — nothing in either app writes `requested → scheduled`. That is
+    the admin app's job and the admin app is a scaffold. If someone books a
+    pickup on stage and then switches to the agent phone, this is the step that
+    makes it appear.
+11. The seeded jobs are dated in the past, so the agent day view's header reads
+    **"0 Assigned today · 0 Collected today · ₹0 Earned today"** above four open
+    jobs. Correct, but it reads as broken. Decide before the demo whether to
+    re-date the seed or just not linger on that header.
+
+---
+
 ## Standing checks for the end-of-sprint pass
 
 - **Every agent screen passes `hideNav`.** `npm run smoke` fails on anything but

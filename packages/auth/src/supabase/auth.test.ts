@@ -254,7 +254,25 @@ describe('sendEmailOtp', () => {
 
     expect(mockSignInWithOtp).toHaveBeenCalledWith({
       email: 'vendor@example.com',
-      options: { shouldCreateUser: false },
+      options: { shouldCreateUser: false, emailRedirectTo: undefined },
+    })
+  })
+
+  // A link-shaped mail with no emailRedirectTo falls back to the project's
+  // global Site URL, which is shared with two other apps and was saved without
+  // its scheme once already (2026-08-25). Passing it explicitly is what stops
+  // an emailed login link depending on that one dashboard field.
+  it('passes the return address through for link-shaped mails', async () => {
+    mockSignInWithOtp.mockResolvedValue({ data: {}, error: null })
+
+    await sendEmailOtp('vendor@example.com', 'https://example.test/auth/callback?next=%2Fdashboard')
+
+    expect(mockSignInWithOtp).toHaveBeenCalledWith({
+      email: 'vendor@example.com',
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: 'https://example.test/auth/callback?next=%2Fdashboard',
+      },
     })
   })
 })

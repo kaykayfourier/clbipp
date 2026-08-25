@@ -1,26 +1,8 @@
 'use server'
 
-import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { signInWithOAuth } from '@clbipp/auth'
-
-/**
- * The app's own origin, taken from the request rather than an env var.
- *
- * OAuth redirect URLs are per-origin, which is the whole reason Batch 12's
- * deploy waited for this batch — but the app doesn't need to be told what it is.
- * Reading it here means localhost and the Vercel origin both work with no
- * NEXT_PUBLIC_SITE_URL to keep in sync (and nothing to get wrong on a preview
- * deployment, which gets a different hostname on every push).
- *
- * x-forwarded-* first: behind Vercel's proxy `host` is the internal hostname.
- */
-async function requestOrigin() {
-  const h = await headers()
-  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000'
-  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
-  return `${proto}://${host}`
-}
+import { authCallbackUrl } from './request-origin'
 
 /**
  * Step 1 of Google sign-in: swap a click for the provider's consent URL.
@@ -31,11 +13,7 @@ async function requestOrigin() {
  * it routes them to /onboarding rather than signing them out.
  */
 export async function signInWithGoogle() {
-  const origin = await requestOrigin()
-  const { url, error } = await signInWithOAuth(
-    'google',
-    `${origin}/auth/callback?next=/dashboard`,
-  )
+  const { url, error } = await signInWithOAuth('google', await authCallbackUrl())
 
   if (error || !url) {
     // The likely cause by far is that the provider isn't enabled in the

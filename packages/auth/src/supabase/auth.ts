@@ -171,12 +171,21 @@ export async function signOut() {
  * no profile, signs the session out and bounces to /login, so the user loops
  * forever and can never sign up with their real address either. Account
  * creation goes through /signup, which writes both rows.
+ *
+ * `emailRedirectTo` is where a LINK-shaped mail comes back to. Whether the mail
+ * carries a 6-digit code or a clickable link is a dashboard template setting we
+ * don't hold in this repo ({{ .Token }} vs {{ .ConfirmationURL }}), so this has
+ * to be right for both. Omit it and Supabase falls back to the project's Site
+ * URL — a single global value shared with two other apps, and one that silently
+ * sent every emailed link to a dead address until 2026-08-25 because it had
+ * been saved without its https:// scheme. Passing the origin explicitly means
+ * the login link no longer depends on that field being correct.
  */
-export async function sendEmailOtp(email: string) {
+export async function sendEmailOtp(email: string, emailRedirectTo?: string) {
   const supabase = await createClient()
   return supabase.auth.signInWithOtp({
     email,
-    options: { shouldCreateUser: false },
+    options: { shouldCreateUser: false, emailRedirectTo },
   })
 }
 
