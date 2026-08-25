@@ -41,6 +41,42 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // ─── Security headers ──────────────────────────────────────────────────────
+  // Applied to every response. Kept IDENTICAL in the other app's next.config.ts
+  // — change both together.
+  //
+  // DENY rather than SAMEORIGIN: nothing in either app frames its own pages
+  // (no <iframe>/<embed> anywhere in the repo, checked 2026-08-25), so the
+  // stricter value costs nothing today and stops the login form being framed
+  // by a third-party page to harvest clicks against a live session.
+  //
+  // nosniff stops the browser re-interpreting a response as a type it was not
+  // served as. That matters here because both apps accept user-uploaded photos
+  // (booking photos, agent intake photos) through Supabase Storage.
+  //
+  // Referrer-Policy is already most browsers' default; it is pinned because
+  // pickup ids and the /t/ tracking token travel in URL paths, and the token is
+  // a forwardable bearer capability — it must not ride along in a Referer
+  // header to a third-party origin.
+  //
+  // ⚠ Deliberately NO Content-Security-Policy. Next injects inline hydration
+  // scripts, so a real CSP needs nonces threaded through the document; a wrong
+  // one builds green and white-screens production. Worth doing as its own
+  // change with its own smoke run, not smuggled in alongside two static
+  // strings that cannot break a rendering page.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
+
   outputFileTracingIncludes: {
     "/**": ["./src/generated/client/**/*"],
   },

@@ -5,10 +5,71 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-25 — **Field Agent app: EVERY batch except 9 (deploy)
-is done.** 0a, 0b, 1–8 all shipped, plus the PWA + install work Batch 8 had
-dropped. Both apps are installable, and the customer→agent journey works
-end to end for the first time.
+**Last updated:** 2026-08-25 — **the Admin console sprint is planned and
+open.** The Field Agent app is done except Batch 9 (deploy). Both existing apps
+are installable, and the customer→agent journey works end to end.
+
+> ## 2026-08-25 — Admin console: planned (Aamir)
+>
+> The third and final surface. **`docs/PLAN_ADMIN_APP.md` (the why) and
+> `docs/ADMIN_TASKS.md` (the how) are written; nothing is built yet.** The
+> wireframe `docs/CLBIPP_AdminWireframes_V1.html` was assessed against all three
+> HR documents and the live schema.
+>
+> **Verdict on the wireframe: keep it, don't redo it — but it is not a build
+> spec.** Twelve defects, all resolved in §0 of the plan. Three are structural:
+>
+> 🔴 **1. There is no dispatch screen.** Nothing in the wireframe writes
+> `requested → scheduled` or sets `Pickup.agentId` — the exact hole that has been
+> open since the project started and that `npm run assign-job` is the stopgap
+> for. Two new screens (B02/B03), and they are **the first thing built after the
+> scaffold** (Batch 3).
+>
+> 🔴 **2. It is quote-centric; the product is pickup-centric.** Every table is
+> keyed on `trace_id`, which exists **only for li-ion items that went through
+> the engine** — so lead-acid, priced off `PricingRate`, is silently dropped from
+> every screen. And there is no pickups screen at all: admin was the only role
+> with no way to look at a pickup as a pickup. Two more new screens (B04/B05).
+>
+> 🔴 **3. The engine-config screen is ~60% unbacked**, in three different ways.
+> Some fields are `Config` parameters with a DB home; some are parameters stored
+> nowhere; and **damage weights, damage bands and SoH gates are literals inside
+> `damage.ts` and `sohGating.ts`** — not parameters at all, so no screen can move
+> them. Resolved by AD8: tiers 1+2 editable, tier 3 read-only.
+>
+> **A live security defect found while reading the engine:**
+> `apps/agent/src/app/api/quote/route.ts` passes **`body.config`** — the config
+> comes from the *client request body*. An agent's browser can post its own
+> margin tiers and reprice its own quote. Fixed in Batch 11 (AD9); it is
+> exploitable today and could be pulled forward independently.
+>
+> **A second demo-breaking hole, not the wireframe's fault:** `confirmCollection`
+> credits the *agent's* fee but never creates the vendor's `Payment` row —
+> `payment.create` appears **only in `reset-demo.ts`**. A real vendor lands on
+> `/payment/[id]` reading "No payment yet" permanently, against two HR documents
+> that both say "paid right away". Batch 4 (AD10) puts it in the agent's collect
+> transaction.
+>
+> **Four decisions taken with Aamir before writing the plan:** the payout goes in
+> the agent's collect action (AD10) · engine config is tiers 1+2 only (AD8) ·
+> `ops` is dropped, one admin role (AD2) · and **the unit of advance differs by
+> stage because the actor differs** (AD5) — `collected → tested` per
+> `CustodyBatch`, `tested → processed → recovered` only via a confirmed
+> `DispatchManifest`, `recovered → certified` per `Pickup`, minting the
+> certificate.
+>
+> 🔴 **AD5 forced AD6 into the open:** chemistry segregation sends one pickup's
+> items to *different* recyclers on *different* manifests, so a pickup can be
+> half-dispatched. "Advance the pickups on this manifest" is **wrong** — a pickup
+> advances only when *every* item is on a confirmed manifest. Seed fixture 4
+> exists solely to catch this.
+>
+> 🎯 **The full journey — book → dispatch → collect → pay → ship to recycler →
+> certify → vendor downloads it — runs end to end, screens only, after Day 4.**
+> Day 1's three batches share no files at all.
+>
+> **Next: Batch 0 (scaffold + auth gate) — Aamir · Batch 1 (schema + seed) —
+> Khalid · Batch 2 (console kit) — Ali.** All three in parallel.
 
 > ## 2026-08-25 — audit, dispatch, PWA + install (Aamir)
 >
@@ -221,21 +282,41 @@ Prior: 2026-08-07 Plan v2 written)
 > being deleted. Live detail and the deploy fixes are in
 > `REVAMP_BATCHES_2026-08-09.md` → "▶ Resume here", and the runbook Khalid
 > follows is `HANDOVER_KHALID_2026-08-12.md`.
-**Build order across project:** Customer app ✅ → **Field Agent app (current)** →
-Admin dashboard
+**Build order across project:** Customer app ✅ → Field Agent app ✅ (deploy
+pending) → **Admin console (current)**
 
 ---
 
-## ▶ READ FIRST — resume point (2026-08-23)
+## ▶ READ FIRST — resume point (2026-08-25)
 
-**Current sprint: the Field Agent app (`apps/agent`). One week, from 2026-08-20.**
+**Current sprint: the Admin console (`apps/admin`). From 2026-08-25.**
 
-**→ `docs/FIELD_AGENT_TASKS.md` is the live task sheet and the place to resume.**
-Per batch: exact files, numbered steps, a done-when checklist, and the traps.
-`docs/PLAN_FIELD_AGENT_APP.md` is the *why* — wireframe assessment (§0),
-decisions **D0–D10**, screen map (§2), schema delta (§3), lanes + day-by-day
-(§4), risk + cut list (§5). Both are also in `docs/` as PDFs for sharing;
-the `.md` files are the source of truth.
+**→ `docs/ADMIN_TASKS.md` is the live task sheet and the place to resume.** Per
+batch: exact files, numbered steps, a done-when checklist — and a **17-item trap
+list** at the top, every entry of which has already cost this team an hour in an
+earlier sprint. `docs/PLAN_ADMIN_APP.md` is the *why* — wireframe assessment
+(§0, twelve defects), decisions **AD0–AD12** (§1), screen map (§2), schema delta
+(§3), lanes + file ownership + day-by-day (§4), risk + pre-agreed cut list (§5),
+new open questions for the company (§6).
+
+⚠ **Read §0 before building from `docs/CLBIPP_AdminWireframes_V1.html`.** The
+wireframe is the layout source and it is good, but three of its twelve defects
+are structural and two of the screens the demo needs are simply not in it.
+
+**Batch 0 · A · Batch 1 · B · Batch 2 · C — all three start in parallel and
+share no files.**
+
+### The nine decisions most likely to be second-guessed mid-build
+
+- **AD1** — pickup-centric, not quote-centric. Flat-rate items appear everywhere.
+- **AD2** — one admin role. `ops` is not a `UserRole` value.
+- **AD3** — Prisma + service role, no RLS for admin; in-code checks are the boundary.
+- **AD5** — the unit of advance differs by stage. Never `actorRole: 'recycler'`.
+- **AD6** — a pickup advances only when **every** item is covered.
+- **AD7** — a manifest's recycler must accept every chemistry on it.
+- **AD8** — engine config tiers 1+2 editable, tier 3 read-only. Seeded config ≡ `DEFAULT_CONFIG`.
+- **AD10** — the vendor's payout is raised by the agent's collect action.
+- **AD11/AD12** — desktop kit stays in `apps/admin`; nothing admin-side reaches a vendor screen.
 
 ### State of play
 
@@ -281,102 +362,121 @@ the `.md` files are the source of truth.
 - **Batch 4 (engine + pricing) landed from Khalid** (`5e19f02`, fixed in
   `2e5a5e5`). `packages/core` gained `agent-fee.ts` and `market.ts`, the agent
   app gained `/api/quote`, and test count is now **154**.
-- **Admin app: untouched.** Not this sprint.
+- **Admin console: planned, not started (2026-08-25).** `apps/admin` is still
+  the bare scaffold — no Tailwind, no ESLint, no `proxy.ts`, no `.env.local`,
+  no dev script, one placeholder page. Batch 0 turns it into a real app on port
+  **3002**. The plan and task sheet are written; see the top of this file.
+- 🔴 **Two holes the admin sprint closes, both found 2026-08-25:** the quote
+  route trusts `body.config` **from the client** (an agent can reprice their own
+  quote — Batch 11), and `confirmCollection` never creates the vendor's
+  `Payment` row, so a real vendor is never paid (Batch 4).
 
 **Next up: Batch 2 — the safety checklist (A).** It is the feature HR looks for
 first (W1), and **it opens with an unresolved decision** — see "A's next action"
 below.
 
-### Lanes — as of 2026-08-20
+### Lanes — Admin console (2026-08-25)
 
-The 2026-08-09 override (A covering all three lanes) **lapsed on 2026-08-20**,
-then **Batch 0a moved from B to A** the same day. Both logged in
-`LANE_OWNERSHIP.md`.
+The standing map. **File ownership is spelled out path by path in §4 of
+`PLAN_ADMIN_APP.md`, and the lanes were drawn to barely touch** — Day 1's three
+batches share no files, and the only shared file in the sprint is
+`apps/admin/src/app/(admin)/layout.tsx`, created once in Batch 0.
 
 | | Owner | Batches |
 |---|---|---|
-| **A** | Aamir | ~~**0b** scaffold + auth gate~~ ✅ · ~~**0a** schema + seed *(taken from B 2026-08-20)*~~ ✅ · ~~**1** day view + job detail~~ ✅ · **2** safety checklist ← **next** · **5b** cross-app seam · **8** track/history/profile |
-| **B** | Khalid | ~~**4** engine + pricing~~ ✅ · **7b** custody PDF · **9** deploy **+ the agent app's Vercel project (`DEPLOY.md` §9)** |
-| **C** | Ali | **3** multi-item intake · **5a** quote screens · **6** collect · **7a** hub drop-off |
+| **A** | Aamir | **0** scaffold + auth gate + `ConsoleShell` + 19 route stubs ← **next** · **3** dispatch board · **6** custody→tested + manifest dispatch · **7** manifest confirm → certified · **14** exceptions + audit |
+| **B** | Khalid | **1** schema + seed (`admin_app_v1`) ← **next** · **4** `raisePayment` · **8** certificate payload + CPCB export · **11** engine config · **13** compliance · **16** market feed · **17** deploy |
+| **C** | Ali | **2** console data kit ← **next** · **5** pickups list + detail · **9** network · **10** inventory · **12** quotes + trace · **15** dashboard + analytics |
 
-**Lane policy changed 2026-08-20: lanes are a default, not a gate.** If a task
-straddles lanes or its owner isn't ready, **do it and log it** in
-`LANE_OWNERSHIP.md` — no waiting for agreement first. That is why 0a moved.
-Attribute work to whoever actually did it.
+**Cut list, pre-agreed** (§5): 16, then 15, then 14, then 12. **Never cut 0, 1,
+2, 3, 4, 6, 7, 8, 17** — those are the journey.
 
-**Git changed 2026-08-20: commit and push straight to `main`.** No branches, no
-PRs. Both Vercel projects deploy off `main`, so **a push is a deploy** — run
-`npm run build` and the relevant `npm run smoke` first.
+**Lane policy (2026-08-20, unchanged): lanes are a default, not a gate.** If a
+task straddles lanes or its owner isn't ready, **do it and log it** in
+`LANE_OWNERSHIP.md`. Attribute work to whoever actually did it. Batch 4 already
+crosses into Ali's lane by design (AD10) — log it when it lands.
 
-### A's next action — **Batch 2, the safety checklist**
+**Git (2026-08-20, unchanged): commit and push straight to `main`.** No branches,
+no PRs. **All three** Vercel projects deploy off `main`, so **a push is a
+deploy** — `npm run build` plus the relevant `npm run smoke` first. Pre-push is
+now three smoke runs, not two.
 
-**Batches 0b, 0a and 1 are done.** Batch 2 is the feature all three HR documents
-call *mandatory* and *pre-pickup* (W1), and the wireframe omitted entirely.
+### A's next action — **Batch 0, the admin scaffold + auth gate**
 
-**Read first:** "Batch 1 — as built" and "Batch 0a — as built" at the bottom of
-`FIELD_AGENT_TASKS.md`, then §Batch 2 of that file for the steps.
+Everyone is blocked on it, so it is a half-day, not a day.
+**Read first:** `docs/ADMIN_TASKS.md` → the trap list, then §Batch 0.
 
-🔴 **It opens with an unresolved decision, flagged in Batch 0a and still open.**
-The checklist is meant to be *chemistry-aware* ("show lithium-specific items only
-when the pickup has a li-ion item"), but `BatteryItem`'s customer-declared half
-has `category` and **no chemistry** — the agent tags chemistry on site in Batch 3,
-*after* this checklist is supposed to gate intake. So the question cannot be
-answered from declared data. **Decide at the top of Batch 2:** either a heuristic
-on `category` (`ev` / `portable` ⇒ treat as li-ion), or show every item and let
-the agent tick N/A. Not resolvable earlier.
+`apps/admin` today is a bare scaffold: two files under `src/app`, no Tailwind,
+no ESLint, no `proxy.ts`, no `.env.local`, no dev script. Batch 0 copies
+`apps/agent`'s build setup verbatim — do not invent a new one — and adds:
 
-**What Batch 1 already did for you:** `/job/[id]` reads `pickup.safetyChecklist`
-and renders a completed-state banner plus a "Continue to intake" button when
-`passed` is true. So step 4 ("show it as a completed step on the job detail
-screen") is done — Batch 2 only has to write the row.
+- **`apps/admin/src/proxy.ts`** with `allowRoles: ['admin']`, `publicPaths:
+  ['/login','/auth']`, `homePath: '/'`, `onboardingPath: undefined` (AD2 — no
+  `ops`, no self-signup).
+  🔴 **It must live at `src/proxy.ts`, never the project root** — Next's dev
+  bundler silently never registers a root-level proxy when `src/app` is in use,
+  and an unregistered auth guard fails **OPEN**. Verify `npm run build` prints
+  `ƒ Proxy (Middleware)` for admin.
+- **`ConsoleShell`** — sidebar, topbar, **and a working logout** (the wireframe
+  has none). Desktop-first, in `apps/admin/src/components/shell/`. 🔴 No
+  `AppShell`, no `PhoneFrame`, no `hideNav` — those are the other two apps'
+  mobile primitives (AD11).
+- **All 19 routes as one-line stubs.** This is the highest-value thing in the
+  batch: it is what lets B and C work without ever creating a file A also
+  creates.
+- **`dev:admin` on port 3002**, and `scripts/smoke.mjs --app=admin`.
 
-**The action pattern is now in this repo, not just in the customer app.** Copy
-`apps/agent/src/app/(agent)/job/[id]/actions.ts`: session identity (never a form
-field) + `createAdminClient()` + re-verify `agentId === user.id` **in code** +
-status and `status_events` written together + idempotent + POST, never a GET.
+⚠ **A smoke route that 307s scores a bare "ok".** Five agent routes asserted
+nothing at all for two batches because of this — **every admin route needs a
+content assertion**, not just a status code.
 
-⚠ **The gate is the server-side redirect, not the hidden button.** `/job/[id]/items`
-must redirect back to `/safety` unless a `passed` checklist exists — verify by
-URL, not by clicking.
+**The action pattern for Batch 3 is already in this repo:** copy
+`apps/agent/src/app/(agent)/job/[id]/actions.ts` — session identity (never a
+form field) + `createAdminClient()` + an in-code role re-check + status and
+`status_events` written together + idempotent + POST, never a GET.
 
-**Verification commands, now that there are two apps:**
+**Verification commands, now that there are three apps:**
 
 ```bash
 npm run dev          # customer, :3000
 npm run dev:agent    # agent,    :3001
-npm run smoke                                                     # customer, 45/45
+npm run dev:admin    # admin,    :3002
+
+npm run smoke                                                     # customer
 npm run smoke -- --app=agent                                      # agent
-npm run smoke -- --app=agent --blocked business@test businesstest # vendor barred from agent app
-npm run smoke -- --blocked agent@test demo1234                    # agent barred from customer app
+npm run smoke -- --app=admin                                      # admin
+
+# The role gate, every direction. All six must bounce.
+npm run smoke -- --app=agent --blocked business@test businesstest
+npm run smoke -- --app=admin --blocked business@test businesstest
+npm run smoke -- --app=admin --blocked agent@test demo1234
+npm run smoke -- --blocked agent@test demo1234
+npm run smoke -- --blocked admin@test demo1234
 ```
 
-The last two are the role gate in both directions. All four were green on
-2026-08-23.
+🔴 **Smoke the CUSTOMER app against a production build, not `npm run dev`** —
+the three `api/documents/[kind]/[id]` routes 404 under Turbopack dev. Unchanged
+from the last sprint; the runbook is in the historical section below.
 
-🔴 **Smoke the CUSTOMER app against a production build, not `npm run dev`.**
-As of 2026-08-23 `npm run smoke` reports 3 false failures against the dev server
-— the three `/api/documents/{certificate,receipt,invoice}/…` routes return
-Next's own HTML 404 instead of a PDF — but is **45/45** against
-`npm run build` + `npx next start` in `apps/customer`. It reproduces on a clean
-tree, so it is not any one batch's; it looks like Turbopack dev failing to match
-the doubly-nested dynamic API route `api/documents/[kind]/[id]`. **Owner:
-Khalid** (PDF templates + deploy). The agent app is unaffected — smoke it against
-`npm run dev:agent` as normal.
+---
 
-```bash
-npm run build && (cd apps/customer && npx next start -p 3002 &)
-SMOKE_BASE_URL=http://localhost:3002 npm run smoke     # 45/45
-```
+### Field Agent — A's completed actions (historical)
 
-⚠ If smoke reports `BOUNCED TO LOGIN` on routes you believe are fine, check the
-dev-server log for `getaddrinfo ENOTFOUND` first. `getUser()` in the shared
-middleware fails closed on a network error — deliberately, and now commented
-there. It is not a guard bug.
+Batches 0b, 0a, 1, 2, 5b and 8 all shipped; see the dated entries at the top of
+this file and the "as built" sections in `FIELD_AGENT_TASKS.md`.
 
 ### Decisions that are settled — do not re-litigate
 
-D0–D10 in `PLAN_FIELD_AGENT_APP.md` §1. The ones most likely to be
-second-guessed mid-build:
+**This sprint: AD0–AD12 in `PLAN_ADMIN_APP.md` §1** — the nine most likely to be
+second-guessed are listed under "READ FIRST" above.
+
+⚠ **Three decision sets are now live and the same letter means different things
+in each** — the customer app's D1–D7, the agent app's D0–D10, and the admin
+console's AD0–AD12. **Always quote the decision with its app.**
+
+**Still binding from the Field Agent sprint** (D0–D10 in
+`PLAN_FIELD_AGENT_APP.md` §1) — the agent app is finished but is live code the
+admin app writes alongside:
 
 - **D0** — the decision engine is live code, not frozen. Where it and the HR
   documents disagree, **the HR documents win**. Fix defects; don't refactor it.

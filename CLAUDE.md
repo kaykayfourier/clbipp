@@ -21,10 +21,15 @@ they are in context even if nothing else is:
   the app half-work rather than fail.
 - **The auth guard must stay at `apps/<app>/src/proxy.ts`** — unregistered, it
   fails **OPEN**.
-- **Agent screens pass `hideNav` and add no bottom padding.**
+- **Agent screens pass `hideNav` and add no bottom padding.** **Admin screens
+  use `ConsoleShell` and import no mobile primitive at all** — no `AppShell`,
+  no `PhoneFrame`, no `hideNav`.
 - **Integer paise everywhere**; `formatPaise` from `@clbipp/core/format` in
   client components.
 - 🔴 **A change that moves a price says so in its commit message.**
+- 🔴 **Never write `StatusEvent.actorRole: 'recycler'`** (or `'hub'`). Every
+  admin-written stage past the hub is an admin asserting something on a party's
+  behalf, and the trail has to say so.
 
 ## What this project is
 
@@ -38,8 +43,8 @@ monorepo** (migrated 2026-08-09):
 
 1. **Customer / Vendor app** — `apps/customer` — **built + deployed** (revamp
    merged to `main` 2026-08-15)
-2. **Field Agent app** — `apps/agent` — **CURRENT SPRINT** (one week, from
-   2026-08-20). Runs on **port 3001** (`npm run dev:agent`). Done so far:
+2. **Field Agent app** — `apps/agent` — **built** (sprint 2026-08-20 → 08-25).
+   Runs on **port 3001** (`npm run dev:agent`). Batches:
    **0b** scaffold + role-gated auth · **0a** schema + seed · **1** day view +
    job detail · **2** safety checklist · **3** multi-item intake · **4** engine +
    pricing · **5a** quote screens + offer · **5b** cross-app seam (D7) · **6**
@@ -47,12 +52,14 @@ monorepo** (migrated 2026-08-09):
    history, profile · **PWA + install prompt** (deferred out of 8, built
    2026-08-24). **Everything except Batch 9 (deploy) is built.**
 
-   🔴 **One hole the batches never covered: nothing writes `requested →
-   scheduled` or sets `Pickup.agentId`.** That transition belongs to the admin
-   app, which is a scaffold — so a pickup booked in the customer app is
-   invisible to the agent app. `npm run assign-job` (2026-08-24) is the CLI
-   stopgap; see "Dispatch" below.
-3. **Admin dashboard** — `apps/admin` — scaffolded, built last
+   🔴 **One hole the agent batches never covered: nothing writes `requested →
+   scheduled` or sets `Pickup.agentId`,** so a pickup booked in the customer app
+   is invisible to the agent app. That transition belongs to the admin app and
+   is **Batch 3 of the current sprint** — the first thing built after the
+   scaffold. Until it lands, `npm run assign-job` is the CLI stopgap; see
+   "Dispatch" below.
+3. **Admin console** — `apps/admin` — **CURRENT SPRINT** (from 2026-08-25).
+   Runs on **port 3002** (`npm run dev:admin`). All three can run at once.
 
 ```
 apps/customer            the customer app (Next.js App Router)
@@ -84,17 +91,84 @@ which re-exports the client *and* every model type and enum).
 Packages ship raw TypeScript and are compiled by each app via
 `transpilePackages` — there is no per-package build step to maintain.
 
-## Current sprint: Field Agent app
+## Current sprint: Admin console
 
-Read `docs/FIELD_AGENT_TASKS.md` first — it is the executable task sheet
-(files, steps, done-when checks, traps, per batch). `docs/PLAN_FIELD_AGENT_APP.md`
-is the *why* behind it: the wireframe assessment and decisions **D0–D10**, which
-are settled and **must not be re-litigated mid-build**.
+Read `docs/ADMIN_TASKS.md` first — it is the executable task sheet (files,
+numbered steps, done-when checks, and a 17-item trap list, per batch).
+`docs/PLAN_ADMIN_APP.md` is the *why* behind it: the wireframe assessment (§0)
+and decisions **AD0–AD12**, which are settled and **must not be re-litigated
+mid-build**.
 
-**In scope:** the 19 screens in §2 of the plan. `docs/CLBIPP_FieldAgentWireframes_V2.html`
-is the layout source, but it has nine known defects — §0 of the plan lists them
-all and every one is already resolved there. **Read §0 before building from the
-wireframe.**
+**In scope:** the 19 screens in §2 of the plan.
+`docs/CLBIPP_AdminWireframes_V1.html` is the layout source, but it has **twelve
+known defects** — §0 of the plan lists them all and every one is already
+resolved there. **Read §0 before building from the wireframe.**
+
+Headlines you need even if you read nothing else:
+
+- **The first priority is closing the lifecycle, not building oversight.**
+  Nothing writes `requested → scheduled` (so a real booking never reaches an
+  agent) and nothing writes any stage past `collected` (so a real collection
+  never becomes a certificate). Batches 3, 6 and 7 close those. Engine config,
+  exceptions and analytics come after. 🎯 **The full journey runs end to end,
+  screens only, after Day 4.**
+- **The admin app is pickup-centric, not quote-centric** (AD1). `/pickups` +
+  `/pickups/[id]` are the spine; `/quotes` is a lens over `BatteryItem`.
+  🔴 **Flat-rate (non-li-ion) items must appear in every operational table** —
+  they have no `traceId`, and a `trace_id`-keyed table silently drops half the
+  data.
+- **The unit of advance differs by stage, because the actor differs** (AD5):
+  `collected → tested` per **`CustodyBatch`** · `tested → processed → recovered`
+  only via a confirmed **`DispatchManifest`** · `recovered → certified` per
+  **`Pickup`**, and that last one **mints the `Certificate` row + PDF**.
+  🔴 **Every stage past the hub is an admin recording something on behalf of a
+  party that has no app** (there is no hub-staff app and no recycler portal).
+  That is only defensible because `StatusEvent.actorRole` says `'admin'` —
+  **never write `actorRole: 'recycler'`.**
+- 🔴 **A pickup advances only when EVERY one of its items is covered** (AD6).
+  Chemistry segregation sends one pickup's items to different recyclers on
+  different manifests, so "advance the pickups on this manifest" is **wrong**.
+  There is deliberately no per-item status column.
+- **A manifest may name only an `isActive` recycler whose `acceptedChemistries`
+  covers every item on it** (AD7) — enforced in the action, not just the picker.
+- **One admin role** (AD2). `ops` is not a `UserRole` value and is not being
+  added. `allowRoles: ['admin']`.
+- **Admin reads and writes through Prisma + the service role; no RLS policies**
+  (AD3) — in-code role and identity checks are the entire access boundary, same
+  posture as D10 for the agent app.
+- **Engine config: tiers 1 + 2 editable, tier 3 read-only** (AD8). Damage
+  weights, damage bands and SoH gates are **literals in the engine's own code**
+  (`damage.ts`, `sohGating.ts`), not `Config` parameters — a screen cannot move
+  them. The seeded `EngineConfig` is byte-identical to `DEFAULT_CONFIG`, guarded
+  by a drift test, 🔴 **so no price moves**.
+- 🔴 **The quote route currently trusts `body.config` from the client** — an
+  agent's browser can post its own margin tiers. Fixed in Batch 11 (AD9) with a
+  server-side `getActiveConfig()`.
+- **Admin is a DESKTOP app** — no `AppShell`, no `PhoneFrame`, no `hideNav`, no
+  PWA. Its console kit lives in `apps/admin/src/components/console/`, **not
+  `packages/ui`** (AD11), because `packages/ui` is a mobile kit two shipped apps
+  import.
+- **Admin sees everything, one level beyond the agent** (AD12) — including the
+  engine configuration. 🔴 **Nothing from an admin screen may reach a vendor
+  screen:** never import from `apps/admin` into `apps/customer`, and never move
+  an admin component into `packages/ui`.
+
+**Exactly one file is shared across lanes:** `apps/admin/src/app/(admin)/layout.tsx`.
+A creates it in Batch 0 along with **all 19 routes as one-line stubs**, and
+nobody else creates a file A also creates. Each owner only ever *replaces* their
+own stub.
+
+## The Field Agent app — built, and still live code
+
+Everything below governs `apps/agent`, which is finished and deployed-pending.
+It is not this sprint's build target, but it is live code the admin app writes
+alongside — read it before touching an agent screen or the cross-app seam.
+`docs/FIELD_AGENT_TASKS.md` is its task sheet and `docs/PLAN_FIELD_AGENT_APP.md`
+its plan; decisions **D0–D10** there are settled and still binding.
+
+**The agent app's screens** are the 19 in §2 of that plan.
+`docs/CLBIPP_FieldAgentWireframes_V2.html` was the layout source, with nine
+known defects resolved in §0 of the plan.
 
 Headlines you need even if you read nothing else:
 
@@ -288,20 +362,19 @@ merged branch. It predates the monorepo and schema v2 — don't build on it.
 
 ## Ownership map (this sprint)
 
-All three of us are available for the Field Agent app, so the 2026-08-09
-override (A covering all three lanes for the customer-app revamp) **has lapsed**.
-Ownership is back to the standing map.
+The standing map, applied to the Admin console. **Batch-by-batch ownership and
+the day-by-day are in §4 of `docs/PLAN_ADMIN_APP.md`.**
 
 | Area | Owner |
 |------|-------|
-| **A — Aamir.** Supabase Auth, session/route protection, RLS policies, the app scaffold + auth gate, nav shell, job detail, the safety checklist, realtime + tracking screens, history, profile, PWA + offline, **and the cross-app seam** | A |
-| **B — Khalid.** Prisma schema + migrations + seed, the decision engine and all pure pricing logic in `packages/core`, PDF templates, **and deployment/CI** | B |
-| ↳ **Batch 0a (schema + seed) moved to A on 2026-08-20** — it blocks A's Batches 1 and 2 and every other lane, so it was taken over rather than waited on. Logged in `docs/LANE_OWNERSHIP.md`. | A |
-| **C — Ali.** Component library, and the full on-site flow: intake → assessment → quote → collect → hub drop-off | C |
+| **A — Aamir.** Supabase Auth, session/route protection, RLS policies, the app scaffold + auth gate, the console shell, **and every lifecycle write** — dispatch, custody-batch advance, manifest dispatch + confirm, certification, exceptions, the audit log. Also `scripts/smoke.mjs`. | A |
+| **B — Khalid.** Prisma schema + migrations + seed, the decision engine and all pure pricing logic in `packages/core`, PDF templates, engine config + market feed + compliance screens, **and deployment** | B |
+| **C — Ali.** The console component kit, and every read screen: pickups, quotes, traceability, network directories, inventory, dashboard, analytics | C |
 
-The agent app decomposes along the same three seams the vendor app did — it's
-the same architecture from the other side — so no lane shift was needed.
-Batch-by-batch ownership is in §4 of `docs/PLAN_FIELD_AGENT_APP.md`.
+**File ownership is spelled out path by path in §4 of the plan, and the lanes
+were drawn to barely touch.** Day 1's three batches (scaffold · schema · console
+kit) share **no files at all**. The only shared file in the whole sprint is
+`apps/admin/src/app/(admin)/layout.tsx`, created once in Batch 0.
 
 **Editing another lane's area is fine when it unblocks you** (changed
 2026-08-20) — do the work, then log what you took on in `docs/LANE_OWNERSHIP.md`
@@ -319,7 +392,8 @@ All commands run from the **repo root** (turbo fans them out to the workspaces).
 
 ```bash
 npm run dev          # Customer app dev server  (:3000)
-npm run dev:agent    # Field Agent app dev server (:3001) — both can run at once
+npm run dev:agent    # Field Agent app dev server (:3001)
+npm run dev:admin    # Admin console dev server   (:3002) — all three at once
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
 npm run test         # All tests (Vitest) — currently 142
@@ -328,8 +402,14 @@ npm run test         # All tests (Vitest) — currently 142
 # this is what catches a server component that throws at request time.
 npm run smoke                                                     # customer, as business@test
 npm run smoke -- --app=agent                                      # agent, as agent@test
-npm run smoke -- --app=agent --blocked business@test businesstest # role gate, both
-npm run smoke -- --blocked agent@test demo1234                    # directions
+npm run smoke -- --app=admin                                      # admin, as admin@test
+
+# The role gate, in every direction. All six must bounce.
+npm run smoke -- --app=agent --blocked business@test businesstest
+npm run smoke -- --app=admin --blocked business@test businesstest
+npm run smoke -- --app=admin --blocked agent@test demo1234
+npm run smoke -- --blocked agent@test demo1234
+npm run smoke -- --blocked admin@test demo1234
 
 # Run a single test file (from the owning package)
 cd packages/core && npx vitest run src/booking.test.ts
@@ -339,9 +419,10 @@ npm run db:migrate --workspace=@clbipp/database        # Apply schema changes
 npm run reset-demo                                     # Wipe + reseed the demo data
 
 # Dispatch: assign a `requested` pickup to an agent, i.e. `requested →
-# scheduled` + set agentId. Nothing in either app does this — it is the admin
-# app's job and the admin app is a scaffold — so without it a pickup booked in
-# the customer app never reaches the agent's day view. Idempotent.
+# scheduled` + set agentId. The CLI stopgap until the admin app's dispatch board
+# ships (Batch 3) — without one or the other, a pickup booked in the customer
+# app never reaches the agent's day view. Idempotent. Keep it after Batch 3: it
+# is the fallback when a screen is down mid-demo.
 npm run assign-job                    # every `requested` pickup → agent@test
 npm run assign-job -- PKP-2026-000101 # just this one
 npm run assign-job -- --agent=other@test
@@ -397,14 +478,23 @@ keeps every lane moving in parallel without anyone touching another's files.
 - `docs/BEFORE_YOU_PUSH.md` — **the second-glance checklist. Read before every
   push.** Pre-push commands, git workflow, shared-database rules, the traps that
   pass review, and the two orderings that actually matter.
-- `docs/FIELD_AGENT_TASKS.md` — **the executable task sheet for this sprint.**
-  Per batch: files, numbered steps, done-when checklist, traps. **Read this
-  first.** (`FIELD_AGENT_TASKS.pdf` is a generated rendition — edit the `.md`.)
-- `docs/PLAN_FIELD_AGENT_APP.md` — the operative plan behind it: wireframe
-  assessment (§0), decisions **D0–D10**, screen map (§2), schema delta (§3),
-  lanes and day-by-day (§4), risks (§5).
-- `docs/CLBIPP_FieldAgentWireframes_V2.html` — layout source for this sprint.
-  ⚠ It has nine known defects — **read §0 of the plan before building from it.**
+- `docs/ADMIN_TASKS.md` — **the executable task sheet for this sprint.** Per
+  batch: files, numbered steps, done-when checklist — plus a **17-item trap
+  list** at the top that is worth reading once on its own. **Read this first.**
+- `docs/PLAN_ADMIN_APP.md` — the operative plan behind it: wireframe assessment
+  (§0, twelve defects), decisions **AD0–AD12** (§1), screen map (§2), schema
+  delta (§3), lanes + file ownership + day-by-day (§4), risks and the
+  pre-agreed cut list (§5), new open questions (§6).
+- `docs/CLBIPP_AdminWireframes_V1.html` — layout source for this sprint.
+  ⚠ It has **twelve known defects** — **read §0 of the plan before building from
+  it.** Three are structural: no dispatch screen, no pickups screen, and an
+  engine-config screen that is ~60% unbacked.
+- `docs/FIELD_AGENT_TASKS.md` — the Field Agent app's task sheet. Built, but
+  still live code — read the "as built" sections before touching an agent
+  screen. (`FIELD_AGENT_TASKS.pdf` is a generated rendition — edit the `.md`.)
+- `docs/PLAN_FIELD_AGENT_APP.md` — its plan: decisions **D0–D10**, still binding.
+- `docs/CLBIPP_FieldAgentWireframes_V2.html` — the agent app's layout source
+  (nine defects, resolved in §0 of that plan).
 - `docs/REVAMP_BATCHES_2026-08-09.md` — customer-app revamp tracker. Historical
   now; still the reference for demo accounts, commands and the outstanding
   Batch 13 scan.
@@ -444,11 +534,11 @@ keeps every lane moving in parallel without anyone touching another's files.
 breakdown from before the vendor-only rescope. Superseded by `PROJECT_STATE.md`
 and the ownership map above. Do not use it for lane or phase decisions.
 
-**Scope note for future docs:** only the docs listed above are in scope this
-sprint. If docs for the later Field Agent or Admin apps get added (e.g. under
-`docs/field-agent/` or `docs/admin/`), they are NOT relevant to current
-vendor-app work — don't read them for context on this sprint's tasks unless
-explicitly asked to.
+**Scope note:** the Admin console is the last of the three surfaces, so there is
+no "later app" whose docs to ignore any more. All three apps' docs are now live
+— but they are not interchangeable. The customer, agent and admin plans each
+carry their own decision set (**D1–D7**, **D0–D10**, **AD0–AD12**) and the same
+letter means different things in each. **Quote the decision with its app.**
 
 ## Conventions
 
@@ -505,9 +595,9 @@ explicitly asked to.
   client), and Batch 9's verification asserts the two agree.
 - **Git: commit and push straight to `main`. No branches, no PRs** (changed
   2026-08-20). Branch-and-PR was costing more time in merge friction than it was
-  buying in review, on a three-person build with one week left. Both Vercel
-  projects deploy off `main`, so **a push is a deploy** — run `npm run build`
-  and the relevant `npm run smoke` before pushing, not after.
+  buying in review, on a three-person build with one week left. **All three**
+  Vercel projects deploy off `main`, so **a push is a deploy** — run
+  `npm run build` and the relevant `npm run smoke` before pushing, not after.
 - Inline error handling at API route / async boundaries; let internal pure
   functions throw freely.
 - Comments explain *why*, not *what*.
@@ -524,14 +614,17 @@ code is never reached with `@/` — it comes from `@clbipp/{ui,auth,core,databas
 
 - RLS / policy question → read `docs/ai-prompts/database-rls-policies.md` first.
 - Migration question → read `docs/ai-prompts/database-create-migration.md` first.
-- UI/UX question → `docs/CLBIPP_FieldAgentWireframes_V2.html` for the agent app
-  (⚠ read §0 of the plan first — nine known defects), or
-  `docs/CLBIPP_Vendor_Wireframes_1.html` for the customer app. Navigation is
-  built into both (each button's `data-go` shows the target).
+- UI/UX question → `docs/CLBIPP_AdminWireframes_V1.html` for the admin console
+  (⚠ read §0 of `PLAN_ADMIN_APP.md` first — **twelve** known defects),
+  `docs/CLBIPP_FieldAgentWireframes_V2.html` for the agent app (nine defects,
+  §0 of its plan), or `docs/CLBIPP_Vendor_Wireframes_1.html` for the customer
+  app. Navigation is built into all three (each button's `data-go` shows the
+  target).
 - Status / "what's done, what's next" → `docs/PROJECT_STATE.md`, then
-  `docs/FIELD_AGENT_TASKS.md` for the batch you're on.
-- "What exactly do I build?" → `docs/FIELD_AGENT_TASKS.md`. "Why is it like
-  that?" → `docs/PLAN_FIELD_AGENT_APP.md`.
+  `docs/ADMIN_TASKS.md` for the batch you're on.
+- "What exactly do I build?" → `docs/ADMIN_TASKS.md`. "Why is it like that?" →
+  `docs/PLAN_ADMIN_APP.md`. For the agent app, the same pair with
+  `FIELD_AGENT_` in place of `ADMIN_`.
 - Stack question → Next.js + Supabase + Prisma in a Turborepo monorepo, deployed
   to Vercel. Don't introduce new frameworks.
 - "Where does this file live now?" → the 2026-08-09 migration moved everything.
