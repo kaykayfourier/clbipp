@@ -5,8 +5,73 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-24 — **Field Agent app: Batches 0b, 0a, 1, 2, 3, 4,
-5b, 7b and 8 are done.**
+**Last updated:** 2026-08-25 — **Field Agent app: EVERY batch except 9 (deploy)
+is done.** 0a, 0b, 1–8 all shipped, plus the PWA + install work Batch 8 had
+dropped. Both apps are installable, and the customer→agent journey works
+end to end for the first time.
+
+> ## 2026-08-25 — audit, dispatch, PWA + install (Aamir)
+>
+> A full audit of the Field Agent app against the customer app. Build, tests and
+> lint green; **customer smoke 46/46, agent 30/30, and both role-gate
+> (`--blocked`) directions green** — agent isolation holds in both directions.
+> Four findings, two of them serious.
+>
+> 🔴 **1. A customer booking could never reach the agent app.** Nothing anywhere
+> wrote `requested → scheduled` or set `Pickup.agentId` — only the seed did. That
+> transition belongs to the **admin app**, which is a scaffold, so no batch ever
+> owned it, and the entire cross-app journey worked *only* on seeded rows. Fixed
+> with **`npm run assign-job`** (`packages/database/prisma/assign-job.ts`),
+> idempotent, deliberately a CLI and not a screen — the customer app would cross
+> the D7 seam, the agent app would contradict D2. Lift into an admin server
+> action when that surface exists. **Proven end to end:** dispatching
+> PKP-2026-000101 put it on the agent's day view as SCHEDULED while the
+> customer's `/track` showed the partner card, ETA and a custody entry reading
+> "Recorded by CLBIPP — Assigned to Ravi Kumar for collection."
+>
+> 🔴 **2. The deployed customer app was not installable, and had not been.** Both
+> `src/proxy.ts` matchers excluded a directory `icons/` that has never existed,
+> while the real icons sit at the public root — so `icon-192.png`,
+> `icon-512.png`, `icon.svg` and `apple-touch-icon.png` all **307'd to
+> `/login`**. Chrome will not offer an install unless it can fetch the 192 and
+> 512 icons, so `beforeinstallprompt` never fired; iOS used a screenshot of the
+> page as the home-screen icon. **Nothing looked broken** — the manifest itself
+> was excluded and returned 200, so the only symptom was an install prompt that
+> never appeared. Fixed in both apps, with the filenames named explicitly.
+>
+> **3. The agent app had no PWA at all** — no `public/` directory. Batch 8 was
+> marked done but silently dropped its PWA half; the layout still carried "PWA +
+> offline is Batch 8" as a comment. Built: manifest, `sw.js`, `offline.html`,
+> icons, `ServiceWorkerRegister`, metadata. Icon is the deliberate inverse of the
+> customer's (black "FA" on lime vs lime "B2" on black) because the two-device
+> demo puts both on one home screen.
+>
+> **4. Agent smoke was red at 2 of 29 — and five more routes were passing
+> vacuously.** Stale table entries from Batches 5a/6/7a. Once those screens went
+> behind the safety gate they returned 307, and **a 307 with no assertions
+> scores a bare "ok"**, so five routes were asserting nothing at all. Rebuilt as
+> the gate's reject half (asserted on absent content) plus a render half on
+> PKP-2026-000104, the one pickup with an `Offer`.
+>
+> Also: a shared **`<InstallPrompt />`** (`packages/ui`) on both apps' home
+> screens — one-tap install on Chromium, Share-sheet instructions on iOS — and
+> `/.well-known/assetlinks.json` served from `ANDROID_*` env vars in both apps,
+> so the Play Store fingerprint can be set at deploy time with no code change.
+>
+> ⚠ **A stale Turbopack dev server 404s `result/breakdown` and `result/why`**
+> and the safety gate never runs. Not an app bug — `rm -rf apps/agent/.next`.
+> Same family as the stale-`.next` warning below.
+>
+> **Distribution:** both apps are installable PWAs. Android/desktop get a
+> one-tap prompt; **iOS uses Share → Add to Home Screen because Safari has no
+> install API** — an Apple platform decision, not a gap here. A Play Store
+> package is ~half a day post-deploy and keeps instant updates
+> (`docs/ANDROID_TWA_BUILD.md`); the App Store would mean rebuilding the client
+> against an API (`docs/NATIVE_APP_HANDOVER.md`). Raised with the company as
+> **open question 14**.
+>
+> **Next: Batch 9 (deploy) — Khalid,** then the one manual pass on real
+> handsets, then the TWA package.
 
 > **Batch 8 (track, history, profile) shipped 2026-08-24.** The last five
 > Batch-0b stubs are real screens: `/pickups` (two groups + the pending
@@ -42,9 +107,9 @@
 > apps/<app>/.next`. Batch 9 runs build and smoke back to back, so it will hit
 > this.
 >
-> **Next up: Batch 5a (quote screens + offer) — Ali,** then Batch 6 (collect)
-> and Batch 7a (hub drop-off UI). **Aamir's lane is now clear through to Batch
-> 9.**
+> ~~**Next up: Batch 5a (quote screens + offer) — Ali,** then Batch 6 (collect)
+> and Batch 7a (hub drop-off UI).~~ **All three shipped 2026-08-24** (commit
+> `777f627`); see the 2026-08-25 entry at the top.
 
 > **Batch 5b (the cross-app seam, D7) shipped 2026-08-24** — the highest-risk
 > correctness item in the plan. `acceptOffer` no longer writes `collected`: a

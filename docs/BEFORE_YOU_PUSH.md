@@ -88,6 +88,23 @@ All three of us point at **one Supabase project**. The two apps are separated by
   `createClient().auth.getUser()` — **never trust an id that came from the form.**
   Reference implementation: `apps/customer/src/app/(app)/handover/actions.ts`.
 
+**Static assets / PWA** *(added 2026-08-25)*
+- 🔴 **Anything served from an app's `public/` root must ALSO be excluded in that
+  app's `src/proxy.ts` matcher**, or the auth guard 307s it to `/login`. This is
+  not hypothetical: both matchers excluded a directory `icons/` that has never
+  existed while the real icons sat at the root, so `icon-192.png`,
+  `icon-512.png` and `apple-touch-icon.png` were all behind the guard. Chrome
+  will not offer to install an app whose 192/512 icons it cannot fetch, so the
+  **deployed customer app was silently un-installable**, and iOS used a
+  screenshot of the page as its home-screen icon. Nothing looked broken —
+  `manifest.webmanifest` *was* in the exclusion list and returned 200, so the
+  only symptom was an install prompt that never appeared.
+- Same rule for `/.well-known` — Android fetches `assetlinks.json` anonymously
+  at install time.
+- **Install and offline cannot be tested on `npm run dev`.** The service worker
+  is production-only by design (it would fight HMR). Use
+  `npm run build && npm start`.
+
 **Imports**
 - **Never import from `@prisma/client`** — use `@clbipp/database`, which
   re-exports the client and every model type and enum.

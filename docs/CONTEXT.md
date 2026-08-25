@@ -55,6 +55,27 @@ outlive a single sprint.
   line, net value, margin %, and the price band. This is the deliberate inverse
   of the vendor-visibility rules below, not an exception to them — nothing
   agent-side may leak onto a vendor screen.
+- **Dispatch (`requested → scheduled` + assigning an agent) belongs to the ADMIN
+  app** — noted 2026-08-25. No batch ever owned this transition, so until then
+  *nothing in the codebase wrote it* and only the seed did; a pickup booked in
+  the customer app was invisible to the agent app forever. `npm run assign-job`
+  is a CLI stopgap, deliberately **not** a screen in either app: the customer app
+  would cross the D7 write seam, and the agent app would make jobs pull-able,
+  contradicting D2 (jobs are pushed). Lift `assignJob` into an admin server
+  action when that surface exists — the logic transfers unchanged.
+- **Distribution is PWA-first, and that is a choice, not a limitation** — noted
+  2026-08-25. Both apps install as real home-screen apps on Android, desktop and
+  iOS. Android/desktop get a one-tap prompt; **iOS uses Share → Add to Home
+  Screen because Safari implements no install API** — an Apple platform
+  decision that applies to every PWA, not a gap in this build. PWA delivery also
+  buys **instant updates**, which matters here because the vendor and agent apps
+  share one pickup lifecycle and must not drift across versions. A Play Store
+  package (TWA) is ~half a day post-deploy and **keeps** instant updates; the
+  App Store would require rebuilding the client against an API, because these
+  are server-rendered apps and a webview wrapper is what Apple rejects under
+  guideline 4.2. Full reasoning and the reuse analysis:
+  `NATIVE_APP_HANDOVER.md`. Whether the company expects a store listing is
+  **open question 14** in `COMPANY_FLOW_REVIEW_2026-08-07.md`.
 - **No recovery rate % shown to the vendor — hard rule.** Lead's explicit
   instruction; the company's flow document doesn't ask for it either.
 - **No recovered value shown to the vendor — a default, not a hard rule**
