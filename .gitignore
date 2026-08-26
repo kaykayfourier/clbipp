@@ -45,6 +45,9 @@ packages/database/src/generated/
 # the query engine copied in by each app's prebuild step
 apps/customer/src/generated/
 apps/agent/src/generated/
+# Added with the admin app, Batch 0. Without this line the copied query-engine
+# binary (~15 MB, platform-specific) gets committed by the first `git add -A`.
+apps/admin/src/generated/
 
 CLAUDE.local.md
 post-review.md

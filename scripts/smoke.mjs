@@ -3,11 +3,22 @@
  *
  *   npm run dev                  # customer, :3000, in another terminal
  *   npm run dev:agent            # agent,    :3001, in another terminal
+ *   npm run dev:admin            # admin,    :3002, in another terminal
  *
  *   npm run smoke                            # customer, as business@test
- *   npm run smoke -- agent@test demo1234 --blocked
  *   npm run smoke -- --app=agent             # agent, as agent@test
+ *   npm run smoke -- --app=admin             # admin, as admin@test
+ *
+ * The role gate, in every direction. All SIX of these must bounce — three apps
+ * means six wrong-role pairings, and a gate only ever tested one way is
+ * indistinguishable from a gate that blocks everyone:
+ *
  *   npm run smoke -- --app=agent --blocked business@test businesstest
+ *   npm run smoke -- --app=admin --blocked business@test businesstest
+ *   npm run smoke -- --app=admin --blocked agent@test demo1234
+ *   npm run smoke -- --app=agent --blocked admin@test demo1234
+ *   npm run smoke -- --blocked agent@test demo1234
+ *   npm run smoke -- --blocked admin@test demo1234
  *
  * `--app=` selects which app to point at (default `customer`); it swaps the
  * base URL, the .env.local read for Supabase credentials, the default account
@@ -747,6 +758,130 @@ const AGENT_LOGIN_ISOLATION = {
   '/login': ['Create account', 'Send code', 'Email me a login code', 'Continue with Google', 'Agent ID'],
 }
 
+// ═══ Admin console (Batch 0) ═════════════════════════════════════════════════
+//
+// Every route here is still a STUB — a heading and no data access — so these
+// currently prove routing, the console shell and the role gate, not screen
+// content. Content assertions get tightened per batch as the real screens land,
+// exactly the way the customer and agent tables above grew.
+//
+// 🔴 Trap 9, and the reason every single route below carries an assertion: a
+// route that 307s scores a bare "ok". Five agent routes asserted nothing at all
+// for two batches because of it. The admin table starts with full coverage so
+// that can't repeat here.
+//
+// The assertion each stub carries is its <h1> text, and that string is chosen
+// to SURVIVE the real build — B04's real screen is still headed "Pickups". So
+// replacing a stub does not require touching this file, but deleting or
+// renaming a heading does, and that is the point.
+//
+// ⚠ Contract with packages/database/prisma/reset-demo.ts, same as the agent
+// table: the ids below are real seeded rows.
+const ADMIN_REQUESTED = 'PKP-2026-000101' // seeded `requested`, no agent — the
+//                                            dispatch board's own demo row
+const ADMIN_PICKUP = 'PKP-2026-000102' // seeded `scheduled`, 3 mixed items
+// TODO: no DispatchManifest or trace_id fixture exists yet — B's Batch 1 seeds
+// the first ones (§3 fixtures 4 and 5). Until then these two exercise the
+// router and the shell only, which is all a stub can prove anyway. Swap them
+// for the seeded ids when Batch 1 lands.
+const ADMIN_MANIFEST = '00000000-0000-4000-8000-000000000401'
+const ADMIN_TRACE = 'TRC-2026-0847'
+
+const ADMIN_ROUTES = [
+  // B · Operations
+  '/',
+  '/dispatch',
+  `/dispatch/${ADMIN_REQUESTED}`,
+  '/pickups',
+  `/pickups/${ADMIN_PICKUP}`,
+  '/lifecycle',
+  // C · Chain of custody
+  '/inventory',
+  '/manifests',
+  '/manifests/new',
+  `/manifests/${ADMIN_MANIFEST}`,
+  // D · Engine
+  '/config',
+  '/market',
+  '/quotes',
+  `/trace/${ADMIN_TRACE}`,
+  '/exceptions',
+  // E · Network
+  '/suppliers',
+  '/agents',
+  '/facilities',
+  // F · Reports
+  '/compliance',
+  '/analytics',
+  '/audit',
+]
+
+// The console chrome, asserted on the dashboard. This is what proves
+// ConsoleShell actually rendered rather than the page returning bare markup —
+// and, because the sidebar is only reachable with a session, that the shell's
+// own getCurrentProfile() read succeeded under the admin's RLS.
+//
+// 'Chain of custody' is deliberately in here: it is one of the three sidebar
+// groups the wireframe does NOT have (W1/W2/W9 add dispatch, pickups and
+// manifests), so asserting it stops a future edit quietly reverting the nav to
+// the wireframe's twelve items and stranding the P0 screens.
+//
+// ⚠ 'Account menu for' is the UserMenu TRIGGER's aria-label, not the 'Sign out'
+// item itself. The item is inside a dropdown that only mounts once the menu is
+// opened, so it is genuinely not in the server HTML and asserting on it fails —
+// which it did, first run. This asserts the control W14 asked for is present
+// and labelled; that it actually ends the session is in
+// docs/MANUAL_TEST_QUEUE.md, because a fetch-based smoke cannot click.
+const ADMIN_SHELL = ['Console', 'Operations', 'Chain of custody', 'Engine', 'Network', 'Reports', 'Dispatch', 'Account menu for']
+
+const ADMIN_APP_CONTENT = {
+  '/': ['Overview', ...ADMIN_SHELL],
+  '/dispatch': ['Dispatch board'],
+  [`/dispatch/${ADMIN_REQUESTED}`]: ['Dispatch request', ADMIN_REQUESTED],
+  '/pickups': ['Pickups'],
+  [`/pickups/${ADMIN_PICKUP}`]: ['Pickup detail', ADMIN_PICKUP],
+  '/lifecycle': ['Lifecycle control'],
+  '/inventory': ['Inventory'],
+  '/manifests': ['Dispatch manifests'],
+  '/manifests/new': ['New manifest'],
+  [`/manifests/${ADMIN_MANIFEST}`]: ['Manifest detail'],
+  '/config': ['Engine config'],
+  '/market': ['Market feed'],
+  '/quotes': ['Quote queue'],
+  [`/trace/${ADMIN_TRACE}`]: ['Traceability'],
+  '/exceptions': ['Exception queue'],
+  '/suppliers': ['Suppliers'],
+  '/agents': ['Agent roster'],
+  // '&' renders as &amp; — assert the two halves, never the raw ampersand.
+  '/facilities': ['Facilities', 'recyclers'],
+  '/compliance': ['Compliance'],
+  '/analytics': ['Analytics'],
+  '/audit': ['Audit log'],
+}
+
+const ADMIN_PUBLIC_ROUTES = ['/login']
+
+const ADMIN_CONTENT = {
+  '/login': ['Admin Console', 'Sign in', 'Email', 'Password'],
+}
+
+// AD2 made assertable, the same way AGENT_LOGIN_ISOLATION asserts D6.
+//
+// Admins do not self-sign-up, and this login must not grow the customer
+// login's other doors — a signup route into the console would hand whoever
+// used it every price in the business. Each string below genuinely appears on
+// apps/customer's /login, so a copy-paste from there fails this run rather
+// than shipping the door.
+//
+// 'ops' is here for a different reason: it is wireframe defect W10. UserRole is
+// customer | agent | admin, `ops` is not being added (AD2), and the wireframe
+// renders 'ADMIN · OPS' in its sidebar footer. Asserting its absence is what
+// stops that string being copied back in and implying a role tier that does not
+// exist.
+const ADMIN_LOGIN_ISOLATION = {
+  '/login': ['Create account', 'Send code', 'Email me a login code', 'Continue with Google', 'ops'],
+}
+
 // ═══ App selection ═══════════════════════════════════════════════════════════
 // `--app=<name>`. Only the shared shape lives here; the customer-only sections
 // (documents, exports, public /t/ tracking, the onboarding probes) are gated on
@@ -764,6 +899,26 @@ const APPS = {
     publicRoutes: PUBLIC_ROUTES,
     content: CONTENT,
     publicIsolation: {},
+  },
+  admin: {
+    port: 3002,
+    // Same Supabase project again — one database, one auth pool, three apps
+    // separated by profiles.role at the proxy. Under AD3 this app has no RLS
+    // policies of its own: it reads through Prisma and the service role, so
+    // the role gate below and the in-code checks inside each server action are
+    // the entire access boundary. That makes the three --blocked runs load
+    // bearing here in a way they are not for the other two apps.
+    envFile: 'apps/admin/.env.local',
+    defaultUser: ['admin@test', 'demo1234'],
+    routes: ADMIN_ROUTES,
+    appContent: ADMIN_APP_CONTENT,
+    // No isolation table yet — nothing in the console is withheld from an
+    // admin (AD12), so there is nothing to assert absent on a logged-in route.
+    // The absent-doors assertions live on /login, in ADMIN_LOGIN_ISOLATION.
+    appIsolation: () => [],
+    publicRoutes: ADMIN_PUBLIC_ROUTES,
+    content: ADMIN_CONTENT,
+    publicIsolation: ADMIN_LOGIN_ISOLATION,
   },
   agent: {
     port: 3001,

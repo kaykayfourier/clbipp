@@ -1,0 +1,165 @@
+@import "tailwindcss";
+/* Tailwind 4 scans only this app's tree by default — without this line every
+   class used inside packages/ui gets purged and shared components render
+   unstyled (Plan v2 §3A.8). Same relative depth as the other two apps. */
+@source "../../../../packages/ui/src";
+
+/* ─── Product tokens ─────────────────────────────────────────────────────────
+   A byte-for-byte copy of apps/agent's and apps/customer's. Kept identical on
+   purpose, and this is a decision worth stating:
+
+   docs/CLBIPP_AdminWireframes_V1.html defines its OWN near-miss palette
+   (--ink #0E120E vs #111111, --paper #F2EDE2 vs #F8F5EE, --signal #C5F050 vs
+   #C8F53D). Adopting those values would have made every Badge / Button / Card
+   this app imports from @clbipp/ui render slightly off-brand, because those
+   components resolve --color-* from these names. Batch 2's rules tell C to
+   reuse those primitives where they fit, so the shared token values have to be
+   the ones they were built against.
+
+   The wireframe's genuinely NEW surface — the dark sidebar — is carried below
+   as a separate --console-* block instead. That keeps the desktop chrome
+   faithful to the wireframe without repainting the shared kit.
+   ⚠ If a token here changes, change it in all THREE apps. */
+:root {
+  /* Fonts (loaded in layout.tsx) */
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+
+  /* Brand */
+  --primary-green: #C8F53D;
+  --primary-black: #111111;
+
+  /* Backgrounds */
+  --background: #F8F5EE;
+  --surface: #FFFFFF;
+
+  /* Borders */
+  --border: #E5E5E5;
+  --border-strong: #CCCCCC;
+
+  /* Text */
+  --text-primary: #111111;
+  --text-secondary: #666666;
+  --text-disabled: #AAAAAA;
+
+  /* Semantic — fills */
+  --success: #22C55E;
+  --success-bg: #F0FDF4;
+
+  --error: #EF4444;
+  --error-bg: #FEF2F2;
+
+  --warning: #F97316;
+  --warning-bg: #FFF7ED;
+
+  --info: #3B82F6;
+  --info-bg: #EFF6FF;
+
+  --hazard: #FF5A1F;
+  --hazard-bg: #FFF3EE;
+
+  /* Semantic — text-on-coloured-bg shades */
+  --success-text: #15803D;
+  --error-text: #B91C1C;
+  --warning-text: #C2410C;
+  --info-text: #1D4ED8;
+
+  /* Semantic — banner / chip border tints */
+  --success-border: #BBF7D0;
+  --error-border: #FECACA;
+  --warning-border: #FED7AA;
+  --info-border: #BFDBFE;
+
+  /* Interaction micro-shades (not in the main table; used for pressed states) */
+  --background-pressed: #F0EDE6;
+}
+
+@theme inline {
+  /* Fonts */
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
+  --font-sans: var(--font-body);
+
+  /* Brand */
+  --color-primary-green: var(--primary-green);
+  --color-primary-black: var(--primary-black);
+
+  /* Backgrounds */
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-background-pressed: var(--background-pressed);
+
+  /* Borders */
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  /* Text */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-disabled: var(--text-disabled);
+
+  /* Semantic — fills */
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-text: var(--success-text);
+  --color-success-border: var(--success-border);
+
+  --color-error: var(--error);
+  --color-error-bg: var(--error-bg);
+  --color-error-text: var(--error-text);
+  --color-error-border: var(--error-border);
+
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-text: var(--warning-text);
+  --color-warning-border: var(--warning-border);
+
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-info-text: var(--info-text);
+  --color-info-border: var(--info-border);
+
+  --color-hazard: var(--hazard);
+  --color-hazard-bg: var(--hazard-bg);
+}
+
+body {
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+/* ─── Console chrome (admin only) ────────────────────────────────────────────
+   The desktop shell surfaces from the wireframe's console CSS (.csb / .ctop).
+   These have NO equivalent in the two mobile apps — there is no dark sidebar
+   on a phone — which is exactly why they live here and not in packages/ui
+   (AD11). Nothing in this block may be moved into the shared package. */
+:root {
+  /* Dark sidebar rail */
+  --console-rail: #111111;
+  --console-rail-text: rgba(248, 245, 238, 0.62);
+  --console-rail-text-strong: #F8F5EE;
+  --console-rail-muted: rgba(248, 245, 238, 0.32);
+  --console-rail-line: rgba(248, 245, 238, 0.12);
+  --console-rail-hover: rgba(248, 245, 238, 0.05);
+  /* Active item: the brand green at low alpha, per .csb-item.on */
+  --console-rail-active: rgba(200, 245, 61, 0.13);
+
+  /* Light main column. --console-app sits a shade lighter than --background:
+     the console body is a working surface behind white panels, not a page. */
+  --console-app: #FBFAF6;
+  --console-line: rgba(17, 17, 17, 0.10);
+}
+
+@theme inline {
+  --color-console-rail: var(--console-rail);
+  --color-console-rail-text: var(--console-rail-text);
+  --color-console-rail-text-strong: var(--console-rail-text-strong);
+  --color-console-rail-muted: var(--console-rail-muted);
+  --color-console-rail-line: var(--console-rail-line);
+  --color-console-rail-hover: var(--console-rail-hover);
+  --color-console-rail-active: var(--console-rail-active);
+  --color-console-app: var(--console-app);
+  --color-console-line: var(--console-line);
+}

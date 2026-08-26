@@ -266,6 +266,44 @@ public, 46/46 + 30/30 smoke both directions. Left to check by eye:
 
 ---
 
+## Admin console — Batch 0 (scaffold, auth gate, console shell) · 2026-08-26 · A
+
+Everything a `fetch` can check is already checked: 22/22 routes with content
+assertions, all six role-gate directions, `ƒ Proxy (Middleware)` in the build.
+What is left needs a browser or a human eye.
+
+12. 🔴 **Sign out actually signs you out.** `scripts/smoke.mjs` asserts the
+    account-menu *trigger* exists (its `aria-label`), because the `Sign out`
+    item lives in a dropdown that only mounts on click and is genuinely not in
+    the server HTML — a fetch cannot reach it. **Click the avatar, sign out,
+    then press Back.** You must land on `/login`, not on a cached console page.
+13. **The sidebar highlights the right item on a detail route.** `isNavItemActive`
+    keeps the parent lit via `matchPrefix`, and `/` is deliberately exact-match
+    so it does not light up on every route. Check `/dispatch/PKP-2026-000101`
+    lights **Dispatch** and *not* **Overview**.
+14. **The rail and the header stay put while the body scrolls.** The console is a
+    fixed-height frame (`h-full overflow-hidden` on `<body>`, `overflow-y-auto`
+    on the body column only). On a nine-column table this is immediately obvious
+    if it is wrong. Check at **1280px and at 1440px**.
+15. **The topbar search box.** It posts `GET /pickups?q=…`. Until C's Batch 5
+    reads `searchParams.q` it will navigate and show an **unfiltered** list —
+    expected for now, but re-check it *after* Batch 5 lands, because that is the
+    point at which a silent no-op becomes a real bug.
+16. **The console does not look like the mobile apps by accident.** The admin app
+    keeps the shared token *values* (so `@clbipp/ui`'s Badge/Button/Card render
+    on-brand) but the wireframe's dark rail via a separate `--console-*` block.
+    Put a phone screen and the console side by side and confirm the greens and
+    the paper background genuinely match.
+17. **Three dev servers at once.** `npm run dev` · `npm run dev:agent` ·
+    `npm run dev:admin` on 3000/3001/3002. Verified individually; confirm the
+    three-terminal demo setup once, before the demo, not during it.
+18. **The login error copy.** Sign in to `:3002` as `agent@test` / `demo1234`.
+    You should be bounced straight back to `/login` reading **"That account
+    cannot access this app."** — the proxy sets it, and it is the only feedback a
+    wrong-role user ever gets.
+
+---
+
 ## Standing checks for the end-of-sprint pass
 
 - **Every agent screen passes `hideNav`.** `npm run smoke` fails on anything but

@@ -59,6 +59,15 @@ Every one of these has already cost this team an hour, in an earlier sprint.
     `npm run build` + **three** smoke runs.
 17. **Smoke the customer app against a production build, not `npm run dev`** —
     the three `api/documents/[kind]/[id]` routes 404 under Turbopack dev.
+18. **Add `apps/<app>/src/generated/` to `.gitignore` when you add an app.**
+    *(Batch 0.)* The Prisma query engine `prebuild` copies **35 MB** of
+    platform-specific binary in there, and the first `git add -A` commits it.
+    The line for admin exists now; this is here for whoever adds a fourth app.
+19. **A content assertion can only see the FIRST render.** *(Batch 0.)* Asserting
+    `'Sign out'` failed because it lives inside a dropdown that mounts on click —
+    `scripts/smoke.mjs` fetches HTML, it does not run a browser. Assert on the
+    always-present trigger (its `aria-label`) and put the click itself in
+    `docs/MANUAL_TEST_QUEUE.md`.
 
 ---
 
@@ -104,14 +113,19 @@ package.json (root)                      ← "dev:admin"
 7. `scripts/smoke.mjs` — `--app=admin`, the admin route table, and **both**
    role-gate directions.
 
-**Done when**
-- [ ] `npm run dev`, `npm run dev:agent`, `npm run dev:admin` all run together.
-- [ ] `npm run build` prints **`ƒ Proxy (Middleware)`** for admin. *(trap 1)*
-- [ ] `npm run smoke -- --app=admin` is green with a **content assertion** on `/`. *(trap 9)*
-- [ ] `npm run smoke -- --app=admin --blocked business@test businesstest` bounces.
-- [ ] `npm run smoke -- --app=admin --blocked agent@test demo1234` bounces.
-- [ ] `npm run smoke -- --blocked admin@test demo1234` — admin barred from the customer app.
-- [ ] No `AppShell` / `PhoneFrame` import anywhere in `apps/admin`. *(trap 15)*
+**Done when** — ✅ **all met, 2026-08-26. See "Batch 0 — as built" at the foot
+of this file.**
+- [x] `npm run dev`, `npm run dev:agent`, `npm run dev:admin` all run together.
+- [x] `npm run build` prints **`ƒ Proxy (Middleware)`** for admin. *(trap 1)*
+- [x] `npm run smoke -- --app=admin` is green with a **content assertion** on `/`. *(trap 9)*
+      — in the event, on **all 22 routes**, not just `/`.
+- [x] `npm run smoke -- --app=admin --blocked business@test businesstest` bounces.
+- [x] `npm run smoke -- --app=admin --blocked agent@test demo1234` bounces.
+- [x] `npm run smoke -- --blocked admin@test demo1234` — admin barred from the customer app.
+- [x] `npm run smoke -- --app=agent --blocked admin@test demo1234` — **admin barred
+      from the agent app.** This line was missing from the sheet: three apps make
+      **six** wrong-role pairings, not five.
+- [x] No `AppShell` / `PhoneFrame` import anywhere in `apps/admin`. *(trap 15)*
 
 ---
 
@@ -135,6 +149,11 @@ One migration: **`admin_app_v1`**. Read `docs/ai-prompts/database-create-migrati
    retyped. Add a test asserting the seeded row deep-equals `DEFAULT_CONFIG` —
    same pattern as the Batch 9 CO₂e drift check.
 7. RLS: **close** the three new tables (AD3). No policy for `authenticated`.
+
+8. **Swap the two placeholder ids in `scripts/smoke.mjs`** — `ADMIN_MANIFEST`
+   and `ADMIN_TRACE` — for the real fixtures 4 and 5 ids once they are seeded.
+   Both carry a `TODO` there. Until then those two admin routes exercise the
+   router and the shell only. *(Batch 0 contract 2.)*
 
 **Done when**
 - [ ] `npm run db:migrate` and `npm run reset-demo` both green.
@@ -249,9 +268,14 @@ The spine (AD1). The screen the wireframe forgot (W2).
    `Offer.acceptedAt`. *(trap 10)*
 4. Read-only. Every write on this pickup belongs to A's batches.
 
+5. 🔴 **Read `searchParams.q` and filter on it** — the topbar search box in
+   `ConsoleShell` is a real `GET` form posting to `/pickups?q=…` (Batch 0
+   contract 1). Until this lands the box navigates and shows an unfiltered list,
+   which reads as broken rather than absent.
+
 **Done when** both render off real seeded data with content assertions in smoke,
-a pickup at every one of the ten statuses renders without throwing, and the
-two-halves display never overwrites either half.
+a pickup at every one of the ten statuses renders without throwing, the
+two-halves display never overwrites either half, and **`/pickups?q=` filters**.
 
 ---
 
@@ -390,9 +414,14 @@ npm run dev:agent    # agent,    :3001
 npm run dev:admin    # admin,    :3002   ← new
 
 npm run smoke -- --app=admin
-npm run smoke -- --app=admin --blocked business@test businesstest   # vendor barred
-npm run smoke -- --app=admin --blocked agent@test demo1234          # agent barred
-npm run smoke -- --blocked admin@test demo1234                      # admin barred from customer
+
+# The role gate, all SIX directions. Three apps = six wrong-role pairings.
+npm run smoke -- --app=admin --blocked business@test businesstest   # vendor  ✗ admin
+npm run smoke -- --app=admin --blocked agent@test demo1234          # agent   ✗ admin
+npm run smoke -- --blocked admin@test demo1234                      # admin   ✗ customer
+npm run smoke -- --app=agent --blocked admin@test demo1234          # admin   ✗ agent
+npm run smoke -- --app=agent --blocked business@test businesstest   # vendor  ✗ agent
+npm run smoke -- --blocked agent@test demo1234                      # agent   ✗ customer
 
 npm run build && npm run test && npm run lint
 ```
@@ -404,3 +433,112 @@ npm run build && npm run test && npm run lint
 *Append a section here when a batch lands: what actually shipped, what deviated
 from this sheet and why, and what the next batch must know. Same convention as
 `FIELD_AGENT_TASKS.md` — that habit is why this sheet has a trap list.*
+
+---
+
+## Batch 0 — as built · 2026-08-26 · A (Aamir)
+
+**Green.** `npm run build` (all three apps), `npm run lint`, `npm run smoke --
+--app=admin` **22/22**, and **all six role-gate directions** bounce. Everyone is
+unblocked: B can start Batch 1 and C can start Batch 2 without creating a single
+file A also creates.
+
+### What shipped
+
+```
+apps/admin/package.json                       dev :3002, prebuild, lint, full dep set
+apps/admin/next.config.ts                     transpilePackages, security headers, engine tracing
+apps/admin/postcss.config.mjs                 new
+apps/admin/eslint.config.mjs                  new
+apps/admin/scripts/copy-prisma-engine.mjs     new (agent's, retargeted)
+apps/admin/.env.local  .env.example           new — same Supabase project as the other two
+apps/admin/src/proxy.ts                       🔴 the auth gate — allowRoles: ['admin']
+apps/admin/src/app/globals.css                shared tokens + a --console-* block
+apps/admin/src/app/layout.tsx                 rewritten (fonts, no PWA metadata)
+apps/admin/src/app/login/{page,actions,field}.tsx   new
+apps/admin/src/app/(admin)/layout.tsx         🔴 THE ONE SHARED FILE — nobody edits it again
+apps/admin/src/components/shell/*             ConsoleShell, Sidebar, Topbar, UserMenu, nav, icons, actions
+apps/admin/src/app/(admin)/**/page.tsx        21 stubs
+scripts/smoke.mjs                             --app=admin + route table + AD2 isolation
+package.json (root)                           "dev:admin"
+```
+
+`apps/admin/src/app/page.tsx` (the old "built last" scaffold) was **deleted** —
+`/` is now the `(admin)` group's dashboard stub.
+
+### Done-when — all met
+
+- [x] `npm run dev` · `dev:agent` · `dev:admin` run together on 3000/3001/3002.
+- [x] `npm run build` prints **`ƒ Proxy (Middleware)`** for admin. *(trap 1)*
+- [x] `npm run smoke -- --app=admin` green, with a content assertion on **every**
+      route including `/`. *(trap 9)*
+- [x] Vendor bounced from admin · agent bounced from admin · admin bounced from
+      customer · **admin bounced from agent** (a sixth direction the sheet did
+      not list — three apps make six wrong-role pairings, not five).
+- [x] Vendor→agent and agent→customer re-run as regressions: still 30/30 and 46/46.
+- [x] No `AppShell` / `PhoneFrame` / `hideNav` anywhere in `apps/admin`. *(trap 15)*
+
+### Deviations from this sheet, and why
+
+1. **Login lives at `src/app/login/`, not in an `(auth)` group.** The sheet says
+   `src/app/login/page.tsx`, and §4 assigns A `src/app/login/**`, so it is taken
+   literally. It sits outside `(admin)` and therefore outside `ConsoleShell`
+   already — the agent app's `(auth)` group exists to escape a layout this app
+   does not have.
+
+2. **21 stubs, not 19.** §2's table is headed "19 screens" but lists **22 rows**
+   (A01 + B01–B06 + C01–C04 + D01–D05 + E01–E03 + F01–F03). All 22 were built —
+   21 under `(admin)` plus `/login`. **The heading is the error, not the table.**
+
+3. **The sidebar has five groups and sixteen items, not the wireframe's four and
+   twelve.** The wireframe's nav predates §0, which adds dispatch (W1), pickups
+   (W2) and manifests (W9) — the P0 screens. Leaving the nav as drawn would have
+   made the whole demo path unreachable from the chrome. `ADMIN_SHELL` in
+   `scripts/smoke.mjs` asserts `'Chain of custody'` so a later "tidy-up" cannot
+   quietly revert it.
+
+4. 🟠 **The app keeps the shared token VALUES, not the wireframe's.** The admin
+   wireframe defines a near-miss palette of its own (`--ink #0E120E` vs
+   `#111111`, `--paper #F2EDE2` vs `#F8F5EE`, `--signal #C5F050` vs `#C8F53D`).
+   Adopting it would have made every `Badge`/`Button`/`Card` this app imports
+   from `@clbipp/ui` render off-brand, since those resolve `--color-*` from the
+   shared names — and Batch 2 tells C to reuse those primitives. The wireframe's
+   genuinely new surface, the dark rail, is carried as a separate `--console-*`
+   block in `globals.css`. **C: build the kit against the shared tokens.**
+
+5. **A local `field.tsx` for the login inputs**, not a console-kit input. Batch 2
+   is a table/KPI/chart kit for logged-in screens; `/login` renders before any of
+   it exists, and Batch 0 must not depend on another lane. Third copy of this
+   component in the repo — noted as a cleanup, not scheduled.
+
+### 🔴 Two things the next batches must know
+
+1. **CONTRACT WITH BATCH 5 (C).** The topbar search box is a real `GET` form
+   posting to **`/pickups?q=…`**. §2 adds no `/search` screen and B04 is already
+   specified to search "by pickup id / vendor / agent", so it points there rather
+   than inventing a twentieth screen. **Until `/pickups` reads `searchParams.q`
+   it navigates and silently shows an unfiltered list — which reads as a broken
+   feature rather than an absent one.** Added to Batch 5's done-when below.
+
+2. **CONTRACT WITH BATCH 1 (B).** `scripts/smoke.mjs` has two placeholder ids —
+   `ADMIN_MANIFEST` and `ADMIN_TRACE` — because no `DispatchManifest` or
+   `trace_id` fixture exists yet. They exercise the router and the shell only.
+   **Swap them for the real seeded ids when §3 fixtures 4 and 5 land**; both are
+   marked with a `TODO` in that file.
+
+### Notes for later, deliberately not done now
+
+- `apps/admin/public/` is **empty**, and `src/proxy.ts`'s matcher excludes only
+  `_next/*` and `favicon.ico`. Admin is not a PWA (AD11/R5), so there is nothing
+  else to exclude — but **trap 2 still applies the moment anyone adds a file
+  there.** The comment in `proxy.ts` says so.
+- No Vercel project yet; `apps/admin/vercel.json` was already present and is
+  unchanged. Batch 17 (B).
+- The greeting in `Topbar` uses the **server's** clock, so on Vercel it is UTC,
+  not IST. Fine for "Good morning"; the comment warns against deriving any
+  reported date that way.
+
+### Added to Batch 5's done-when *(by A, Batch 0)*
+
+- [ ] `/pickups` reads `searchParams.q` and filters on it — the topbar search box
+      in `ConsoleShell` posts there. See Batch 0 as-built, contract 1.

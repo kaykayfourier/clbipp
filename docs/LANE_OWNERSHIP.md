@@ -559,6 +559,53 @@ directions.
 
 ---
 
+## 2026-08-26 — Admin console Batch 0 (scaffold, auth gate, console shell) — A (Aamir)
+
+Squarely in A's lane, so nothing here is a lane crossing. Logged because three
+decisions inside it **constrain B and C**, and they should not have to find them
+by reading the diff.
+
+1. **The sidebar is a five-group, sixteen-item nav, not the wireframe's four and
+   twelve.** `apps/admin/src/components/shell/nav.ts`. The wireframe's nav
+   predates §0 of the plan, which adds dispatch (W1), pickups (W2) and manifests
+   (W9) — all P0. Leaving it as drawn would have made the demo path unreachable
+   from the chrome. **Adding a screen means adding it here**; nothing else
+   derives navigation.
+
+2. 🟠 **The admin app keeps the SHARED design-token values, not the admin
+   wireframe's.** The wireframe defines a near-miss palette of its own
+   (`--ink #0E120E` vs `#111111`, `--paper #F2EDE2` vs `#F8F5EE`,
+   `--signal #C5F050` vs `#C8F53D`). Adopting it would have made every
+   `Badge`/`Button`/`Card` imported from `@clbipp/ui` render slightly off-brand,
+   because those resolve `--color-*` from the shared names — and Batch 2's rules
+   tell **C** to reuse exactly those primitives. The wireframe's genuinely new
+   surface, the dark rail, is carried as a separate `--console-*` block in
+   `apps/admin/src/app/globals.css`.
+   → **C: build the console kit against the shared tokens.** If you want the
+   wireframe's exact palette instead, that is a real discussion — raise it, don't
+   half-adopt it in one component.
+
+3. **Two contracts A has imposed on other lanes**, both marked `TODO` in code:
+   - **On C, Batch 5:** the topbar search box is a live `GET` form to
+     `/pickups?q=…`. §2 adds no `/search` screen and B04 was already specified to
+     search by pickup id / vendor / agent, so it points there rather than
+     inventing a twentieth screen. **Until `/pickups` reads `searchParams.q` the
+     box silently shows an unfiltered list.** Added to Batch 5's done-when.
+   - **On B, Batch 1:** `scripts/smoke.mjs` carries two placeholder ids
+     (`ADMIN_MANIFEST`, `ADMIN_TRACE`) because no manifest or trace fixture
+     exists yet. Swap them when §3 fixtures 4 and 5 land. Added to Batch 1's steps.
+
+**Also touched, and worth naming:** `.gitignore` gained
+`apps/admin/src/generated/`. The Prisma-engine `prebuild` copies **35 MB** of
+platform-specific binary there and the first `git add -A` would have committed
+it — the other two apps were already ignored and admin was not.
+
+**`apps/admin/src/app/(admin)/layout.tsx` is now created and is the one shared
+file of the sprint.** Per §4 nobody edits it again. If you think you need to,
+say so here first.
+
+---
+
 ## Superseded policy (2026-06-27 → 2026-08-20) — kept for the record
 
 Entries logged above under dates before 2026-08-20 were made under this rule,

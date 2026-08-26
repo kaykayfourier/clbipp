@@ -60,6 +60,10 @@ monorepo** (migrated 2026-08-09):
    "Dispatch" below.
 3. **Admin console** — `apps/admin` — **CURRENT SPRINT** (from 2026-08-25).
    Runs on **port 3002** (`npm run dev:admin`). All three can run at once.
+   **Batch 0 is built** (2026-08-26): the app scaffold, the auth gate, the
+   `ConsoleShell` desktop chrome, `/login`, **all 22 routes as stubs**, and
+   `npm run smoke -- --app=admin`. Every screen is still a heading with no data
+   access, and **both lifecycle holes below are still open.**
 
 ```
 apps/customer            the customer app (Next.js App Router)
@@ -147,16 +151,31 @@ Headlines you need even if you read nothing else:
 - **Admin is a DESKTOP app** — no `AppShell`, no `PhoneFrame`, no `hideNav`, no
   PWA. Its console kit lives in `apps/admin/src/components/console/`, **not
   `packages/ui`** (AD11), because `packages/ui` is a mobile kit two shipped apps
-  import.
+  import. The **shell** (sidebar, topbar, user menu, nav table) is separate and
+  already built, at `apps/admin/src/components/shell/` — same AD11 rule applies.
+- 🟠 **The admin app keeps the SHARED design-token values, not the admin
+  wireframe's** (Batch 0, 2026-08-26). The wireframe defines a near-miss palette
+  (`--ink #0E120E` vs `#111111`, `--signal #C5F050` vs `#C8F53D`); adopting it
+  would make every `@clbipp/ui` primitive the app imports render off-brand. The
+  wireframe's dark rail is carried as a separate `--console-*` block in
+  `apps/admin/src/app/globals.css`. **Build the console kit against the shared
+  tokens.**
+- **The admin sidebar is five groups / sixteen items**, not the wireframe's four
+  and twelve — the wireframe's nav predates §0 and omits dispatch, pickups and
+  manifests, which are the P0 screens. It lives in one file,
+  `apps/admin/src/components/shell/nav.ts`; **adding a screen means adding it
+  there**, and no screen derives navigation independently.
 - **Admin sees everything, one level beyond the agent** (AD12) — including the
   engine configuration. 🔴 **Nothing from an admin screen may reach a vendor
   screen:** never import from `apps/admin` into `apps/customer`, and never move
   an admin component into `packages/ui`.
 
 **Exactly one file is shared across lanes:** `apps/admin/src/app/(admin)/layout.tsx`.
-A creates it in Batch 0 along with **all 19 routes as one-line stubs**, and
+A created it in Batch 0 along with **all 22 routes as one-line stubs** (§2's
+table is headed "19 screens" but lists 22 rows — the heading is the error), and
 nobody else creates a file A also creates. Each owner only ever *replaces* their
-own stub.
+own stub. **Both are done as of 2026-08-26**, so no lane is waiting on a file to
+exist.
 
 ## The Field Agent app — built, and still live code
 
@@ -219,6 +238,15 @@ Headlines you need even if you read nothing else:
 (D6). Same rule as the customer app: **it must stay under `src/`** — Next's dev
 bundler silently never registers it at the project root when `src/app` is in
 use, and an unregistered auth guard fails **OPEN**.
+
+> **All three apps now have one**, and the rule is identical in each:
+> `apps/customer/src/proxy.ts` (`['customer']`), `apps/agent/src/proxy.ts`
+> (`['agent']`), `apps/admin/src/proxy.ts` (`['admin']`, built 2026-08-26).
+> **Verify with `npm run build`: it must print `ƒ Proxy (Middleware)` for each.**
+> The admin one carries the most weight — under AD3 that app has no RLS policies
+> at all, so the guard plus in-code role checks are its *entire* access boundary.
+> **Three apps make SIX wrong-role pairings**, and all six are asserted in
+> `scripts/smoke.mjs`.
 
 **Both apps are installable PWAs** (agent's built 2026-08-24). Manifest, icons,
 `sw.js` and `offline.html` live in each app's `public/`; `<InstallPrompt />`
@@ -394,9 +422,10 @@ All commands run from the **repo root** (turbo fans them out to the workspaces).
 npm run dev          # Customer app dev server  (:3000)
 npm run dev:agent    # Field Agent app dev server (:3001)
 npm run dev:admin    # Admin console dev server   (:3002) — all three at once
+                     # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 142
+npm run test         # All tests (Vitest) — currently 214 (core 152, auth 40, engine 22)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -404,12 +433,14 @@ npm run smoke                                                     # customer, as
 npm run smoke -- --app=agent                                      # agent, as agent@test
 npm run smoke -- --app=admin                                      # admin, as admin@test
 
-# The role gate, in every direction. All six must bounce.
-npm run smoke -- --app=agent --blocked business@test businesstest
-npm run smoke -- --app=admin --blocked business@test businesstest
-npm run smoke -- --app=admin --blocked agent@test demo1234
-npm run smoke -- --blocked agent@test demo1234
-npm run smoke -- --blocked admin@test demo1234
+# The role gate, in every direction. Three apps = SIX pairings; all six must
+# bounce, and all six pass as of 2026-08-26.
+npm run smoke -- --app=agent --blocked business@test businesstest   # vendor ✗ agent
+npm run smoke -- --app=admin --blocked business@test businesstest   # vendor ✗ admin
+npm run smoke -- --app=admin --blocked agent@test demo1234          # agent  ✗ admin
+npm run smoke -- --app=agent --blocked admin@test demo1234          # admin  ✗ agent
+npm run smoke -- --blocked agent@test demo1234                      # agent  ✗ customer
+npm run smoke -- --blocked admin@test demo1234                      # admin  ✗ customer
 
 # Run a single test file (from the owning package)
 cd packages/core && npx vitest run src/booking.test.ts
@@ -434,11 +465,11 @@ cd packages/database
 npx prisma db execute --file ../../supabase/policies.sql --schema prisma/schema.prisma
 ```
 
-**Env files:** `apps/customer/.env.local`, `apps/agent/.env.local` (Supabase URL
-+ keys, DB URLs — the two apps read the *same* Supabase project; they are
-separated by `profiles.role` at the proxy, not by project) and
-`packages/database/.env` (DB URLs only). All gitignored; `.env.example` next to
-each holds the key names.
+**Env files:** `apps/customer/.env.local`, `apps/agent/.env.local`,
+`apps/admin/.env.local` (Supabase URL + keys, DB URLs — all **three** apps read
+the *same* Supabase project; they are separated by `profiles.role` at the proxy,
+not by project) and `packages/database/.env` (DB URLs only). All gitignored;
+`.env.example` next to each holds the key names.
 
 ## Stack
 

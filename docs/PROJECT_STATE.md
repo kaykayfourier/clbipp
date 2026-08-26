@@ -5,9 +5,53 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-25 — **the Admin console sprint is planned and
-open.** The Field Agent app is done except Batch 9 (deploy). Both existing apps
-are installable, and the customer→agent journey works end to end.
+**Last updated:** 2026-08-26 — **the Admin console sprint is building. Batch 0
+(scaffold, auth gate, console shell, all route stubs) is done and every lane is
+unblocked.** The Field Agent app is done except Batch 9 (deploy). Both existing
+apps are installable, and the customer→agent journey works end to end.
+
+> ## 2026-08-26 — Admin console Batch 0: built (Aamir)
+>
+> **`apps/admin` is a real app now**, on **port 3002** (`npm run dev:admin`), and
+> all three run at once. Green: `npm run build` for all three apps, `npm run
+> lint`, `npm run smoke -- --app=admin` **22/22 with a content assertion on every
+> route**, and **all six role-gate directions** — three apps make six wrong-role
+> pairings, not the five the task sheet listed.
+>
+> **What this unblocks:** every one of the 22 screens in §2 now exists as a stub,
+> so **B can start Batch 1 (schema) and C can start Batch 2 (console kit) without
+> either of them creating a file A also creates.** That was the entire point of
+> the batch. The only file shared across lanes,
+> `apps/admin/src/app/(admin)/layout.tsx`, is created and closed.
+>
+> **What is NOT built:** every screen is still a heading with no data access. The
+> two holes the sprint exists to close are both still open — nothing writes
+> `requested → scheduled` (Batch 3, A) and nothing writes any stage past
+> `collected` (Batches 6–7, A). 🔴 **`npm run assign-job` is still the only way to
+> get a booked pickup to an agent, and it is still required before any demo.**
+>
+> **Three things decided in the build**, all written up in `docs/LANE_OWNERSHIP.md`
+> and the "Batch 0 — as built" section of `docs/ADMIN_TASKS.md`:
+>
+> 1. 🟠 The admin app keeps the **shared design-token values**, not the admin
+>    wireframe's near-miss palette — otherwise every `@clbipp/ui` primitive it
+>    imports renders off-brand. The wireframe's dark rail is a separate
+>    `--console-*` block. **C builds the kit against the shared tokens.**
+> 2. The sidebar is **five groups / sixteen items**, not the wireframe's four and
+>    twelve: the wireframe's nav predates §0 and omits dispatch, pickups and
+>    manifests — the P0 screens.
+> 3. §2's table is headed "19 screens" but **lists 22 rows**. All 22 were built.
+>    The heading is the error.
+>
+> Two contracts A imposed on other lanes, both `TODO`-marked in code and added to
+> the owning batch's steps: **C's Batch 5** must read `searchParams.q` on
+> `/pickups` (the topbar search posts there), and **B's Batch 1** must swap two
+> placeholder ids in `scripts/smoke.mjs` once the manifest and trace fixtures
+> exist.
+>
+> Also caught: `.gitignore` had no entry for `apps/admin/src/generated/`, so the
+> 35 MB Prisma query-engine binary would have been committed on the first
+> `git add -A`.
 
 > ## 2026-08-25 — Admin console: planned (Aamir)
 >
