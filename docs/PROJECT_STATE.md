@@ -5,10 +5,46 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-26 — **the Admin console sprint is building. Batch 0
-(scaffold, auth gate, console shell, all route stubs) is done and every lane is
-unblocked.** The Field Agent app is done except Batch 9 (deploy). Both existing
-apps are installable, and the customer→agent journey works end to end.
+**Last updated:** 2026-08-26 — **the Admin console sprint is building. Batches 0
+(scaffold, auth gate, console shell, all route stubs) and 1 (schema + seed
+delta) are done and every lane is unblocked, now against REAL data.** The Field
+Agent app is done except Batch 9 (deploy). Both existing apps are installable,
+and the customer→agent journey works end to end.
+
+> ## 2026-08-26 — Admin console Batch 1: built (Aamir, covering B's lane)
+>
+> **The `admin_app_v1` migration is applied to the shared Supabase project and
+> the demo data is reseeded.** Green: `npm run build` (three proxies registered),
+> `npm run lint`, `npm run test` **220 passing** (was 214), `npm run smoke`
+> **22 / 30 / 46**, **all six role-gate directions**, and a new
+> `npm run verify-seed` at **21/21**.
+>
+> **New:** `EngineConfig` (append-only, seeded byte-identical to `DEFAULT_CONFIG`
+> with a drift test — 🔴 no price moved), `AdminAudit` (one table for all of W7),
+> `ItemException` (W4), the `MarginTier` enum, `Profile.marginTier`, and W6's
+> four `MarketPrices` columns. 🔴 **All three new tables are RLS-enabled with
+> ZERO policies** (AD3) — closed to `authenticated`, reachable only through
+> Prisma and the service role.
+>
+> **The seed now carries all eight §3 fixtures**, plus seven dispatch manifests
+> and a consistent audit trail. Two of them exist to fail a later batch:
+> **`PKP-2026-000113`** splits across a `dispatched` and a `draft` manifest, so
+> Batch 7's naive "advance the pickups on this manifest" must not pass (AD6);
+> **`PKP-2026-000114`** sits at `requested` still carrying a stale `agentId` and
+> `agentFeePaise`, which Batch 3's dispatch board has to clear.
+>
+> **Three judgement calls**, all in `LANE_OWNERSHIP.md` and "Batch 1 — as built":
+> `Profile.eprRegNo` was **not** added (§3/W11 are wrong on the facts —
+> `epr_reg_id` already exists and is fully wired); the manifest history goes
+> deeper than §3 asks so the seed does not contradict AD5; and
+> `packages/core/src/audit.ts` is new, holding the closed `AdminAudit.action`
+> vocabulary that Batches 3, 6, 7 and 9 must import rather than retype.
+>
+> 🔴 **`npm run assign-job` is STILL the only way to get a booked pickup to an
+> agent.** Batch 3 is what changes that.
+>
+> ⚠ **Use `prisma migrate deploy` against the shared project, never `migrate
+> dev`** — the latter can offer to reset it.
 
 > ## 2026-08-26 — Admin console Batch 0: built (Aamir)
 >

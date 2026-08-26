@@ -18,8 +18,13 @@ export async function getMarketData(): Promise<MarketData> {
 
     market_snapshot_id: `MKT-${row.id.slice(0, 8).toUpperCase()}`,
 
-    // MarketPrices has no fx_rate column — hardcoded until a migration adds it
-    fx_rate_usd_inr: 83.2,
+    // Read from the row since admin_app_v1 (Batch 1). It used to be hardcoded
+    // 83.2 here, which is exactly what the column DEFAULTS to and what the seed
+    // writes — so this changed no price, and it must not: the engine only
+    // echoes the rate into its audit output (`metal_price` is already ₹/kg), it
+    // does no arithmetic with it. The market feed screen (C02, Batch 12) is
+    // what makes this value editable.
+    fx_rate_usd_inr: row.fxRateUsdInr.toNumber(),
 
     metal_price: {
       Li: row.Li.toNumber(),

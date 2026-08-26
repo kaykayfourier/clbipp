@@ -20,6 +20,12 @@ const mockRow = {
   Mn: { toNumber: () => 200  },
   Cu: { toNumber: () => 850  },
   Al: { toNumber: () => 220  },
+  // Added with admin_app_v1 (Admin Batch 1). The column is NOT NULL with a
+  // database default of 83.2, so a row without it cannot exist — the mock has
+  // to carry it or these tests assert against a shape production never sees.
+  // Deliberately NOT 83.2 here: the old code hardcoded that number, so a mock
+  // that also says 83.2 would pass whether or not the column is actually read.
+  fxRateUsdInr: { toNumber: () => 84.75 },
   updatedAt: new Date("2026-01-01"), // old date — should not affect freshness
 }
 
@@ -58,5 +64,15 @@ describe("getMarketData", () => {
   it("fx_rate_usd_inr is a positive number", async () => {
     const result = await getMarketData()
     expect(result.fx_rate_usd_inr).toBeGreaterThan(0)
+  })
+
+  it("reads fx_rate_usd_inr from the ROW, not from a constant", async () => {
+    // 🔴 This is the assertion the previous test could not make. Until
+    // admin_app_v1 added market_prices.fx_rate_usd_inr, market.ts returned a
+    // hardcoded 83.2 — which is also the column's default, so "is a positive
+    // number" passes identically either way. 84.75 is the mock's value and
+    // nothing else in the codebase says it.
+    const result = await getMarketData()
+    expect(result.fx_rate_usd_inr).toBe(84.75)
   })
 })

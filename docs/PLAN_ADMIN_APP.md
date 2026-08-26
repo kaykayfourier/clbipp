@@ -125,6 +125,14 @@ the Suppliers screen renders. Note the engine **already honours**
 `supplier_margin_overrides` ([`selection.ts:92`](../packages/decision-engine/src/decisionEngine/layers/selection.ts))
 — it simply has nowhere to persist. → Two columns added in §3.
 
+> 🔴 **HALF OF W11 IS WRONG, corrected in build 2026-08-26 (Batch 1).** The
+> margin-tier half is right and `Profile.marginTier` was added. The EPR half is
+> not: `Profile` **already has `epr_reg_id`**, and it is not a dormant column —
+> the fleet signup form collects it, `/onboarding` collects it, `validation.ts`
+> validates it in two schemas, `auth.ts` selects it, `grants.sql` allowlists it
+> for writing, and the vendor's profile screen renders it. **Only ONE column was
+> added.** The Suppliers screen reads `eprRegId`.
+
 **W12 — Lifecycle Control is right in principle, too coarse in practice.**
 One-at-a-time advance is correct per D5/D7. But "Advance → Certified" implies a
 status flip, when it must **mint the `Certificate` row and the PDF** — that is
@@ -332,7 +340,14 @@ Owned by **B**, Batch 1. Nothing else in the sprint needs a second migration.
 
 **Altered**
 
-- `Profile` **+** `eprRegNo String?`, `marginTier MarginTier?`  *(W11)*
+- `Profile` **+** ~~`eprRegNo String?`~~, `marginTier MarginTier?`  *(W11)*
+  > 🔴 **CORRECTED IN BUILD, 2026-08-26 (Batch 1).** `eprRegNo` was **not**
+  > added. W11's premise is factually wrong: `Profile` already has **`eprRegId`**,
+  > wired end to end (fleet signup, `/onboarding`, `validation.ts`, `auth.ts`,
+  > `grants.sql`'s writable-column allowlist, the vendor profile screen) and
+  > seeded. A second column would start null for every real vendor. **The
+  > Suppliers screen reads `eprRegId`.** `marginTier` was added as specified.
+  > See "Batch 1 — as built" in `ADMIN_TASKS.md`, deviation 2.
 - `MarketPrices` **+** `fxRateUsdInr`, `source`, `note`, `createdBy`  *(W6)*
 
 **Not added, deliberately**
@@ -352,6 +367,13 @@ trap real, not to pad the demo:
 3. **Two more recyclers** (three total) covering lead-acid, NMC, and LFP/NCA — so AD7's validation can actually fail.
 4. **One pickup whose items split across two chemistries** → two recyclers. Exercises AD6.
 5. **One `dispatched` and one `draft` manifest.**
+   > **EXTENDED IN BUILD, 2026-08-26 (Batch 1).** Seven manifests are seeded,
+   > not two: those plus `received` / `reconciled` ones back-filled for the
+   > pickups already at processed / recovered / certified. Without them the seed
+   > contradicts AD5 — those pickups would have reached a recycler via nothing —
+   > and `/trace/[traceId]` would show a certified battery whose custody chain
+   > stops at the hub. Grouped by (target status, recycler) **across** pickups.
+   > Ids `…401`–`…407` are pinned; `scripts/smoke.mjs` points at `…401`.
 6. **Two or three open `ItemException` rows.**
 7. `eprRegNo` + `marginTier` on the vendor profiles.
 8. 🔴 **One reactivated pickup** — `cancelled → requested` **carrying a stale `agentId` and `agentFeePaise`**. This is the loose end `CLAUDE.md` flags in red, and Batch 3 is where it finally gets handled.

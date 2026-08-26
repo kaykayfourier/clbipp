@@ -66,15 +66,38 @@ model BatteryDiagnostic {
 }
 
 model MarketPrices {
-  id        String   @id @default(uuid())
-  Li        Decimal  @map("Li_price")
-  Co        Decimal  @map("Co_price")
-  Ni        Decimal  @map("Ni_price")
-  Mn        Decimal  @map("Mn_price")
-  Cu        Decimal  @map("Cu_price")
-  Al        Decimal  @map("Al_price")
+  id String  @id @default(uuid())
+  Li Decimal @map("Li_price")
+  Co Decimal @map("Co_price")
+  Ni Decimal @map("Ni_price")
+  Mn Decimal @map("Mn_price")
+  Cu Decimal @map("Cu_price")
+  Al Decimal @map("Al_price")
+
+  // ── Admin console (admin_app_v1, W6) ──────────────────────────────────────
+  // The market feed screen (C02) shows all four of these and none existed.
+  //
+  // `fxRateUsdInr` replaces the hardcoded 83.2 at packages/core/src/market.ts.
+  // 🔴 The default is that exact number ON PURPOSE: the engine echoes the rate
+  // into its audit output and does no arithmetic with it (metal_price is
+  // already ₹/kg), so seeding anything else would change what a quote SAYS it
+  // was priced against. No price moves.
+  //
+  // `source` is where the row came from — 'seed', 'manual-override', or a feed
+  // name once one exists. `createdBy` is the admin who typed an override, null
+  // for a machine-written row; W7's audit trail is AdminAudit, this is just the
+  // authorship stamp on the row itself.
+  fxRateUsdInr Decimal @default(83.2) @map("fx_rate_usd_inr") @db.Decimal(10, 4)
+  source       String?
+  note         String?
+  createdBy    String? @map("created_by") @db.Uuid
+
   updatedAt DateTime @default(now()) @map("updated_at")
 
+  author Profile? @relation(fields: [createdBy], references: [id])
+
+  // getMarketData() reads `findFirst orderBy updatedAt desc` on every quote.
+  @@index([updatedAt(sort: Desc)])
   @@map("market_prices")
 }
 
@@ -245,6 +268,34 @@ enum ManifestStatus {
   reconciled
 }
 
+// ── Admin console (admin_app_v1) ─────────────────────────────────────────────
+
+// The two engine decision flags an admin can be asked to clear (W4/AD4).
+// These are ENGINE flags, not pickup statuses — nothing here touches
+// PickupStatus, and there is deliberately no per-item status column (AD6).
+enum ExceptionKind {
+  hold
+  review
+}
+
+// How an admin closed an ItemException. Null resolution + null resolvedAt is
+// what "open" means; there is no separate open/closed column to drift.
+enum ExceptionResolution {
+  retest
+  override
+  reject
+}
+
+// 🔴 MUST stay in step with `keyof Config["margin_tiers"]` in
+// packages/decision-engine/src/decisionEngine/types.ts. The engine already
+// honours Config.supplier_margin_overrides (selection.ts) — it had nowhere to
+// persist, which is the whole of W11.
+enum MarginTier {
+  aggressive
+  standard
+  generous
+}
+
 // ── Models ───────────────────────────────────────────────────────────────────
 
 model Profile {
@@ -273,6 +324,19 @@ model Profile {
   // pickups.status vs status_events).
   walletBalancePaise Int @default(0) @map("wallet_balance_paise")
 
+  // ── Admin console (admin_app_v1, W11) ────────────────────────────────────
+  // Which margin tier the engine prices this supplier at. Read into
+  // Config.supplier_margin_overrides by the admin app; null means the tier in
+  // the active EngineConfig applies unchanged.
+  //
+  // ⚠ W11 also called for an `eprRegNo` column. NOT ADDED — `eprRegId` above is
+  // already that column and is wired end to end (the fleet signup form,
+  // onboarding, validation.ts, auth.ts's select list, grants.sql's writable
+  // allowlist, and the vendor profile screen). A second column would start null
+  // for every real vendor and guarantee drift. The admin Suppliers screen reads
+  // `eprRegId`. See "Batch 1 — as built" in docs/ADMIN_TASKS.md.
+  marginTier MarginTier? @map("margin_tier")
+
   // agent-only (null for customer/admin) — used by the Agent app
   agentZone       String?   @map("agent_zone")
   agentVehicle    String?   @map("agent_vehicle")
@@ -293,6 +357,13 @@ model Profile {
   walletTxns      WalletTxn[]
   invoices        Invoice[]
   custodyBatches  CustodyBatch[]
+
+  // Admin console (admin_app_v1). Four separate relations, no @relation names
+  // needed — each points at a different model, so Prisma can tell them apart.
+  publishedConfigs   EngineConfig[]
+  adminAudits        AdminAudit[]
+  resolvedExceptions ItemException[]
+  marketOverrides    MarketPrices[]
 
   @@index([role])
   @@map("profiles")
@@ -467,9 +538,15 @@ model BatteryItem {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  pickup Pickup @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  pickup     Pickup          @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  exceptions ItemException[]
 
   @@index([pickupId])
+  // /quotes and /trace/[traceId] both look an item up by its engine run id.
+  // NOT unique: a flat-rate (non-li-ion) item has no traceId at all, and a
+  // re-quote of the same item would reuse one. pathway_decisions.trace_id is
+  // the unique side of that join.
+  @@index([traceId])
   @@map("battery_items")
 }
 
@@ -793,4 +870,138 @@ model SafetyChecklist {
   pickup Pickup @relation(fields: [pickupId], references: [id])
 
   @@map("safety_checklists")
+}
+
+// ── Admin console (admin_app_v1) ─────────────────────────────────────────────
+// Three new tables, all written ONLY through the service role by the admin app.
+//
+// 🔴 RLS: all three are closed (AD3) — RLS enabled, ZERO policies, so an
+// `authenticated` session sees nothing. That is deliberate, not an oversight:
+// the admin app reads and writes through Prisma as the table owner (which
+// bypasses RLS) and its access boundary is the proxy guard plus in-code role
+// checks, the same posture as D10 for the agent app. The `enable row level
+// security` statements live in supabase/policies.sql with every other policy,
+// per the repo's Prisma-owns-structure / SQL-owns-RLS split.
+//
+// 🔴 `@default(uuid())` is a PRISMA-CLIENT default, not a database one. It
+// applies to `prisma.x.create()` and NOT to a raw service-role insert through
+// PostgREST — trap 3. Generate the id in the action for any non-Prisma write.
+
+// The published pricing configuration the engine runs against.
+//
+// APPEND-ONLY. Publishing writes a NEW row and deactivates the old one; a row
+// is never updated in place, because a quote already priced against v-n must
+// still be explainable after v-n+1 ships. `parentVersion` is what makes the
+// diff on the config screen (B02) possible.
+//
+// ⚠ TWO VERSION STRINGS, and they are not the same thing.
+//   `version`         — this row's PUBLISH identity, e.g. "v2026-08-26-r1".
+//   `config.config_version` — the ENGINE's own build stamp inside the JSON,
+//                             "v0.1.0-placeholder" in DEFAULT_CONFIG today.
+// The seeded row keeps DEFAULT_CONFIG byte-identical, so the two disagree on a
+// fresh seed. 🔴 Batch 11's getActiveConfig() has to decide which one the
+// engine's audit output should name — see "Batch 1 — as built" in
+// docs/ADMIN_TASKS.md. Do not "fix" it by rewriting the JSON here; that would
+// break the drift test that guarantees no price moves.
+model EngineConfig {
+  id String @id @default(uuid())
+
+  version  String  @unique
+  config   Json
+  // Exactly one row should be true. Enforced in the publish action (deactivate
+  // then insert, in one transaction), not by a partial unique index — Prisma
+  // cannot express one, and a raw index here would not survive a schema reset.
+  isActive Boolean @default(false) @map("is_active")
+
+  note          String?
+  publishedBy   String?  @map("published_by") @db.Uuid
+  publishedAt   DateTime @default(now()) @map("published_at")
+  parentVersion String?  @map("parent_version")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  publisher Profile? @relation(fields: [publishedBy], references: [id])
+
+  @@index([isActive])
+  @@index([publishedAt(sort: Desc)])
+  @@map("engine_configs")
+}
+
+// One table for every admin action worth answering for (W7).
+//
+// This is NOT StatusEvent. StatusEvent is pickup-lifecycle-only and keyed to a
+// pickup; config publishes, market overrides, exception resolutions, margin
+// changes and dispatch assignments have no pickup, or have one only
+// incidentally. Both are append-only; neither replaces the other.
+//
+// `action` is a STRING, not an enum, for two reasons: the values are dotted
+// (`pickup.assign`) and so are not legal Prisma enum identifiers, and a ninth
+// action should not cost a migration. The closed vocabulary lives in
+// packages/core/src/audit.ts as `ADMIN_AUDIT_ACTIONS` — 🔴 write rows through
+// that type, never a bare string literal.
+model AdminAudit {
+  id String @id @default(uuid())
+
+  actorId String @map("actor_id") @db.Uuid
+  action  String
+
+  // e.g. ("pickup", "PKP-2026-000101") or ("engine_config", "<uuid>").
+  subjectType String @map("subject_type")
+  subjectId   String @map("subject_id")
+
+  // The changed fields only, not the whole row. A config publish stores the
+  // parent version and the new one, not two 4KB blobs.
+  before Json?
+  after  Json?
+  // Required by the caller for lifecycle.override (B06) — the schema keeps it
+  // nullable because most actions do not need one.
+  reason String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // No onDelete: the actor must not be able to disappear out of an audit trail.
+  // Prisma's default (Restrict) is exactly right here — leave it alone.
+  actor Profile @relation(fields: [actorId], references: [id])
+
+  @@index([createdAt(sort: Desc)])
+  @@index([subjectType, subjectId])
+  @@index([actorId])
+  @@map("admin_audits")
+}
+
+// An engine HOLD or REVIEW flag, and what an admin did about it (W4/AD4).
+//
+// 🔴 This is per BATTERY ITEM, not per pickup, and it is NOT a status. The
+// engine flags an item; a pickup carrying a flagged item still sits at whatever
+// lifecycle stage it reached. There is deliberately no per-item status column
+// (AD6) and no new PickupStatus value (AD4).
+//
+// "Open" is `resolvedAt IS NULL`. There is no open/closed boolean to drift out
+// of step with the resolution fields.
+model ItemException {
+  id String @id @default(uuid())
+
+  batteryItemId String        @map("battery_item_id")
+  kind          ExceptionKind
+  // Machine-readable trigger, e.g. "soh_below_gate" / "damage_score_high" /
+  // "bms_anomaly". `detail` is the human sentence next to it on D02.
+  cause         String
+  detail        String?
+
+  openedAt DateTime @default(now()) @map("opened_at")
+
+  resolution ExceptionResolution?
+  resolvedBy String?              @map("resolved_by") @db.Uuid
+  resolvedAt DateTime?            @map("resolved_at")
+  notes      String?
+
+  batteryItem BatteryItem @relation(fields: [batteryItemId], references: [id], onDelete: Cascade)
+  resolver    Profile?    @relation(fields: [resolvedBy], references: [id])
+
+  @@index([batteryItemId])
+  // /exceptions filters to the open ones first; this is the index that read
+  // uses. Nulls sort last on a DESC index in Postgres, so open rows are not at
+  // the front of it — the screen filters, it does not rely on ordering.
+  @@index([resolvedAt])
+  @@map("item_exceptions")
 }

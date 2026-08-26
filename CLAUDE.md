@@ -60,10 +60,14 @@ monorepo** (migrated 2026-08-09):
    "Dispatch" below.
 3. **Admin console** — `apps/admin` — **CURRENT SPRINT** (from 2026-08-25).
    Runs on **port 3002** (`npm run dev:admin`). All three can run at once.
-   **Batch 0 is built** (2026-08-26): the app scaffold, the auth gate, the
-   `ConsoleShell` desktop chrome, `/login`, **all 22 routes as stubs**, and
-   `npm run smoke -- --app=admin`. Every screen is still a heading with no data
-   access, and **both lifecycle holes below are still open.**
+   **Batches 0 and 1 are built** (2026-08-26):
+   **0** the app scaffold, the auth gate, the `ConsoleShell` desktop chrome,
+   `/login` and **all 22 routes as stubs** · **1** the `admin_app_v1` migration
+   (`EngineConfig`, `AdminAudit`, `ItemException`, `MarginTier`, W6's market
+   columns) **applied to the shared project**, and the seed delta — all eight
+   §3 fixtures plus seven manifests and a consistent audit trail.
+   Every screen is still a heading with no data access, and **both lifecycle
+   holes below are still open.**
 
 ```
 apps/customer            the customer app (Next.js App Router)
@@ -425,7 +429,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 214 (core 152, auth 40, engine 22)
+npm run test         # All tests (Vitest) — currently 220 (core 153, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -446,8 +450,17 @@ npm run smoke -- --blocked admin@test demo1234                      # admin  ✗
 cd packages/core && npx vitest run src/booking.test.ts
 
 # Database
-npm run db:migrate --workspace=@clbipp/database        # Apply schema changes
+# ⚠ `db:migrate` runs `prisma migrate dev`, which can offer to RESET the shared
+# project. Against the shared database use `prisma migrate deploy` instead —
+# generate the SQL with `prisma migrate diff`, hand-annotate it the way every
+# migration in this repo is, and deploy. See Admin Batch 1's as-built notes.
+npm run db:migrate --workspace=@clbipp/database        # Apply schema changes (LOCAL/new DB)
 npm run reset-demo                                     # Wipe + reseed the demo data
+# Assert the seeded FIXTURES still have the shape the next batch is built
+# against — 21 checks, read-only, non-zero exit. `smoke` proves a route renders
+# and `test` proves pure logic; neither can catch a fixture quietly vanishing.
+# 🔴 Run it after every reseed, and add a check when you add a fixture.
+npm run verify-seed                                    # Verify the demo fixtures
 
 # Dispatch: assign a `requested` pickup to an agent, i.e. `requested →
 # scheduled` + set agentId. The CLI stopgap until the admin app's dispatch board
@@ -551,8 +564,12 @@ keeps every lane moving in parallel without anyone touching another's files.
 - `docs/BATCH_0B_SCHEMA.md` — reference for what every schema-v2 model means.
   **Already executed** (2026-08-09) — read it, don't run it.
 - `packages/database/prisma/schema.prisma` — the real schema (Profile, Pickup,
-  StatusEvent, Certificate). Read before writing any RLS policy or auth code
-  that touches these tables. Owned by Person B — don't edit directly.
+  StatusEvent, Certificate, and since `admin_app_v1` EngineConfig / AdminAudit /
+  ItemException). Read before writing any RLS policy or auth code that touches
+  these tables. Owned by Person B — don't edit directly. ⚠ **The three admin
+  tables are RLS-enabled with ZERO policies** (AD3): closed to `authenticated`,
+  reachable only through Prisma (table owner) and the service role. That is
+  deliberate — never `disable row level security` to "fix" a read.
 - `docs/DecisionSystemBreakdown.pdf` — the engine spec. **Relevant this sprint**
   (Batch 4). Where it and the HR documents disagree, the HR documents win (D0).
 - `docs/CLBIPP_Vendor_Build_Plan.pdf` — the full granular build plan (screen
@@ -616,6 +633,11 @@ letter means different things in each. **Quote the decision with its app.**
   `updatePhone` in `profile/actions.ts` is the pattern. Use Prisma for profile
   data only when you genuinely need a transaction, and then re-enforce ownership
   in code.
+- **`AdminAudit.action` and `.subjectType` come from `@clbipp/core/audit`** —
+  never a bare string literal. The column is a `String` because the values are
+  dotted (`pickup.assign`) and so cannot be a Prisma enum; `ADMIN_AUDIT_ACTIONS`
+  is what keeps it a closed set. `isReasonRequired()` says which actions must
+  carry a typed reason. Same subpath-import reasoning as `@clbipp/core/format`.
 - **CO₂e factors live only in `packages/core/src/impact.ts`** — never write CO₂
   arithmetic in a screen or a seed. ⚠ **The values there are a placeholder and
   the citations are unverified** (only the relative ordering is defensible) —

@@ -780,12 +780,18 @@ const AGENT_LOGIN_ISOLATION = {
 const ADMIN_REQUESTED = 'PKP-2026-000101' // seeded `requested`, no agent — the
 //                                            dispatch board's own demo row
 const ADMIN_PICKUP = 'PKP-2026-000102' // seeded `scheduled`, 3 mixed items
-// TODO: no DispatchManifest or trace_id fixture exists yet — B's Batch 1 seeds
-// the first ones (§3 fixtures 4 and 5). Until then these two exercise the
-// router and the shell only, which is all a stub can prove anyway. Swap them
-// for the seeded ids when Batch 1 lands.
+// Real seeded rows since Admin Batch 1 (2026-08-26) — the Batch 0 placeholders
+// are gone. Both ids are PINNED in reset-demo.ts so a reseed cannot move them.
+//
+// 401 is the first manifest generated: the DISPATCHED li-ion one. It is the
+// manifest fixture 4 turns on — PKP-2026-000113 has an item on it and another
+// item on a `draft` manifest, so 🔴 confirming this manifest must NOT advance
+// that pickup (AD6). Batch 7 is where that gets tested for real.
 const ADMIN_MANIFEST = '00000000-0000-4000-8000-000000000401'
-const ADMIN_TRACE = 'TRC-2026-0847'
+// PKP-2026-000113's li-ion item. Its OTHER item is flat-rate lead-acid and has
+// no trace at all — which is the point of the fixture, and why no admin table
+// may be keyed on trace_id.
+const ADMIN_TRACE = 'TRC-2026-1130'
 
 const ADMIN_ROUTES = [
   // B · Operations

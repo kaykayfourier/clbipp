@@ -17,6 +17,7 @@
     "db:generate": "turbo run db:generate",
     "db:migrate": "npm run db:migrate --workspace=@clbipp/database",
     "reset-demo": "npm run reset-demo --workspace=@clbipp/database",
+    "verify-seed": "npm run verify-seed --workspace=@clbipp/database",
     "smoke": "node scripts/smoke.mjs",
     "assign-job": "npm run assign-job --workspace=@clbipp/database --"
   },

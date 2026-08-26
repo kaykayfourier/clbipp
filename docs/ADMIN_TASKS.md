@@ -68,6 +68,17 @@ Every one of these has already cost this team an hour, in an earlier sprint.
     `scripts/smoke.mjs` fetches HTML, it does not run a browser. Assert on the
     always-present trigger (its `aria-label`) and put the click itself in
     `docs/MANUAL_TEST_QUEUE.md`.
+20. **Postgres `jsonb` does not preserve key order.** *(Batch 1.)* It stores keys
+    sorted by length then bytewise, so a `JSON.stringify(row.config) ===
+    JSON.stringify(SOURCE)` check on `EngineConfig.config` fails even when every
+    value is identical. Compare by VALUE. This cost a false "the seed is broken"
+    the first time `verify-seed` ran.
+21. 🔴 **A `Json?` Prisma column cannot be written as bare `null`.** *(Batch 1.)*
+    Prisma distinguishes SQL NULL (`Prisma.DbNull`) from the JSON value `null`
+    (`Prisma.JsonNull`), and `null` is a type error. Omit the field, or pick one
+    deliberately. `AdminAudit.before` / `.after` are the columns this hits.
+22. **`profiles` has an EPR column already, and it is `epr_reg_id`.** *(Batch 1.)*
+    §3/W11 say to add `eprRegNo`. Do not — see deviation 2 below.
 
 ---
 
@@ -155,11 +166,16 @@ One migration: **`admin_app_v1`**. Read `docs/ai-prompts/database-create-migrati
    Both carry a `TODO` there. Until then those two admin routes exercise the
    router and the shell only. *(Batch 0 contract 2.)*
 
-**Done when**
-- [ ] `npm run db:migrate` and `npm run reset-demo` both green.
-- [ ] The `EngineConfig` drift test passes. 🔴 **No existing test's expected price changed.**
-- [ ] `/dispatch` would have ≥3 unassigned rows; three recyclers exist with non-overlapping chemistries.
-- [ ] Grants re-applied after the reseed. *(trap 7)*
+**Done when** — ✅ **all met, 2026-08-26. See "Batch 1 — as built" at the foot
+of this file.**
+- [x] `npm run db:migrate` and `npm run reset-demo` both green.
+      — in the event `prisma migrate deploy`, not `migrate dev`; see deviation 1.
+- [x] The `EngineConfig` drift test passes. 🔴 **No existing test's expected price changed.**
+- [x] `/dispatch` would have ≥3 unassigned rows; three recyclers exist with non-overlapping chemistries.
+- [x] Grants re-applied after the reseed. *(trap 7)* — plus `policies.sql`,
+      `storage-policies.sql`, `realtime.sql`, in that order.
+- [x] **New: `npm run verify-seed` is green — 21 checks, every §3 fixture by
+      number.** Added this batch; see deviation 6.
 
 ---
 
@@ -542,3 +558,195 @@ package.json (root)                           "dev:admin"
 
 - [ ] `/pickups` reads `searchParams.q` and filters on it — the topbar search box
       in `ConsoleShell` posts there. See Batch 0 as-built, contract 1.
+
+---
+
+## Batch 1 — as built · 2026-08-26 · **A (Aamir), covering B's lane**
+
+**Green.** `npm run build` (all three apps, all three proxies registered) ·
+`npm run lint` · `npm run test` **220 passing** (core 153, auth 40, engine 27 —
+was 214) · `npm run smoke` **22 / 30 / 46** on admin / agent / customer ·
+**all six role-gate directions bounce** · `npm run verify-seed` **21/21**.
+
+The migration is applied to the shared project and the demo data is reseeded.
+Nothing is blocked: C can build Batch 2 and 5 against real rows, and Batch 3's
+dispatch board has a board to render.
+
+### What shipped
+
+```
+packages/database/prisma/schema.prisma                     3 models, 3 enums, 2 altered tables
+packages/database/prisma/migrations/20260826182031_admin_app_v1/  the migration
+packages/database/prisma/reset-demo.ts                     all 8 §3 fixtures + manifests + audit
+packages/database/prisma/verify-seed.ts                    NEW — 21 fixture assertions
+packages/database/package.json                             + @clbipp/decision-engine, verify-seed
+packages/core/src/audit.ts                                 NEW — the closed audit vocabulary
+packages/core/src/market.ts                                fx rate read from the row, not a constant
+packages/core/src/market.test.ts                           mock updated + one real new assertion
+packages/core/package.json                                 + "./audit" subpath
+packages/decision-engine/src/decisionEngine/defaults.test.ts  NEW — the drift guard, 5 tests
+supabase/policies.sql                                      the three new tables CLOSED
+scripts/smoke.mjs                                          Batch 0's two placeholder ids swapped
+package.json (root)                                        "verify-seed"
+```
+
+### Deviations from this sheet, and why
+
+1. **`prisma migrate deploy`, not `migrate dev`.** `migrate dev` can decide the
+   database has drifted and offer to RESET it — on the one shared Supabase
+   project, with two other people working in it. The migration SQL was generated
+   with `prisma migrate diff` (so it is exactly what Prisma would have written),
+   hand-annotated with a header the way every other migration in this repo is,
+   and applied with `deploy`, which never resets. **Use `deploy` for the rest of
+   this sprint.** `npm run db:migrate` still points at `migrate dev`; left alone
+   rather than changed under B's feet, but do not run it against the shared
+   project without reading this first.
+
+2. 🔴 **`Profile.eprRegNo` was NOT added, though §3 and W11 both call for it.**
+   W11 says "`Profile` has no `eprRegNo`" and that is simply not true: `Profile`
+   already has **`eprRegId`**, wired end to end — the fleet signup form,
+   `/onboarding`, `validation.ts` (two schemas), `auth.ts`'s select list,
+   `grants.sql`'s writable-column allowlist, and the vendor's own profile
+   screen. It is seeded as `CPCB/EPR/PROD/2024/0091`. A second column would
+   start null for every real vendor, so the Suppliers screen would render an
+   empty column while the value sat one column over. **The Suppliers screen
+   (D-group) reads `eprRegId`.** Approved by Aamir before the schema was
+   touched. `Profile.marginTier` — W11's other half — was added as specified.
+
+3. **The manifest history goes deeper than fixture 5 asks.** §3 wants one
+   `dispatched` + one `draft`. Seven are seeded: those two plus `received` and
+   `reconciled` manifests generated for the pickups already at
+   processed / recovered / certified. Without them AD5's "a pickup only reaches
+   `processed` via a confirmed manifest" is contradicted by the seed itself, and
+   `/trace/[traceId]` would show a certified battery whose custody chain stops
+   at the hub. Grouped by **(target status, recycler) across pickups**, which is
+   what a real consolidated manifest looks like. Approved by Aamir up front.
+
+4. **`AdminAudit` rows are seeded (8 of them), which §3 does not ask for.**
+   `/audit` would otherwise be empty for the whole sprint. Every row points at a
+   row this seed actually created — the config publish, each dispatched
+   manifest, the one resolved exception — so the log is *consistent* with the
+   seeded world rather than invented next to it.
+
+5. **`packages/core/src/audit.ts` is new, and is not on any batch's file list.**
+   `AdminAudit.action` is a `String` column (the values are dotted, so a Prisma
+   enum is impossible). Eight bare string literals spread across Batches 3, 6, 7
+   and 9 is how an audit log ends up with typo-variants that make every
+   `where: { action }` read under-count. `ADMIN_AUDIT_ACTIONS`,
+   `AdminAuditSubject` and `isReasonRequired()` live there now. 🔴 **Batches 3,
+   6, 7 and 9: import from `@clbipp/core/audit`, never type the string.**
+
+6. **`npm run verify-seed` is new.** `smoke` proves a route renders and `test`
+   proves pure logic; neither can say the seeded fixtures still have the shape
+   the next batch is built against. Fixture 4 is the row that catches a wrong
+   AD6 implementation and fixture 8 is the row that catches dispatch ignoring a
+   stale agent — a reseed silently dropping either would let a real bug through
+   Batch 3 and Batch 7 with everything green. 21 assertions, read-only,
+   non-zero exit. **Add a check when you add a fixture.**
+
+7. **`packages/core/src/market.ts` now reads the FX rate from the row.** One
+   line, and it is the point of W6's `fxRateUsdInr` column. 🔴 Price-neutral and
+   verified so: the column defaults to **83.2**, the seed writes 83.2, and that
+   is the exact constant the file hardcoded before — and the engine does no
+   arithmetic with the rate at all, it only echoes it into the audit output.
+   The old test asserted "fx is a positive number", which passed identically
+   whether or not the column was read; there is now one that asserts the value.
+
+8. **`packages/database` may import `@clbipp/decision-engine`.** New dependency,
+   added so the seeded `EngineConfig` can be `DEFAULT_CONFIG` itself rather than
+   a retyped copy (step 6). No cycle: decision-engine has no dependencies at
+   all. ⚠ **`packages/database` still must not import `packages/core`** — that
+   one *is* a cycle, which is why the CO₂e factors, the invoice number format,
+   the safety-checklist keys and now the li-ion chemistry list are all still
+   restated by hand in `reset-demo.ts`.
+
+9. **The seeded recycler was renamed and narrowed.** It used to be a real Indian
+   company's name carrying a CPCB registration number we made up. The three now
+   seeded are deliberately not real firms. They also have **non-overlapping**
+   `acceptedChemistries`, which is what lets AD7 fail — a single recycler that
+   accepts everything makes that rule impossible to test. Nothing read the
+   `recyclers` table before this batch, so the rename cost nothing.
+
+### 🔴 What the next batches must know
+
+1. **CONTRACT WITH BATCH 3 (A) — fixture 8 is waiting for you.**
+   `PKP-2026-000114` sits at `requested` **with `agentId` and `agentFeePaise`
+   still set**, because `reschedulePickup` voids `Offer.acceptedAt` and nothing
+   else. Two things follow, and `verify-seed` asserts both:
+   - `/dispatch` must not assume `status: 'requested'` implies `agentId: null`.
+     Filtering on `agentId: null` **hides this row entirely** — the pickup
+     becomes invisible to dispatch *and* stuck. Assign must **clear the stale
+     agent and fee** before writing the new ones.
+   - It shows up in the **agent app's day view today**, which queries
+     `where: { agentId: user.id }` with no status floor
+     (`apps/agent/src/app/(agent)/page.tsx`). `isActiveJob('requested', null)` is
+     `true`, so it lands in the ACTIVE list reading "In recovery — nothing to
+     do" — a job the agent can neither start nor get rid of. Not a new bug; the
+     seed just made it visible for the first time.
+
+2. **CONTRACT WITH BATCH 7 (A) — fixture 4 is the row that fails you.**
+   `PKP-2026-000113` has two items: the li-ion one is on manifest **`…401`
+   (`dispatched`)** and the lead-acid one is on **`…402` (`draft`)**.
+   🔴 `confirmManifestReceived('…401')` **must not advance PKP-2026-000113** —
+   half its load is still at the hub. Every other seeded pickup lets the naive
+   "advance the pickups on this manifest" implementation pass. This one does
+   not. Its lead-acid item also has **no `traceId`**, so a table keyed on
+   `trace_id` drops it silently.
+
+3. **CONTRACT WITH BATCH 11 (B) — 🔴 two version strings, and someone must pick.**
+   `EngineConfig.version` is `"v2026-08-26-r1"` (the row's publish identity);
+   `config.config_version` inside the JSON is `"v0.1.0-placeholder"` (the
+   engine's own build stamp). They disagree on a fresh seed, deliberately —
+   §3 says the row is byte-identical to `DEFAULT_CONFIG` and the drift test
+   enforces it. The engine echoes `config_version` into every quote's audit
+   output, so **`getActiveConfig()` has to decide which one a quote should name.**
+   Recommended: return `{ ...row.config, config_version: row.version }`, so the
+   audit trail names the *published* config. 🔴 **Do not fix this by editing
+   `defaults.ts` — that moves every existing quote's audit trail.**
+
+4. **CONTRACT WITH BATCH 12 (B) — the market feed screen has its columns now.**
+   `fxRateUsdInr` (83.2), `source` (`'seed'`), `note`, `createdBy` (null — a
+   seeded row has no human author). 🔴 An override must write `createdBy` **and**
+   an `AdminAudit` row with `market.override`; `isReasonRequired()` says a reason
+   is mandatory for it.
+
+5. **Nine manifests' worth of ids are pinned.** `…401` through `…407`, numbered
+   in generation order: dispatched (nickel, lead→forced `draft`, lfp), then
+   received, then reconciled. `scripts/smoke.mjs` points `/manifests/[id]` at
+   `…401`. Reordering `RECYCLERS` or `MANIFEST_STAGE` in the seed **renumbers
+   them all** and breaks that assertion.
+
+6. **Every li-ion item past `collected` now has a `traceId`**
+   (`TRC-2026-<3-digit serial><item index>`), and **no flat-rate item has one**.
+   `pathway: 'recycle'` is set on every confirmed item too. What is still NOT
+   seeded is `quoteData` — running the engine in the seed needs BMS fields no
+   screen collects (the Batch 5a workaround), so `/quotes` and `/trace` get
+   pathway + prices but no engine breakdown. Left for whoever builds C's
+   traceability screen to decide whether that is enough.
+
+7. **`PathwayDecision` rows are still not seeded.** `BatteryItem.traceId` points
+   at nothing on the `pathway_decisions` side. Seeding them needs
+   `packId` / `inspectionId` / `factorConfigId` FKs into the old single-pack
+   test harness, which has zero rows and no defined mapping onto
+   Pickup → BatteryItem — the exact reason `BatteryItem.quoteData` exists as a
+   workaround. Unchanged by this batch, and still the open question that
+   workaround's TODO names.
+
+### Notes for later, deliberately not done now
+
+- 🟠 **`actorRole` has two spellings for one role.** Every seeded vendor event
+  says `'customer'`; `reschedulePickup` in the customer app writes `'vendor'`.
+  Fixture 8 reproduces the live behaviour rather than normalising it, so the
+  seed looks like production. **Whoever builds the audit-log screen has to
+  handle both**, or pick one and migrate. Worth a one-line fix in
+  `handover/actions.ts` plus a data migration; not scheduled.
+- **Nobody accepts `nimh` or `other`.** No recycler's `acceptedChemistries`
+  covers them, and no seeded item uses them. That is the AD7 gate having
+  something real to reject, not a gap — but a real item with either chemistry
+  would be un-manifestable, which is a conversation for the company, not a bug.
+- **Seeded manifest timestamps are indicative, not a reconstructed audit.** They
+  are derived from the most recent pickup on the manifest walking the same
+  one-stage-per-day clock the status-event loop uses. Do not read one as
+  evidence of anything; a real manifest is stamped by the action that writes it.
+- **`npm run db:migrate` still runs `migrate dev`.** See deviation 1. Changing
+  it is B's call.

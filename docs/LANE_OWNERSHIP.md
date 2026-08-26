@@ -606,6 +606,57 @@ say so here first.
 
 ---
 
+## 2026-08-26 — Admin Batch 1 (schema + seed delta) · **B's lane, done by A (Aamir)**
+
+**Taken, not waited on.** Batch 1 is B's per §4 of `PLAN_ADMIN_APP.md`. Nothing
+in the sprint could start against real data without it — C's Batch 2 kit needs
+rows and Batch 3's dispatch board needs a board — so A built it the same day
+Batch 0 landed. Do-it-and-note-it, per the 2026-08-20 policy. **B: read
+"Batch 1 — as built" in `ADMIN_TASKS.md` before touching any of it.**
+
+**Files A took in B's lane:** `packages/database/prisma/schema.prisma`, the
+`admin_app_v1` migration, `prisma/reset-demo.ts`, `packages/core/src/market.ts`
++ its test, and a new `packages/core/src/audit.ts`. Plus A's own
+`supabase/policies.sql` and `scripts/smoke.mjs`.
+
+**Both contracts Batch 0 left open are now closed:**
+- ✅ **The two `scripts/smoke.mjs` placeholders are gone.** `ADMIN_MANIFEST` is
+  the real pinned `…401` and `ADMIN_TRACE` is `TRC-2026-1130`, both seeded.
+- ⏳ The `/pickups?q=…` contract on C's Batch 5 is untouched and still open.
+
+**Three judgement calls worth disagreeing with, if you do:**
+
+1. 🔴 **`Profile.eprRegNo` was not added.** §3 and W11 both call for it, and
+   both are wrong on the facts — `epr_reg_id` already exists and is wired
+   through signup, onboarding, validation, grants and the profile screen.
+   Approved by Aamir before the schema was touched. **The Suppliers screen reads
+   `eprRegId`.** If you want the second column anyway, say so here first: it
+   needs a backfill and a `grants.sql` allowlist entry, neither of which exists.
+
+2. **Seven manifests, not §3's two**, and eight seeded `AdminAudit` rows §3 does
+   not ask for. Both exist so the seeded world is internally consistent: without
+   them, pickups already at `processed`+ reached a recycler via nothing, and the
+   audit log accounts for none of the admin actions the rest of the seed depicts.
+
+3. **`packages/core/src/audit.ts` is new and on nobody's file list.** It is the
+   closed vocabulary for `AdminAudit.action` (a `String` column — the values are
+   dotted, so a Prisma enum is impossible). 🔴 **Batches 3, 6, 7 and 9 must
+   import from `@clbipp/core/audit` rather than typing the eight strings.**
+
+**Also taken, and worth naming:** `npm run verify-seed` is new
+(`packages/database/prisma/verify-seed.ts`, 21 assertions over the §3 fixtures).
+It is not in any lane because it did not exist. Whoever adds a fixture adds a
+check.
+
+**One thing the shared database now carries that everyone should know:** the
+`admin_app_v1` migration is **applied** and the demo data is **reseeded**
+(2026-08-26). Grants, policies, storage-policies and realtime were re-applied in
+that order afterwards. If your local Prisma client is stale, `npm run db:generate`.
+⚠ **Use `prisma migrate deploy`, not `migrate dev`, against the shared project**
+— `migrate dev` can offer to reset it. See deviation 1 in the as-built notes.
+
+---
+
 ## Superseded policy (2026-06-27 → 2026-08-20) — kept for the record
 
 Entries logged above under dates before 2026-08-20 were made under this rule,

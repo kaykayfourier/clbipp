@@ -341,3 +341,33 @@ using (
     select id from pickups where agent_id = (select auth.uid())
   )
 );
+
+-- ===========================================================================
+-- Admin console (Batch 1, 2026-08-26) — three CLOSED tables. No policies.
+-- ===========================================================================
+-- AD3: the admin app reads and writes through Prisma with the service role and
+-- has NO RLS policies at all. Its access boundary is `apps/admin/src/proxy.ts`
+-- plus in-code role checks — the same posture as D10 for the agent app.
+--
+-- So why are these three lines here at all, if there is no policy to write?
+--
+-- 🔴 Because a table created by a Prisma migration has RLS **OFF**, and
+-- supabase/grants.sql hands `authenticated` SELECT/INSERT/UPDATE/DELETE on
+-- every table in `public` (including future ones, via `alter default
+-- privileges`). RLS-off + that grant means any logged-in vendor's own JWT can
+-- read all three of these through PostgREST. `engine_configs` is the entire
+-- margin structure of the business; `admin_audits` is the record of who
+-- changed it. Enabling RLS with zero policies is what closes them: Postgres
+-- denies every row to every non-owner, non-service role by default.
+--
+-- Enabling RLS does NOT affect the admin app: Prisma connects as the table
+-- OWNER (which bypasses RLS unless `force row level security` is set) and the
+-- service role bypasses it outright. Exactly the same reasoning as the
+-- market_prices / pathway_* block above.
+--
+-- ⚠ If a future batch ever needs a vendor to read one of these, the fix is a
+-- narrow SELECT policy here — never `disable row level security`.
+-- ---------------------------------------------------------------------------
+alter table engine_configs enable row level security;
+alter table admin_audits enable row level security;
+alter table item_exceptions enable row level security;

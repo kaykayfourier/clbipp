@@ -302,6 +302,41 @@ What is left needs a browser or a human eye.
     cannot access this app."** — the proxy sets it, and it is the only feedback a
     wrong-role user ever gets.
 
+19. 🔴 **The reactivated pickup in the AGENT app.** Log in to `:3001` as
+    `agent@test`. `PKP-2026-000114` (Peeragarhi) should appear on the day view's
+    **active** list reading "In recovery — nothing to do" — a job the agent can
+    neither start nor dismiss. That is Admin Batch 1 fixture 8 making a real,
+    already-existing bug visible for the first time (a reactivated pickup keeps
+    its `agentId`). **Confirm it is ugly but harmless — nothing 500s, nothing
+    lies about money.** It should stop appearing once Batch 3's dispatch board
+    clears the stale agent on assignment.
+
+20. **Its timeline reads forwards even though the log runs backwards.** Open
+    `/pickups/PKP-2026-000114` in the agent app, or `/track/PKP-2026-000114` in
+    the customer app as `business@test`. The `status_events` rows genuinely go
+    requested → scheduled → arrived → offered → **cancelled** → **requested**,
+    with that last one dated most recently. `buildStages` is first-wins, so the
+    timeline should still show each stage at the date it was FIRST reached.
+    Confirm it does not render a second "Requested" row or relabel anything.
+
+21. **`/offer` and `/handover` do not loop for it.** Same pickup, customer app.
+    Its `Offer` row survives with `acceptedAt` **null** (voided by
+    `reschedulePickup`) while the pickup is back at `requested`. Confirm neither
+    screen redirects into the other — the two guards redirect off that one
+    field and a wrong read makes them ping-pong forever.
+
+22. **The seeded manifests read sensibly once C's screens land.** `/manifests`
+    should show 7 rows: 1 draft, 2 dispatched, 2 received, 2 reconciled. The
+    draft one (`MFT-2026-000402`, Sunrise Lead) is the deliberate gap that keeps
+    `PKP-2026-000113` from advancing. ⚠ **Do not read the seeded manifest
+    timestamps as a reconstructed audit** — they are indicative.
+
+23. **A demo reads three fabricated recycler names.** Meridian Metals Recovery,
+    Sunrise Lead Recyclers, Verdant Cell Recovery, with invented CPCB numbers.
+    They deliberately are **not** real companies (the previous seed named a real
+    one). Before showing this to the company, decide whether to say so out loud
+    or ask them for real partner names.
+
 ---
 
 ## Standing checks for the end-of-sprint pass
@@ -314,3 +349,6 @@ What is left needs a browser or a human eye.
   no material-by-material ₹. The inverse rule is deliberate; the leak is not.
 - **Camera and gallery fallback** on a real phone, not a desktop browser.
 - The **offline / flaky-connection** behaviour of anything that writes.
+- **`npm run verify-seed` after any reseed** (added Admin Batch 1). 21 assertions
+  over the §3 fixtures, read-only, non-zero exit. It catches "the row the next
+  batch is built against quietly stopped existing", which no other check can.

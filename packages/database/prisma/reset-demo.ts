@@ -11,8 +11,21 @@
  * Run: npm run reset-demo
  */
 import { createClient } from "@supabase/supabase-js"
+// The engine's own defaults, imported rather than retyped — the seeded
+// `EngineConfig` row must BE `DEFAULT_CONFIG`, not a copy that can drift from
+// it (Admin Batch 1 step 6). Safe direction of dependency: decision-engine has
+// no dependencies at all, so `database → decision-engine` creates no cycle —
+// unlike `database → core`, which is why the CO₂e factors and the invoice
+// number format below are still restated by hand.
+import { DEFAULT_CONFIG } from "@clbipp/decision-engine"
 import { prisma } from "../src/client"
-import type { BatteryCategory, BatteryCondition, BatteryType, PickupStatus } from "../src/generated/client"
+import type {
+  BatteryCategory,
+  BatteryCondition,
+  BatteryType,
+  ManifestStatus,
+  PickupStatus,
+} from "../src/generated/client"
 import { loadAppEnv } from "./env"
 import { solidPng, PHOTO_COLOURS } from "./placeholder-image"
 
@@ -158,6 +171,13 @@ async function ensureAuthUser(
  */
 async function wipe() {
   await prisma.safetyChecklist.deleteMany()
+  // Admin console (admin_app_v1). item_exceptions cascades from battery_items
+  // anyway, but the order is stated rather than relied on — the other two hold
+  // FKs to `profiles`, which this function deliberately does NOT wipe (they
+  // match real auth users), so they must go before anything else touches it.
+  await prisma.itemException.deleteMany()
+  await prisma.adminAudit.deleteMany()
+  await prisma.engineConfig.deleteMany()
   await prisma.dispatchManifest.deleteMany()
   await prisma.invoice.deleteMany()
   await prisma.certificate.deleteMany()
@@ -222,9 +242,158 @@ const CONDITION_BP: Record<BatteryCondition, number> = {
  */
 const MARKET_PRICES = { Li: 1450, Co: 2600, Ni: 1550, Mn: 180, Cu: 780, Al: 240 }
 
+/**
+ * 🔴 The FX rate the engine records against every quote.
+ *
+ * MUST stay 83.2 unless someone deliberately moves it: that is the exact
+ * constant `packages/core/src/market.ts` hardcoded before admin_app_v1 added
+ * the column, and it is also the column's database default. The engine does no
+ * arithmetic with it — `metal_price` is already ₹/kg — it only echoes it into
+ * the audit output, so changing this changes what every quote SAYS it was
+ * priced against without changing the price. That is the worst kind of drift.
+ */
+const FX_RATE_USD_INR = 83.2
+
+/**
+ * The published pricing configuration, Admin Batch 1 fixture 1.
+ *
+ * ⚠ TWO VERSION STRINGS and they deliberately disagree. This is the ROW's
+ * publish identity; `DEFAULT_CONFIG.config_version` ("v0.1.0-placeholder") is
+ * the engine's own build stamp inside the JSON. The row stores DEFAULT_CONFIG
+ * byte-identical — a drift test in packages/decision-engine guards that, and
+ * 🔴 rewriting the JSON to reconcile the two would move every quote's audit
+ * trail. Batch 11's getActiveConfig() decides which one the engine should name.
+ */
+const ENGINE_CONFIG_VERSION = "v2026-08-26-r1"
+
+/**
+ * The three recyclers, Admin Batch 1 fixture 3.
+ *
+ * 🔴 `acceptedChemistries` are NON-OVERLAPPING on purpose. AD7 says a manifest
+ * may name only an `isActive` recycler whose accepted chemistries cover every
+ * item on it, enforced in the action and not just the picker — and a single
+ * recycler that takes everything (which is what this seed had until now) makes
+ * that rule impossible to fail, so it would never be tested. Chemistry-wise
+ * segregation is the whole reason one pickup's items end up on two manifests
+ * (AD6), which is fixture 4 below.
+ *
+ * ⚠ `nimh` and `other` are accepted by NOBODY. That is not an omission: it is
+ * the AD7 gate having something real to reject. No seeded item uses either.
+ *
+ * ⚠ The single recycler this replaces was a REAL Indian company's name carrying
+ * a CPCB registration number we invented. These three are deliberately not real
+ * firms — a demo should not attribute a fabricated regulatory registration to a
+ * company that exists. Nothing read the `recyclers` table before this batch, so
+ * the rename costs nothing.
+ */
+const RECYCLERS = [
+  {
+    key: "nickel",
+    name: "Meridian Metals Recovery Pvt Ltd",
+    cpcbRegNo: "CPCB/EPR/BW/2024/000418",
+    acceptedChemistries: ["li_ion_nmc", "li_ion_nca"] as BatteryType[],
+    capacityKg: 250000,
+  },
+  {
+    key: "lead",
+    name: "Sunrise Lead Recyclers Pvt Ltd",
+    cpcbRegNo: "CPCB/EPR/BW/2024/000572",
+    acceptedChemistries: ["lead_acid"] as BatteryType[],
+    capacityKg: 400000,
+  },
+  {
+    key: "lfp",
+    name: "Verdant Cell Recovery Pvt Ltd",
+    cpcbRegNo: "CPCB/EPR/BW/2025/000133",
+    acceptedChemistries: ["li_ion_lfp"] as BatteryType[],
+    capacityKg: 180000,
+  },
+] as const
+
+type RecyclerKey = (typeof RECYCLERS)[number]["key"]
+
+/** Which recycler takes which chemistry. The inverse of the table above. */
+const RECYCLER_FOR_CHEMISTRY: Partial<Record<BatteryType, RecyclerKey>> = {
+  li_ion_nmc: "nickel",
+  li_ion_nca: "nickel",
+  li_ion_lfp: "lfp",
+  lead_acid: "lead",
+  // nimh / other: deliberately unassigned. See the note on RECYCLERS.
+}
+
+/**
+ * The li-ion chemistries, i.e. the ones that take the engine path (D1).
+ *
+ * ⚠ MUST MATCH `LI_ION_CHEMISTRIES` in `packages/core/src/intake.ts`, which is
+ * the canonical list. Restated here for the same reason the CO₂e factors and
+ * the invoice number format are: `packages/database` must not depend on
+ * `packages/core` — core depends on database, and the cycle breaks the
+ * generated client's build.
+ *
+ * 🔴 This is what decides which seeded items get a `traceId`. A flat-rate
+ * (non-li-ion) item has NO trace, which is exactly the trap CLAUDE.md flags:
+ * an operational table keyed on `trace_id` silently drops half the data.
+ */
+const LI_ION: readonly BatteryType[] = ["li_ion_nmc", "li_ion_lfp", "li_ion_nca"]
+const isLithiumChemistry = (c: BatteryType) => LI_ION.includes(c)
+
+/**
+ * A stable `BatteryItem.traceId` for a demo item — the engine's own run id
+ * format is `TRC-YYYY-NNNN` (layers/intake.ts). Derived from the pickup serial
+ * and the item index for the same reason `demoItemId` is: `scripts/smoke.mjs`
+ * needs a `/trace/<id>` URL that survives a reseed.
+ *
+ * `PKP-2026-000113` item 0 → `TRC-2026-1130`.
+ */
+function demoTraceId(pickupId: string, index: number): string {
+  const serial = (pickupId.split("-").pop() ?? "0").slice(-3)
+  return `TRC-2026-${serial}${index}`
+}
+
 /** @returns the seeded hub facility — CustodyBatch needs its id. */
-async function seedReferenceData() {
-  await prisma.marketPrices.create({ data: MARKET_PRICES })
+async function seedReferenceData(adminId: string) {
+  await prisma.marketPrices.create({
+    data: {
+      ...MARKET_PRICES,
+      fxRateUsdInr: FX_RATE_USD_INR,
+      // W6: where the row came from and who typed it. A seeded row has no
+      // human author — `createdBy` is for a hand-entered override (C02).
+      source: "seed",
+      note: "Demo placeholders — right order of magnitude, not researched quotes.",
+    },
+  })
+
+  // ── The active EngineConfig (Admin Batch 1 fixture 1) ────────────────────
+  // 🔴 The margin tiers the engine prices against and the MarginTier enum a
+  // supplier's override is stored in are two declarations of one list, in two
+  // packages that cannot import each other. This is the only place both are in
+  // scope, so this is where they get compared. A mismatch here means
+  // Profile.marginTier can hold a value the engine has no tier for, and the
+  // failure would surface as a silently unapplied override on a real quote.
+  const engineTiers = Object.keys(DEFAULT_CONFIG.margin_tiers).sort()
+  const schemaTiers = ["aggressive", "generous", "standard"]
+  if (JSON.stringify(engineTiers) !== JSON.stringify(schemaTiers)) {
+    throw new Error(
+      `MarginTier drift: schema.prisma has [${schemaTiers}] but ` +
+        `DEFAULT_CONFIG.margin_tiers has [${engineTiers}]. Fix both, then reseed.`,
+    )
+  }
+
+  await prisma.engineConfig.create({
+    data: {
+      version: ENGINE_CONFIG_VERSION,
+      // Byte-identical to DEFAULT_CONFIG, imported not retyped. AD8: tiers 1
+      // and 2 are editable through B02; tier 3 (damage weights, damage bands,
+      // SoH gates) lives as literals in the engine's own code and no screen can
+      // move it. 🔴 No price moves on this seed.
+      config: DEFAULT_CONFIG as object,
+      isActive: true,
+      note: "Seeded from DEFAULT_CONFIG — the engine's own reference values, unmodified.",
+      publishedBy: adminId,
+      parentVersion: null,
+      publishedAt: day(30),
+    },
+  })
 
   await prisma.pricingRate.createMany({
     data: RATES.flatMap(([category, chemistry, ratePerKgPaise]) =>
@@ -248,16 +417,20 @@ async function seedReferenceData() {
     },
   })
 
-  await prisma.recycler.create({
-    data: {
-      name: "Attero Recycling Pvt Ltd",
-      cpcbRegNo: "CPCB/EPR/BW/2023/000418",
-      acceptedChemistries: ["li_ion_nmc", "li_ion_lfp", "li_ion_nca", "lead_acid"],
-      capacityKg: 250000,
-    },
-  })
+  const recyclerIds = {} as Record<RecyclerKey, string>
+  for (const r of RECYCLERS) {
+    const row = await prisma.recycler.create({
+      data: {
+        name: r.name,
+        cpcbRegNo: r.cpcbRegNo,
+        acceptedChemistries: [...r.acceptedChemistries],
+        capacityKg: r.capacityKg,
+      },
+    })
+    recyclerIds[r.key] = row.id
+  }
 
-  return facility
+  return { facility, recyclerIds }
 }
 
 // ─── Demo photos ──────────────────────────────────────────────────────────────
@@ -380,6 +553,23 @@ type PickupSpec = {
   notes?: string
   daysAgo: number
   items: ItemSpec[]
+
+  /**
+   * Admin Batch 1 fixture 8. The stage this pickup HAD reached before it was
+   * cancelled and then reactivated (`cancelled → requested`). Its `status` is
+   * `requested` again, but its history — safety checklist, offer, status
+   * events — is the history of everything it went through first.
+   *
+   * 🔴 Set this and the pickup keeps its `agentId` and `agentFeePaise`. That is
+   * not a seed bug, it is the loose end CLAUDE.md flags in red: `reschedulePickup`
+   * in the customer app voids `Offer.acceptedAt` but leaves both of those
+   * columns alone, so a live pickup can sit at `requested` with an agent still
+   * assigned to it. Batch 3's dispatch board is where it finally gets handled.
+   */
+  reactivatedFrom?: PickupStatus
+
+  /** Override for the derived preferred date — a reactivation picks a NEW one. */
+  preferredDateDaysAgo?: number
 }
 
 const PICKUPS: PickupSpec[] = [
@@ -522,6 +712,91 @@ const PICKUPS: PickupSpec[] = [
       { category: "portable", quantity: 10, weightKg: 5.1, condition: "healthy", chemistry: "li_ion_nmc" },
     ],
   },
+
+  // ── Admin Batch 1 fixtures ────────────────────────────────────────────────
+
+  {
+    // Fixture 2, row 1 of 2. `/dispatch` reading one unassigned pickup is a
+    // demo of a list with nothing to choose between; three is a board.
+    id: "PKP-2026-000111",
+    status: "requested",
+    category: "industrial",
+    location: "Bhiwadi Industrial Area, Rajasthan",
+    notes: "UPS bank decommissioned — needs a two-person lift.",
+    daysAgo: 1,
+    items: [
+      { category: "industrial", quantity: 12, weightKg: 480, condition: "healthy", chemistry: "lead_acid" },
+      { category: "industrial", quantity: 4, weightKg: 22, condition: "dead", chemistry: "li_ion_lfp" },
+    ],
+  },
+  {
+    // Fixture 2, row 2 of 2.
+    id: "PKP-2026-000112",
+    status: "requested",
+    category: "ev",
+    location: "Manesar Sector 8, Haryana",
+    notes: "Two-wheeler fleet swap — packs already crated.",
+    daysAgo: 2,
+    items: [
+      { category: "ev", quantity: 22, weightKg: 154, condition: "healthy", chemistry: "li_ion_nca" },
+    ],
+  },
+  {
+    // 🔴 FIXTURE 4 — the row that catches the wrong AD6 implementation.
+    //
+    // Two items, two chemistries, and under the non-overlapping recycler table
+    // above they go to two DIFFERENT recyclers on two DIFFERENT manifests: the
+    // li-ion nmc item onto the dispatched manifest, the lead-acid item onto a
+    // manifest still sitting at `draft`.
+    //
+    // So when Batch 7's confirmManifestReceived() runs on the dispatched
+    // manifest, this pickup MUST NOT advance — half its load is still at the
+    // hub. The obvious implementation ("advance the pickups on this manifest")
+    // advances it anyway, and every other seeded pickup lets that pass. This
+    // one does not. Do not simplify it to a single chemistry.
+    //
+    // It also carries the OTHER trap: the lead-acid item is flat-rate, so it
+    // has no `traceId` at all. A table keyed on trace_id drops it silently.
+    id: "PKP-2026-000113",
+    status: "tested",
+    category: "industrial",
+    location: "Ghaziabad Sahibabad Site IV, UP",
+    notes: "Mixed load — segregated at the hub into two recycler streams.",
+    daysAgo: 12,
+    items: [
+      { category: "portable", quantity: 30, weightKg: 15.8, condition: "healthy", chemistry: "li_ion_nmc" },
+      { category: "industrial", quantity: 8, weightKg: 320, condition: "healthy", chemistry: "lead_acid" },
+    ],
+  },
+  {
+    // 🔴 FIXTURE 8 — a reactivated pickup, carrying a stale agent.
+    //
+    // It reached `offered`, the vendor cancelled, then rescheduled — and
+    // `reschedulePickup` writes `cancelled → requested` rather than making them
+    // file a new request (changed 2026-08-23; `cancelled` is re-enterable and
+    // is NOT terminal). What it does NOT do is clear `agentId` or
+    // `agentFeePaise`, so this row sits at `requested` with an agent still on
+    // it. See `reactivatedFrom` above; Batch 3 is where dispatch has to cope.
+    //
+    // Two visible symptoms this fixture makes real, both already written up in
+    // docs/LANE_OWNERSHIP.md:
+    //   1. It shows up in the AGENT app's day view, which queries `agentId`
+    //      with no status floor — a job the agent can neither start nor lose.
+    //   2. Its audit log runs BACKWARDS: a `requested` event dated after a
+    //      `cancelled` one. `buildStages` is first-wins, so the timeline still
+    //      reads correctly; the ordering fact underneath it does not.
+    id: "PKP-2026-000114",
+    status: "requested",
+    reactivatedFrom: "offered",
+    category: "automotive",
+    location: "Peeragarhi, New Delhi",
+    notes: "Cancelled and rebooked by the vendor — original quote no longer valid.",
+    daysAgo: 20,
+    preferredDateDaysAgo: -3,
+    items: [
+      { category: "automotive", quantity: 6, weightKg: 84, condition: "healthy", chemistry: "lead_acid" },
+    ],
+  },
 ]
 
 const totalWeight = (items: ItemSpec[]) => items.reduce((sum, i) => sum + i.weightKg, 0)
@@ -585,7 +860,20 @@ async function seed() {
     where: { id: vendorId },
     // An existing row keeps whatever the account actually filled in at signup —
     // only the fields this demo depends on are forced.
-    update: { role: "customer", phone: "+91 98110 22334", walletBalancePaise: 0 },
+    update: {
+      role: "customer",
+      phone: "+91 98110 22334",
+      walletBalancePaise: 0,
+      // Admin Batch 1 fixture 7. Feeds Config.supplier_margin_overrides, which
+      // selection.ts already honours (W11). `standard` is DEFAULT_CONFIG's
+      // middle tier, so seeding it moves NO price — it is what the engine
+      // already applies when there is no override at all.
+      //
+      // ⚠ The other half of fixture 7, `eprRegNo`, is deliberately absent: the
+      // vendor's `eprRegId` below already carries it. See the note on
+      // Profile.marginTier in schema.prisma.
+      marginTier: "standard",
+    },
     create: {
       id: vendorId,
       email: CUSTOMER_EMAIL,
@@ -599,6 +887,7 @@ async function seed() {
       eprRegId: "CPCB/EPR/PROD/2024/0091",
       kycStatus: "verified",
       walletBalancePaise: 0,
+      marginTier: "standard",
     },
   })
 
@@ -638,7 +927,7 @@ async function seed() {
     },
   })
 
-  const facility = await seedReferenceData()
+  const { facility, recyclerIds } = await seedReferenceData(adminId)
 
   // The one seeded hub drop-off, created BEFORE the pickup loop because the
   // pickups in it carry the FK. Weight and count are summed from the specs
@@ -701,7 +990,11 @@ async function seed() {
   for (const spec of PICKUPS) {
     const weight = totalWeight(spec.items)
     const quote = spec.items.reduce((sum, i) => sum + linePrice(i), 0)
-    const hasAgent = spec.status !== "requested" && spec.status !== "cancelled"
+    // 🔴 A REACTIVATED pickup keeps its agent even though it is back at
+    // `requested` — that is fixture 8's entire point, not an oversight here.
+    const hasAgent =
+      spec.reactivatedFrom !== undefined ||
+      (spec.status !== "requested" && spec.status !== "cancelled")
     // Hoisted out of the pickup create (Batch 8) so the pickup column and the
     // agent's ledger entry below are literally the same number — the profile
     // screen reconciles the two, and computing agentFee(quote) twice is exactly
@@ -709,8 +1002,17 @@ async function seed() {
     const agentFeePaise = hasAgent ? agentFee(quote) : null
     // How far along the lifecycle this pickup got. `cancelled` isn't part of
     // the ordered lifecycle — it stops after `requested`.
-    const reachedIndex =
-      spec.status === "cancelled" ? 0 : LIFECYCLE.indexOf(spec.status as (typeof LIFECYCLE)[number])
+    //
+    // For a reactivated pickup this is the stage it reached BEFORE being
+    // cancelled, not its current `requested`: its safety checklist and its
+    // offer are real history and must be seeded. The offer's `acceptedAt` still
+    // comes out null, because `reachedIndex` stays short of `collected` — which
+    // is exactly what voidOfferAcceptance leaves behind.
+    const reachedIndex = spec.reactivatedFrom
+      ? LIFECYCLE.indexOf(spec.reactivatedFrom as (typeof LIFECYCLE)[number])
+      : spec.status === "cancelled"
+        ? 0
+        : LIFECYCLE.indexOf(spec.status as (typeof LIFECYCLE)[number])
 
     // Booking photos — one per line item, uploaded as the vendor (they took
     // them at booking time). Nullable results are filtered so a failed upload
@@ -758,7 +1060,9 @@ async function seed() {
             : day(spec.daysAgo - 1)
           : null,
         etaMinutes: spec.status === "scheduled" ? 45 : null,
-        preferredDate: day(spec.daysAgo - 1),
+        // A reactivation picks a NEW preferred date, usually a future one —
+        // that is the one field reschedulePickup actually rewrites.
+        preferredDate: day(spec.preferredDateDaysAgo ?? spec.daysAgo - 1),
         createdAt: day(spec.daysAgo),
         // Header field kept as the deduped union of the item photos, so older
         // reads against Pickup.photoUrls still see something.
@@ -781,6 +1085,17 @@ async function seed() {
                   recordedAt: day(spec.daysAgo - 2),
                   unitPricePaise: Math.round(linePrice(item) / item.quantity),
                   linePricePaise: linePrice(item),
+                  // The verdict for this item. Every seeded load is a recycle
+                  // — the offers below already say so — so this agrees with
+                  // Offer.pathway rather than inventing a second answer.
+                  pathway: "recycle" as const,
+                  // 🔴 LI-ION ONLY (D1). A flat-rate item never runs the engine
+                  // and therefore has no engine run id. Every admin table that
+                  // joins on `trace_id` has to survive that — half the seeded
+                  // items have none. See fixture 4.
+                  ...(isLithiumChemistry(item.chemistry)
+                    ? { traceId: demoTraceId(spec.id, idx) }
+                    : {}),
                 }
               : {}),
           })),
@@ -851,12 +1166,45 @@ async function seed() {
     }
 
     // Chain-of-custody log: one event per stage reached, each with GPS.
-    const stages: PickupStatus[] =
+    //
+    // Dated `day(spec.daysAgo - i)` — one stage per day, walking forward to the
+    // present — except for the reactivation tail below, which is the one place
+    // the log deliberately runs out of order.
+    const walked: PickupStatus[] =
       spec.status === "cancelled"
         ? ["requested", "cancelled"]
         : [...LIFECYCLE.slice(0, reachedIndex + 1)]
 
-    for (const [i, status] of stages.entries()) {
+    type SeededEvent = { status: PickupStatus; daysAgo: number; role: "customer" | "vendor" | "agent" }
+
+    const stages: SeededEvent[] = walked.map((status, i) => ({
+      status,
+      daysAgo: spec.daysAgo - i,
+      role: i === 0 ? "customer" : "agent",
+    }))
+
+    // 🔴 The reactivation tail (fixture 8), written exactly the way
+    // `reschedulePickup` writes it in apps/customer/handover/actions.ts: the
+    // vendor cancels, then a SECOND `requested` event lands afterwards with
+    // `actorRole: 'vendor'` and the reactivation note.
+    //
+    // Note this event is dated LATER than the `cancelled` one, which means the
+    // append-only log genuinely runs backwards through the lifecycle. That is
+    // the documented loose end, reproduced rather than papered over —
+    // `buildStages` is first-wins precisely so the timeline still reads right.
+    //
+    // ⚠ `actorRole: 'vendor'` and not `'customer'` is not a slip either: it is
+    // the literal string reschedulePickup inserts, while every other
+    // vendor-written event in this seed says 'customer'. The two spellings for
+    // one role are a real inconsistency in live code — noted for a cleanup,
+    // not silently normalised here, because the seed's job is to look like
+    // production.
+    if (spec.reactivatedFrom) {
+      stages.push({ status: "cancelled", daysAgo: spec.daysAgo - walked.length, role: "vendor" })
+      stages.push({ status: "requested", daysAgo: 2, role: "vendor" })
+    }
+
+    for (const [i, { status, daysAgo, role }] of stages.entries()) {
       // Only the on-site stages carry photo proof — that is what the company
       // doc's chain-of-custody actually is (§5.3). A `processed` event in a
       // facility has a timestamp and a location, not a photo from the agent.
@@ -871,12 +1219,16 @@ async function seed() {
         data: {
           pickupId: spec.id,
           status,
-          actorId: i === 0 ? vendorId : agentId,
-          actorRole: i === 0 ? "customer" : "agent",
+          actorId: role === "agent" ? agentId : vendorId,
+          actorRole: role,
+          notes:
+            spec.reactivatedFrom && status === "requested" && i > 0
+              ? "Pickup rescheduled by vendor (reactivated from cancelled)"
+              : undefined,
           lat: GEO.lat + i * 0.004,
           lng: GEO.lng - i * 0.003,
           photoUrls: eventPhoto ? [eventPhoto] : [],
-          occurredAt: day(spec.daysAgo - i),
+          occurredAt: day(daysAgo),
         },
       })
     }
@@ -1068,9 +1420,279 @@ async function seed() {
     }
   }
 
+  const manifestCount = await seedManifests(facility.id, recyclerIds)
+  const exceptionCount = await seedExceptions(adminId)
+  await seedAuditTrail(adminId, ENGINE_CONFIG_VERSION)
+
   console.log(`Seeded ${PICKUPS.length} pickups (one per lifecycle stage) for ${CUSTOMER_EMAIL}.`)
+  console.log(`Seeded ${RECYCLERS.length} recyclers, ${manifestCount} manifests, ${exceptionCount} item exceptions.`)
   console.log(`Agent login: ${AGENT_EMAIL} / ${DEMO_PASSWORD}`)
   console.log(`Admin login: ${ADMIN_EMAIL} / ${DEMO_PASSWORD}`)
+}
+
+
+// ─── Dispatch manifests (Admin Batch 1, fixtures 4 + 5) ──────────────────────
+//
+// A manifest is facility → recycler, and its status maps one-to-one onto how
+// far the pickups on it have got (AD5):
+//
+//   draft       nothing has left the hub
+//   dispatched  it left  →  its pickups sit at `tested`
+//   received    the recycler confirmed  →  `processed`
+//   reconciled  recovery captured  →  `recovered` (and on to `certified`)
+//
+// §3 asks only for one `dispatched` and one `draft`. This seeds the HISTORY as
+// well: without it, every pickup already at processed / recovered / certified
+// reached a recycler via nothing at all, and `/trace/[traceId]` would show a
+// certified battery whose chain of custody stops at the hub. Decision logged in
+// "Batch 1 — as built".
+//
+// 🔴 GROUPED BY (target status, recycler) ACROSS PICKUPS, which is what makes
+// fixture 4 work: one pickup's items land on two different manifests, because
+// chemistry segregation sends them to two different recyclers. `itemIds` is a
+// Json snapshot rather than a join table on purpose — a dispatched manifest is
+// immutable (schema comment says so), so it must not change when the items do.
+
+/** Which manifest status a pickup at this stage implies. */
+const MANIFEST_STAGE: Partial<Record<PickupStatus, ManifestStatus>> = {
+  tested: "dispatched",
+  processed: "received",
+  recovered: "reconciled",
+  certified: "reconciled",
+}
+
+/**
+ * 🔴 THE ONE DELIBERATE GAP. This group is forced back to `draft` instead of
+ * `dispatched`, which is what leaves PKP-2026-000113's lead-acid half sitting
+ * at the hub while its li-ion half is out with a recycler.
+ *
+ * That is fixture 4's trap: confirming the dispatched manifest must NOT advance
+ * PKP-2026-000113, because AD6 says a pickup advances only when EVERY one of
+ * its items is covered. Remove this override and Batch 7's naive
+ * "advance the pickups on this manifest" would pass its own tests.
+ *
+ * It doubles as §3 fixture 5's required `draft` manifest.
+ */
+const DRAFT_GROUP = { stage: "dispatched" as ManifestStatus, recycler: "lead" as RecyclerKey }
+
+/**
+ * Manifest ids are PINNED, same reasoning as CUSTODY_BATCH_ID: `scripts/smoke.mjs`
+ * needs a `/manifests/<id>` URL that survives a reseed. 401 is the first one
+ * generated, i.e. the dispatched li-ion manifest — the one fixture 4 turns on.
+ */
+const MANIFEST_ID_BASE = 401
+
+async function seedManifests(
+  facilityId: string,
+  recyclerIds: Record<RecyclerKey, string>,
+): Promise<number> {
+  type Line = { pickupId: string; itemId: string; weightKg: number; daysAgo: number }
+  // Keyed "<manifest status>|<recycler key>" so the order below is stable and
+  // the pinned ids never shuffle between reseeds.
+  const groups = new Map<string, Line[]>()
+
+  for (const spec of PICKUPS) {
+    const stage = MANIFEST_STAGE[spec.status]
+    if (!stage) continue
+
+    spec.items.forEach((item, idx) => {
+      const recycler = RECYCLER_FOR_CHEMISTRY[item.chemistry]
+      // No recycler accepts this chemistry — the AD7 gate having something real
+      // to reject. Nothing seeded hits this today.
+      if (!recycler) return
+
+      const key = `${stage}|${recycler}`
+      const lines = groups.get(key) ?? []
+      lines.push({
+        pickupId: spec.id,
+        itemId: demoItemId(spec.id, idx),
+        weightKg: item.weightKg,
+        daysAgo: spec.daysAgo,
+      })
+      groups.set(key, lines)
+    })
+  }
+
+  // Deterministic order: by manifest stage, then by the RECYCLERS table's own
+  // order. Both are fixed lists, so the nth manifest is always the same one.
+  const stageOrder: ManifestStatus[] = ["dispatched", "received", "reconciled"]
+  const ordered: Array<[ManifestStatus, RecyclerKey, Line[]]> = []
+  for (const stage of stageOrder) {
+    for (const r of RECYCLERS) {
+      const lines = groups.get(`${stage}|${r.key}`)
+      if (lines?.length) ordered.push([stage, r.key, lines])
+    }
+  }
+
+  let n = 0
+  for (const [stage, recyclerKey, lines] of ordered) {
+    const serial = MANIFEST_ID_BASE + n
+    n += 1
+
+    const isDraft = stage === DRAFT_GROUP.stage && recyclerKey === DRAFT_GROUP.recycler
+    const status: ManifestStatus = isDraft ? "draft" : stage
+
+    // Dated off the most recent pickup on the manifest, walking the same
+    // one-stage-per-day clock the status-event loop uses. ⚠ Indicative, not a
+    // reconstructed audit — do not read a seeded manifest timestamp as evidence
+    // of anything. A real one is stamped by the action that writes it.
+    const ref = Math.min(...lines.map((l) => l.daysAgo))
+    const dispatchedAt = day(Math.max(ref - LIFECYCLE.indexOf("tested"), 0))
+    const confirmedAt = day(Math.max(ref - LIFECYCLE.indexOf(status === "reconciled" ? "recovered" : "processed"), 0))
+
+    await prisma.dispatchManifest.create({
+      data: {
+        id: `00000000-0000-4000-8000-00000000${serial}`,
+        manifestNo: `MFT-2026-000${serial}`,
+        facilityId,
+        recyclerId: recyclerIds[recyclerKey],
+        status,
+        itemIds: lines.map((l) => l.itemId),
+        totalWeightKg: lines.reduce((sum, l) => sum + l.weightKg, 0),
+        // A draft has not left the building — both timestamps stay null, and
+        // that is what `/manifests/new` is for.
+        dispatchedAt: status === "draft" ? null : dispatchedAt,
+        confirmedAt: status === "received" || status === "reconciled" ? confirmedAt : null,
+        createdAt: day(Math.max(ref - LIFECYCLE.indexOf("tested"), 0)),
+      },
+    })
+  }
+
+  return n
+}
+
+// ─── Item exceptions (Admin Batch 1, fixture 6) ──────────────────────────────
+//
+// Engine HOLD / REVIEW flags an admin has to clear (W4/AD4). 🔴 These are per
+// BATTERY ITEM and they are NOT a status: a pickup carrying a flagged item
+// still sits at whatever lifecycle stage it reached. "Open" is `resolvedAt IS
+// NULL` — there is no open/closed column.
+//
+// The four below are chosen to make `/exceptions` non-trivial:
+//   * one on a flat-rate item with NO traceId — the row a trace_id-keyed table
+//     would silently drop
+//   * one already resolved, so the screen has both states to render
+//   * three open, spread across two kinds
+async function seedExceptions(adminId: string): Promise<number> {
+  const rows = [
+    {
+      // PKP-2026-000106, the li-ion LFP line. A real SoH gate rejection.
+      batteryItemId: demoItemId("PKP-2026-000106", 1),
+      kind: "review" as const,
+      cause: "soh_below_gate",
+      detail: "SoH 58% — under the reuse gate but above the recycle floor. Needs a second read.",
+      openedAt: day(3),
+    },
+    {
+      // 🔴 PKP-2026-000113's LEAD-ACID line — a flat-rate item, so it has NO
+      // traceId. Deliberate: the exceptions table must key on battery_item_id,
+      // never on trace_id, or half the estate becomes invisible on this screen.
+      batteryItemId: demoItemId("PKP-2026-000113", 1),
+      kind: "hold" as const,
+      cause: "damage_score_high",
+      detail: "Casing damage found at the hub after intake. Held pending re-inspection.",
+      openedAt: day(2),
+    },
+    {
+      // PKP-2026-000107, the EV LFP line.
+      batteryItemId: demoItemId("PKP-2026-000107", 1),
+      kind: "review" as const,
+      cause: "bms_entropy_anomaly",
+      detail: "Entropy anomalies above threshold on the last read before dispatch.",
+      openedAt: day(6),
+    },
+    {
+      // Already closed — so the screen has a resolved row to render and the
+      // audit trail below has something real to point at.
+      batteryItemId: demoItemId("PKP-2026-000108", 1),
+      kind: "review" as const,
+      cause: "soh_below_gate",
+      detail: "Swollen EV pack flagged at intake.",
+      openedAt: day(18),
+      resolution: "override" as const,
+      resolvedBy: adminId,
+      resolvedAt: day(16),
+      notes: "Re-tested at the hub; damage is cosmetic. Cleared for the recycle stream.",
+    },
+  ]
+
+  for (const row of rows) await prisma.itemException.create({ data: row })
+  return rows.length
+}
+
+// ─── Admin audit trail (Admin Batch 1) ───────────────────────────────────────
+//
+// Not in §3's fixture list. Seeded anyway, because `/audit` would otherwise be
+// an empty screen for the whole sprint — and more importantly because an audit
+// log that does NOT account for the seeded world is worse than none: every
+// other fixture here depicts an admin action nobody is recorded as having
+// taken. These rows exist to be CONSISTENT with the rest of the seed, and each
+// one points at a row this file actually created.
+//
+// 🔴 `action` values come from ADMIN_AUDIT_ACTIONS in packages/core/src/audit.ts,
+// which is the closed vocabulary. Restated as literals here for the usual
+// reason — packages/database must not depend on packages/core.
+async function seedAuditTrail(adminId: string, configVersion: string) {
+  const config = await prisma.engineConfig.findUniqueOrThrow({
+    where: { version: configVersion },
+    select: { id: true },
+  })
+
+  const manifests = await prisma.dispatchManifest.findMany({
+    where: { status: { in: ["dispatched", "received", "reconciled"] } },
+    select: { id: true, manifestNo: true, status: true, dispatchedAt: true },
+    orderBy: { manifestNo: "asc" },
+  })
+
+  const exception = await prisma.itemException.findFirst({
+    where: { resolvedAt: { not: null } },
+    select: { id: true, batteryItemId: true, resolvedAt: true },
+  })
+
+  await prisma.adminAudit.create({
+    data: {
+      actorId: adminId,
+      action: "config.publish",
+      subjectType: "engine_config",
+      subjectId: config.id,
+      // `before` omitted, not written as null: a Prisma `Json?` column
+      // distinguishes SQL NULL (Prisma.DbNull) from the JSON value `null`
+      // (Prisma.JsonNull), and a bare `null` is a type error. There is no prior
+      // config here, so leaving the column unset is the honest one.
+      after: { version: configVersion, parentVersion: null },
+      reason: "Initial published configuration — the engine's own reference values.",
+      createdAt: day(30),
+    },
+  })
+
+  for (const m of manifests) {
+    await prisma.adminAudit.create({
+      data: {
+        actorId: adminId,
+        action: "manifest.dispatch",
+        subjectType: "dispatch_manifest",
+        subjectId: m.id,
+        before: { status: "draft" },
+        after: { status: "dispatched", manifestNo: m.manifestNo },
+        createdAt: m.dispatchedAt ?? day(5),
+      },
+    })
+  }
+
+  if (exception) {
+    await prisma.adminAudit.create({
+      data: {
+        actorId: adminId,
+        action: "exception.resolve",
+        subjectType: "item_exception",
+        subjectId: exception.id,
+        before: { resolution: null },
+        after: { resolution: "override", batteryItemId: exception.batteryItemId },
+        reason: "Re-tested at the hub; damage is cosmetic.",
+        createdAt: exception.resolvedAt ?? day(16),
+      },
+    })
+  }
 }
 
 async function main() {
