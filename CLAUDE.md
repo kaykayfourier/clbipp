@@ -52,27 +52,39 @@ monorepo** (migrated 2026-08-09):
    history, profile · **PWA + install prompt** (deferred out of 8, built
    2026-08-24). **Everything except Batch 9 (deploy) is built.**
 
-   🔴 **One hole the agent batches never covered: nothing writes `requested →
-   scheduled` or sets `Pickup.agentId`,** so a pickup booked in the customer app
-   is invisible to the agent app. That transition belongs to the admin app and
-   is **Batch 3 of the current sprint** — the first thing built after the
-   scaffold. Until it lands, `npm run assign-job` is the CLI stopgap; see
-   "Dispatch" below.
+   ✅ **The hole the agent batches never covered — nothing wrote `requested →
+   scheduled` or set `Pickup.agentId` — is CLOSED** (Admin Batch 3, 2026-08-27).
+   The admin console's `/dispatch` board writes it, with a session behind it and
+   an `AdminAudit` row after it. `npm run assign-job` stays as the CLI fallback
+   (see "Dispatch" below) — it is faster for "assign everything", but it writes
+   no `actorId` and does **not** clear a reactivated pickup's stale agent.
 3. **Admin console** — `apps/admin` — **CURRENT SPRINT** (from 2026-08-25).
    Runs on **port 3002** (`npm run dev:admin`). All three can run at once.
-   **Batches 0 and 1 are built** (2026-08-26):
+   **Batches 0, 1 and 3 are built** (0 + 1 on 2026-08-26, 3 on 2026-08-27):
    **0** the app scaffold, the auth gate, the `ConsoleShell` desktop chrome,
    `/login` and **all 22 routes as stubs** · **1** the `admin_app_v1` migration
    (`EngineConfig`, `AdminAudit`, `ItemException`, `MarginTier`, W6's market
    columns) **applied to the shared project**, and the seed delta — all eight
-   §3 fixtures plus seven manifests and a consistent audit trail.
-   Every screen is still a heading with no data access, and **both lifecycle
-   holes below are still open.**
+   §3 fixtures plus seven manifests and a consistent audit trail ·
+   🔴 **3** the **dispatch board** (`/dispatch`, `/dispatch/[id]`,
+   `assignPickup`) — `requested → scheduled` + `Pickup.agentId`, the first
+   lifecycle write this app owns.
+   Every other screen is still a heading with no data access, and **the second
+   lifecycle hole — nothing past `collected` — is still open** (Batches 6, 7).
+
+   **`apps/admin/src/lib/` now carries the app's server-side helpers**, and they
+   are not optional: 🔴 **`requireAdmin()` in `admin-identity.ts` is the write
+   gate every admin lifecycle action must call** (under AD3 it and `proxy.ts`
+   are the *entire* access boundary), `ist.ts` is the one place the console's
+   timezone is decided, and `job-load.ts` holds the live-job counts. Batches 6,
+   7 and 9 import them rather than re-deriving.
+   `(admin)/dispatch/actions.ts` is the **reference admin lifecycle write** —
+   copy its shape, the way the agent app's `job/[id]/actions.ts` is copied there.
 
 ```
 apps/customer            the customer app (Next.js App Router)
-apps/agent               the field agent app — CURRENT SPRINT
-apps/admin               scaffold only
+apps/agent               the field agent app — built, still live code
+apps/admin               the admin console — CURRENT SPRINT
 packages/ui              components, design tokens, cn()   → @clbipp/ui
 packages/auth            supabase server/browser/admin clients, auth.ts,
                          realtime, createAuthMiddleware()  → @clbipp/auth
@@ -115,11 +127,11 @@ resolved there. **Read §0 before building from the wireframe.**
 Headlines you need even if you read nothing else:
 
 - **The first priority is closing the lifecycle, not building oversight.**
-  Nothing writes `requested → scheduled` (so a real booking never reaches an
-  agent) and nothing writes any stage past `collected` (so a real collection
-  never becomes a certificate). Batches 3, 6 and 7 close those. Engine config,
-  exceptions and analytics come after. 🎯 **The full journey runs end to end,
-  screens only, after Day 4.**
+  ✅ `requested → scheduled` is done (Batch 3, 2026-08-27) — a real booking now
+  reaches an agent from a screen. ❌ Nothing still writes any stage past
+  `collected`, so a real collection never becomes a certificate; Batches 6 and 7
+  close that. Engine config, exceptions and analytics come after. 🎯 **The full
+  journey runs end to end, screens only, after Day 4.**
 - **The admin app is pickup-centric, not quote-centric** (AD1). `/pickups` +
   `/pickups/[id]` are the spine; `/quotes` is a lens over `BatteryItem`.
   🔴 **Flat-rate (non-li-ion) items must appear in every operational table** —
@@ -460,13 +472,18 @@ npm run reset-demo                                     # Wipe + reseed the demo 
 # against — 21 checks, read-only, non-zero exit. `smoke` proves a route renders
 # and `test` proves pure logic; neither can catch a fixture quietly vanishing.
 # 🔴 Run it after every reseed, and add a check when you add a fixture.
+# ⚠ Dispatching a seeded request from /dispatch legitimately BREAKS two of its
+# checks (fixture 8's stale agent, and "≥3 unassigned requests"). After a demo,
+# reseed before reading a failure as a bug.
 npm run verify-seed                                    # Verify the demo fixtures
 
 # Dispatch: assign a `requested` pickup to an agent, i.e. `requested →
-# scheduled` + set agentId. The CLI stopgap until the admin app's dispatch board
-# ships (Batch 3) — without one or the other, a pickup booked in the customer
-# app never reaches the agent's day view. Idempotent. Keep it after Batch 3: it
-# is the fallback when a screen is down mid-demo.
+# scheduled` + set agentId. ⚠ The admin console's /dispatch board does this
+# properly since 2026-08-27 (Admin Batch 3) — prefer it. This stays as the
+# fallback when a screen is down mid-demo, and for assigning everything at once.
+# Idempotent. Two things it does NOT do: it writes no `actorId` on the status
+# event (nobody authenticated to run a CLI), and it does not clear a reactivated
+# pickup's stale `agentId` / `agentFeePaise` the way the screen does.
 npm run assign-job                    # every `requested` pickup → agent@test
 npm run assign-job -- PKP-2026-000101 # just this one
 npm run assign-job -- --agent=other@test

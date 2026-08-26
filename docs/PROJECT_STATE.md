@@ -5,11 +5,52 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-26 — **the Admin console sprint is building. Batches 0
-(scaffold, auth gate, console shell, all route stubs) and 1 (schema + seed
-delta) are done and every lane is unblocked, now against REAL data.** The Field
-Agent app is done except Batch 9 (deploy). Both existing apps are installable,
-and the customer→agent journey works end to end.
+**Last updated:** 2026-08-27 — **the Admin console sprint is building. Batches 0
+(scaffold, auth gate, console shell, all route stubs), 1 (schema + seed delta)
+and 3 (🔴 the dispatch board) are done.** The Field Agent app is done except
+Batch 9 (deploy). Both existing apps are installable, and — as of Batch 3 — the
+**vendor → admin → agent** journey runs from screens alone, with no CLI step.
+
+> ## 2026-08-27 — Admin console Batch 3: 🔴 the dispatch board is built (Aamir)
+>
+> **The lifecycle hole this project has had since day one is closed.**
+> `/dispatch` lists every `requested` pickup oldest-first; `/dispatch/[id]` shows
+> the request in full with an agent picker (live job counts read inline, no
+> dependency on C's `/agents`); `assignPickup` writes **`requested → scheduled`
+> + `Pickup.agentId` + `scheduledSlot` + `etaMinutes`**, a `status_events` row
+> with `actorRole: 'admin'` **and a real `actorId`**, and an `AdminAudit`
+> `pickup.assign` row — all in ONE Prisma transaction, guarded by
+> `updateMany({ where: { id, status: 'requested' } })` so a double-submit changes
+> nothing.
+>
+> 🔴 **Seed fixture 8 is handled**: a pickup reactivated after a cancellation
+> keeps its old `agentId` *and* `agentFeePaise`, so the board shows it (it does
+> **not** filter on `agentId: null`, which would hide the most-stuck row) with a
+> "previously assigned to X" marker, and assignment **clears the stale fee** —
+> verified 71400 → null.
+>
+> **Verified end to end** by posting the real server action over HTTP: the job
+> then appeared on the agent's day view as SCHEDULED, `/job/[id]` opened for that
+> agent, and the vendor's `/track/[id]` showed the partner card, the ETA and the
+> custody entry. Four further submits were all correctly rejected. The shared
+> database was restored afterwards and `npm run verify-seed` is 21/21 again.
+>
+> **Green:** `npm run build` (three proxies), `lint`, `test` 220, `smoke`
+> 22 / 30 / 46, all six role-gate directions.
+>
+> ⚠ **Three things to carry forward.** (1) `requireAdmin()` in
+> `apps/admin/src/lib/admin-identity.ts` is the write gate for **every** admin
+> lifecycle action — Batches 6, 7 and 9 import it, they do not re-derive it.
+> (2) The console fixes its timezone at **IST** (`src/lib/ist.ts`) because a
+> `datetime-local` input submits no offset and Vercel runs UTC. (3) The screens
+> carry local table/panel components because **C's Batch 2 console kit is not
+> built yet** — swapping them is mechanical when it lands, and nothing was
+> written into `components/console/`.
+>
+> Next: **Batch 6 and 7** (custody batch → `tested`, manifest dispatch/confirm,
+> certification) close the second lifecycle hole. Batch 5 (`/pickups`) and Batch
+> 2 (console kit) are C's and still open.
+>
 
 > ## 2026-08-26 — Admin console Batch 1: built (Aamir, covering B's lane)
 >

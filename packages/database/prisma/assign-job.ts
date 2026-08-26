@@ -13,12 +13,27 @@
  * agent journey was a dead end at stage one, and every agent screen was
  * reachable only through seeded rows.
  *
+ * ⚠ SINCE ADMIN BATCH 3 (2026-08-27) THERE IS A SCREEN: /dispatch and
+ * /dispatch/[id] in apps/admin do exactly this, with a session behind them, the
+ * stale-agent handling this script does NOT do, and an `AdminAudit` row saying
+ * who dispatched the job. Prefer the screen. This script stays as the fallback
+ * for when it is down mid-demo, and because it is the only way to dispatch
+ * every waiting pickup in one command.
+ *
+ * Two differences worth knowing before you use it on a demo database:
+ *   · it writes `actorId: null` on the status event (nobody authenticated), so
+ *     the audit trail cannot say who did it;
+ *   · it does NOT clear a reactivated pickup's stale `agentId` / `agentFeePaise`
+ *     — the admin action does. A pickup that was cancelled and rebooked keeps
+ *     the old agent's fee if it is dispatched from here.
+ *
  * This is deliberately a CLI script and NOT a screen in either app:
  *   - Putting it in the customer app would move a lifecycle transition across
  *     the D7 seam, and collapse `requested` into a stage nothing ever occupies.
  *   - Putting it in the agent app would make jobs pull-able, contradicting D2.
- * The admin app is its real home. When that surface is built, lift `assignJob`
- * below into a server action — the logic transfers unchanged.
+ * The admin app is its real home, and as of Batch 3 `assignJob` below has been
+ * lifted into a server action there — apps/admin/src/app/(admin)/dispatch/actions.ts.
+ * The transaction is the same shape; the screen adds identity and audit.
  *
  * Run:
  *   npm run assign-job                      # every `requested` pickup → agent@test

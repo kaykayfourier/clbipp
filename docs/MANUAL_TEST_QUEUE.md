@@ -310,6 +310,12 @@ What is left needs a browser or a human eye.
     its `agentId`). **Confirm it is ugly but harmless — nothing 500s, nothing
     lies about money.** It should stop appearing once Batch 3's dispatch board
     clears the stale agent on assignment.
+    → **Batch 3 shipped (2026-08-27) and this is now fixable from a screen**:
+    open `/dispatch/PKP-2026-000114` in the admin console and assign it. Confirm
+    the job then reads **SCHEDULED · "Head over and tap Arrived"** on the agent's
+    day view instead of "In recovery — nothing to do". ⚠ Doing this **consumes
+    the fixture** — `npm run verify-seed` will fail on fixture 8 afterwards until
+    a reseed. That is expected.
 
 20. **Its timeline reads forwards even though the log runs backwards.** Open
     `/pickups/PKP-2026-000114` in the agent app, or `/track/PKP-2026-000114` in
@@ -336,6 +342,33 @@ What is left needs a browser or a human eye.
     They deliberately are **not** real companies (the previous seed named a real
     one). Before showing this to the company, decide whether to say so out loud
     or ask them for real partner names.
+
+24. 🎯 **THE ROUND TRIP, from a real booking form.** *(Batch 3.)* The half of
+    the demo path a script cannot drive. As `business@test` on `:3000`, book a
+    pickup through the request form. Then as `admin@test` on `:3002`: it should
+    appear at the **bottom** of `/dispatch` (newest = longest still to wait —
+    the board is oldest-first), with the right vendor, address, declared lines
+    and preferred date. Assign it. Then as `agent@test` on `:3001`: it is on the
+    day view as SCHEDULED. Back as the vendor: `/track/[id]` shows the agent, the
+    ETA and the custody entry. *(Everything from "a `requested` pickup" onwards
+    is already verified programmatically; the booking form is the untested link.)*
+
+25. **The collection-slot time is the time you picked.** *(Batch 3.)* Pick
+    something distinctive — 07:15 — and confirm the vendor's tracking screen and
+    the agent's job screen both say **07:15**, not 12:45. The console treats a
+    submitted local time as IST deliberately (`apps/admin/src/lib/ist.ts`); this
+    is the check that the assumption holds end to end, on a machine whose clock
+    is not IST.
+
+26. **The dispatch board's empty state.** *(Batch 3.)* Assign every waiting
+    request and confirm `/dispatch` reads *"Nothing waiting"* with the three KPI
+    tiles still rendering, rather than an empty table with headers.
+
+27. **The stale-agent banner reads right to a person.** *(Batch 3.)* On
+    `/dispatch/PKP-2026-000114`, the amber panel should name the previous agent
+    **and** their carried-over fee (₹714). Confirm it reads as an explanation,
+    not an accusation — a vendor rescheduling is normal, and the fee is data
+    residue, not a payment.
 
 ---
 

@@ -606,6 +606,45 @@ say so here first.
 
 ---
 
+## 2026-08-27 — Admin Batch 3 (dispatch board) — A (Aamir), in lane
+
+**In lane, nothing taken from anyone.** `(admin)/dispatch/**` and
+`scripts/smoke.mjs` are both A's per §4. Logged anyway, because three things
+here affect other lanes.
+
+1. **Three new files under `apps/admin/src/lib/`** — `admin-identity.ts`,
+   `job-load.ts`, `ist.ts`. That directory is on **nobody's** file list in §4.
+   They are the admin app's equivalent of `apps/agent/src/lib/safety-gate.ts`
+   and `job-nav.ts`: server-side helpers a screen must not re-derive. 🔴
+   `requireAdmin()` is the write gate for **every** admin lifecycle action —
+   Batches 6, 7 and 9 import it. If C needs a date formatter, `ist.ts` is the
+   one to use; the console is IST, stated rather than inherited.
+
+2. **No file was created in `apps/admin/src/components/console/`**, even though
+   the dispatch screens plainly want `DataTable` and `KpiTile`. C's Batch 2 has
+   not landed and Batch 3 could not wait for it, so the two screens carry small
+   *local* `Panel` / `Th` / `Td` / `Stat` / `Banner` components instead. They are
+   deliberately plain markup. **C: when the kit lands, deleting them and
+   swapping the imports is mechanical — that is on purpose, not an oversight.**
+
+3. **`packages/database/prisma/assign-job.ts` got a header edit** (B's lane, one
+   comment block). It now points at the screen that replaces it and names the two
+   things the CLI still does *not* do: no `actorId` on the status event, and no
+   clearing of a reactivated pickup's stale `agentId` / `agentFeePaise`. The code
+   is untouched; the script stays as the mid-demo fallback.
+
+**The shared database was written to and put back.** Verifying the action meant
+actually dispatching seed fixture 8 (`PKP-2026-000114`) over HTTP. Its row was
+restored field by field afterwards, the two rows the test wrote were deleted, and
+`npm run verify-seed` is 21/21 again. ⚠ **The first real demo dispatch will
+consume that fixture for good** — `verify-seed` failing on fixture 8 after a demo
+is the check working, not a regression. Reseed.
+
+**Still open, unchanged:** the `/pickups?q=…` contract Batch 0 left for C's
+Batch 5.
+
+---
+
 ## 2026-08-26 — Admin Batch 1 (schema + seed delta) · **B's lane, done by A (Aamir)**
 
 **Taken, not waited on.** Batch 1 is B's per §4 of `PLAN_ADMIN_APP.md`. Nothing

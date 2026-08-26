@@ -79,6 +79,20 @@ Every one of these has already cost this team an hour, in an earlier sprint.
     deliberately. `AdminAudit.before` / `.after` are the columns this hits.
 22. **`profiles` has an EPR column already, and it is `epr_reg_id`.** *(Batch 1.)*
     §3/W11 say to add `eprRegNo`. Do not — see deviation 2 below.
+23. 🔴 **A `'use server'` file may export ONLY async functions.** *(Batch 3.)*
+    A shared `const` exported next to the action is a build error, not a lint
+    warning. Constants the screens also need go in `src/lib/`, not `actions.ts`.
+24. **Next's no-JS form POST is `multipart/form-data`.** *(Batch 3.)* A server
+    action submitted as `application/x-www-form-urlencoded` is **silently
+    ignored** — the route re-renders with a 200 and logs nothing, which reads
+    exactly like a broken action. This is what makes a server action scriptable:
+    post a `FormData` carrying the `$ACTION_ID_…` hidden field from the rendered
+    page. See "How this batch was verified" below — Batches 6 and 7 need it too.
+25. **A corrupted Turbopack cache 500s a handful of dynamic routes with NOTHING
+    in the server log.** *(Batch 3.)* Seven agent routes failed that way
+    mid-batch and were green again on a restarted dev server, code unchanged.
+    Sibling of trap 6: if a route 500s and the log is silent, restart the dev
+    server before believing the failure.
 
 ---
 
@@ -234,12 +248,13 @@ app is invisible to the agent app and `npm run assign-job` is the only route.
 5. Leave `npm run assign-job` in place as the CLI fallback; add a line to its
    header pointing at this screen.
 
-**Done when**
-- [ ] 🎯 Book a pickup in the customer app → it appears on `/dispatch` → assign it → **it appears on the agent's day view as SCHEDULED**. That round trip has never worked from a screen before.
-- [ ] The customer's `/track/[id]` shows the partner card, the ETA, and a custody entry attributing the assignment.
-- [ ] Double-submitting the assign form does not reassign or write a second event.
-- [ ] A forged `pickupId` (someone else's, or a `collected` one) is rejected.
-- [ ] The reactivated pickup shows its stale-agent marker and is cleared on reassign.
+**Done when** — ✅ **all met, 2026-08-27. See "Batch 3 — as built" at the foot
+of this file.**
+- [x] 🎯 A `requested` pickup appears on `/dispatch` → assign it → **it appears on the agent's day view as SCHEDULED** ("Head over and tap Arrived"), and `/job/[id]` opens for the newly assigned agent. That round trip has never worked from a screen before. *(Verified by POSTing the real server action over HTTP; the booking-form half is in `docs/MANUAL_TEST_QUEUE.md`.)*
+- [x] The customer's `/track/[id]` shows the partner card, the ETA and a custody entry attributing the assignment.
+- [x] Double-submitting the assign form does not reassign or write a second event — four further POSTs left exactly one `scheduled` event and one audit row.
+- [x] A forged `pickupId` (one already past `requested`) is rejected. So is an `agentId` that is not an agent, and an out-of-range ETA.
+- [x] The reactivated pickup shows its stale-agent marker, and **`agentFeePaise` 71400 → null** on reassign.
 
 ---
 
@@ -750,3 +765,178 @@ package.json (root)                                        "verify-seed"
   evidence of anything; a real manifest is stamped by the action that writes it.
 - **`npm run db:migrate` still runs `migrate dev`.** See deviation 1. Changing
   it is B's call.
+
+---
+
+## Batch 3 — as built · 2026-08-27 · **A (Aamir)**
+
+🔴 **The lifecycle hole is closed.** `requested → scheduled` + `Pickup.agentId`
+is now written by a screen, with a session behind it and an audit row after it.
+A pickup booked in the customer app reaches an agent's day view without anyone
+running a CLI, for the first time in this project.
+
+**Green.** `npm run build` (all three apps, all three proxies registered) ·
+`npm run lint` · `npm run test` **220 passing** · `npm run smoke` **22 / 30 / 46**
+on admin / agent / customer · **all six role-gate directions bounce** ·
+`npm run verify-seed` **21/21** (before *and* after the live assignment test —
+see "How this batch was verified").
+
+### What shipped
+
+```
+apps/admin/src/app/(admin)/dispatch/page.tsx       B02 — the board
+apps/admin/src/app/(admin)/dispatch/[id]/page.tsx  B03 — request + agent picker
+apps/admin/src/app/(admin)/dispatch/actions.ts     🔴 assignPickup — THE transition
+apps/admin/src/lib/admin-identity.ts               NEW — requireAdmin(), the write gate
+apps/admin/src/lib/job-load.ts                     NEW — live job counts per agent
+apps/admin/src/lib/ist.ts                          NEW — one timezone, stated
+packages/database/prisma/assign-job.ts             header now points at the screen
+scripts/smoke.mjs                                  content assertions for both routes
+```
+
+### Deviations from this sheet, and why
+
+1. 🔴 **The write goes through Prisma `$transaction`, not `createAdminClient()`.**
+   Step 3 says to copy the agent app's reference action verbatim, and all four of
+   its rules are kept — session identity, an RLS-bypassing write path, an in-code
+   re-check standing in for the missing policy, status and event written
+   together. Only the *client* differs, and for three reasons: **AD3 names Prisma
+   as this app's read AND write path**; `packages/database/prisma/assign-job.ts`
+   — the CLI this screen replaces — already writes this exact transition through
+   Prisma; and this action writes **three** tables (`pickups`, `status_events`,
+   `admin_audits`), which supabase-js cannot do atomically. A half-written
+   dispatch (status moved, audit missing) is exactly the drift rule 4 exists to
+   prevent. The sheet's own step 3 asks for an `updateMany({ where: { id,
+   status: 'requested' } })` race guard — which is Prisma's API, so the sheet
+   assumed this too.
+
+2. **The screens carry their own small presentation components** (`Panel`, `Th`,
+   `Td`, `Stat`, `Banner`, `StatusChip`), local to the two page files. **Batch 2
+   (C's console kit) is not built yet** and Batch 3 is the P0 that unblocks the
+   demo, so it could not wait. The markup is deliberately plain: when
+   `DataTable` / `KpiTile` / `Drawer` land, deleting these and swapping the
+   imports is mechanical. 🔴 **Nothing was added to
+   `apps/admin/src/components/console/`** — that directory is C's, and creating
+   a file there is the one thing the lane split forbids.
+
+3. **Three new files under `apps/admin/src/lib/`, which is on nobody's file
+   list.** `admin-identity.ts` is this app's answer to the agent app's
+   `src/lib/safety-gate.ts`: the one server-side gate every lifecycle-writing
+   action calls. 🔴 **Batches 6, 7 and 9 must import `requireAdmin()` rather
+   than re-deriving the check** — a second copy is how one of them ends up
+   subtly weaker than the others. `job-load.ts` holds `LIVE_JOB_STATUSES` and
+   the per-agent count (it cannot live in `actions.ts` — trap 23). `ist.ts` is
+   below.
+
+4. 🔴 **The console fixes its timezone at IST instead of inheriting the server
+   clock.** A `<input type="datetime-local">` submits `2026-09-02T10:00` with no
+   offset at all, and Vercel runs UTC — so a 10:00 slot would have been stored as
+   15:30 IST and the agent would arrive five and a half hours late. `ist.ts`
+   parses a submitted local time **as IST** and formats every rendered time in
+   IST. Verified: a submitted `10:00` stored as `2026-09-02T04:30:00.000Z`.
+   Correct for one country; if CLBIPP ever operates outside IST the honest fix is
+   to send the browser's offset with the form, and that file is the only place to
+   change.
+
+5. **`/dispatch/[id]` renders at ANY status, not only `requested`.** Past
+   `requested` it shows who the job went to and links on to `/pickups/[id]`.
+   This is not politeness: `scripts/smoke.mjs` points that route at
+   **PKP-2026-000101**, and the first time anyone dispatches that row in a demo,
+   a screen that insisted on `requested` would 404 for every later smoke run.
+
+6. **The new smoke assertions are chosen to survive a demo, not just a build.**
+   `/dispatch` asserts `'Waiting'` and `'Oldest request'` — KPI labels that
+   render even when the board is empty (assign every request and an assertion on
+   a row starts failing). The detail route asserts `'Declared items'` and
+   `'Recent status events'`, panels that render at every status, rather than the
+   picker, which is only there while the pickup is still `requested`.
+
+### How this batch was verified
+
+`npm run smoke` cannot POST a form, so the action was exercised **through the
+real HTTP path** — proxy, session cookie, server action, database — by a
+throwaway script that logs in as `admin@test` the way `scripts/smoke.mjs` does,
+reads the `$ACTION_ID_…` hidden field out of the rendered page, and posts a
+`FormData` to the route. 🔴 **It must be `multipart/form-data`** (trap 24): the
+first attempt used urlencoded, and Next silently re-rendered the page with a 200
+and no action call, which looks identical to a broken action.
+
+Results, against seed **fixture 8** (`PKP-2026-000114`, the reactivated pickup):
+
+| Submit | Outcome |
+|---|---|
+| valid | `303 → ?assigned=1`; status `scheduled`, `agentFeePaise` **71400 → null**, slot stored `04:30Z` = 10:00 IST, ETA 45 |
+| same again | `303 → ?error=That pickup is already scheduled…` |
+| a pickup at `offered` | rejected, same shape |
+| ETA 9999 | rejected |
+| `agentId` = the admin's own uuid | `That account is an admin, not an agent.` |
+
+After all five: **exactly one** new `status_events` row (`scheduled`, `admin`,
+`actorId` set, *"Assigned to Ravi Kumar for collection."*) and **exactly one**
+`admin_audits` row (`pickup.assign`, before `{requested, agentId, 71400}` →
+after `{scheduled, agentId, null, slot, eta}`).
+
+Cross-app, both read live: the agent app's day view showed
+`PKP-2026-000114 · SCHEDULED · "Head over and tap Arrived"`, `/job/…` opened for
+that agent, and the vendor's `/track/PKP-2026-000114` showed the partner card
+(Ravi Kumar), the 45-minute ETA and the custody entry attributed to CLBIPP.
+
+⚠ **The shared database was then restored** to fixture 8's seeded state (status,
+`agentId`, `agentFeePaise`, `scheduledSlot`, `etaMinutes`, minus the two rows the
+test wrote), and `npm run verify-seed` re-run: 21/21. Nobody else's work was
+disturbed, and no reseed was needed.
+
+### 🔴 What the next batches must know
+
+1. **`requireAdmin()` is the write gate, and it is shared.** Batches 6, 7 and 9
+   import it from `@/lib/admin-identity`. It returns
+   `{ ok, admin | error }` — a string, never a throw, because an action that
+   throws inside a POST loses the form. Under AD3 there is no RLS behind any of
+   this: `src/proxy.ts` + this function is the entire boundary on a write.
+
+2. **`actions.ts` is the reference shape for every admin lifecycle write.**
+   requireAdmin → validate every field server-side (including re-reading the
+   *other* party's row and checking its role) → read a `before` for the audit →
+   `$transaction` { guarded `updateMany`, `statusEvent.create`, `adminAudit.create` }
+   → `revalidatePath` → redirect-after-POST with the error in the query string.
+   The guarded `updateMany` is the whole idempotency story; keep it.
+
+3. 🔴 **The first demo dispatch consumes a seed fixture, and `verify-seed` will
+   then fail — correctly.** Assigning `PKP-2026-000114` breaks *"fixture 8:
+   status is `requested`"*, and dispatching all three waiting pickups breaks
+   *"≥3 unassigned `requested` pickups"*. That is the check doing its job, not a
+   regression: **reseed** (`npm run reset-demo`, then re-apply grants) before
+   treating a `verify-seed` failure as a bug.
+
+4. **Only ONE agent account exists** (`agent@test`, Ravi Kumar), so the picker
+   shows one option and "reassign to a different agent" has never been run. The
+   stale-agent clearing was proven on the fee, not on a change of person. A
+   second seeded agent would make both the picker and E02 `/agents`
+   demonstrable — **B's call, it needs a Supabase auth user in the seed**, and
+   `verify-seed` would want a check for it.
+
+5. **`revalidatePath('/pickups')` already fires on assignment**, so C's Batch 5
+   list refreshes without doing anything. And `/dispatch/[id]` links to
+   `/pickups/[id]` for anything past `requested` — that link lands on a stub
+   until Batch 5 ships.
+
+### Notes for later, deliberately not done now
+
+- **The stale `Offer` row is left alone on reassignment.** Fixture 8 keeps the
+  offer from its previous life with `acceptedAt` already voided by
+  `reschedulePickup`; the agent app's `presentOffer` **upserts** on `pickup_id`,
+  so the new agent's offer overwrites it cleanly. Checked, not changed — but a
+  reassigned pickup does carry one dead offer until the new agent quotes it.
+- **No bulk dispatch and no filters on the board.** Oldest-first, everything at
+  `requested`, no pagination — three seeded rows and a demo-sized queue. C's
+  `DataTable` brings sorting/filtering/pagination; `npm run assign-job` remains
+  the "assign everything at once" tool.
+- **No agent-availability logic.** The picker shows live load and zone as
+  *information*; it does not stop an admin overloading one agent, and there is no
+  calendar, no travel time and no double-booking check. Out of scope for a
+  one-week build; worth naming to the company as a v2 question.
+- **The board does not show the indicative quote.** The detail screen does
+  (AD12 — admin sees everything). Adding it to the table is a one-liner if the
+  demo wants it.
+- **`assignPickup()` is exported alongside its form action** so a future bulk
+  screen or a test can call it directly. Nothing calls it that way yet.

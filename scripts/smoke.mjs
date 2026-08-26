@@ -842,8 +842,19 @@ const ADMIN_SHELL = ['Console', 'Operations', 'Chain of custody', 'Engine', 'Net
 
 const ADMIN_APP_CONTENT = {
   '/': ['Overview', ...ADMIN_SHELL],
-  '/dispatch': ['Dispatch board'],
-  [`/dispatch/${ADMIN_REQUESTED}`]: ['Dispatch request', ADMIN_REQUESTED],
+  // Built in Batch 3. The extra strings are chosen to survive a DEMO, not just
+  // a build: 'Waiting' is a KPI label that renders even when the board is empty
+  // (assign every request and an assertion on a row would start failing), and
+  // the two detail assertions are panels that render at EVERY status — the
+  // picker itself is only there while the pickup is still `requested`, and
+  // PKP-2026-000101 stops being `requested` the first time anyone dispatches it.
+  '/dispatch': ['Dispatch board', 'Waiting', 'Oldest request'],
+  [`/dispatch/${ADMIN_REQUESTED}`]: [
+    'Dispatch request',
+    ADMIN_REQUESTED,
+    'Declared items',
+    'Recent status events',
+  ],
   '/pickups': ['Pickups'],
   [`/pickups/${ADMIN_PICKUP}`]: ['Pickup detail', ADMIN_PICKUP],
   '/lifecycle': ['Lifecycle control'],
