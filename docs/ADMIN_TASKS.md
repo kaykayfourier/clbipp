@@ -93,6 +93,18 @@ Every one of these has already cost this team an hour, in an earlier sprint.
     mid-batch and were green again on a restarted dev server, code unchanged.
     Sibling of trap 6: if a route 500s and the log is silent, restart the dev
     server before believing the failure.
+26. 🔴 **Not every server-action form carries `$ACTION_ID_…`.** *(Batch 4.)* A
+    plain `<form action={fn}>` does. A **`useActionState`** form — like
+    `/payment/[id]`'s `confirmPayout` — carries `$ACTION_REF_n`, `$ACTION_n:0`,
+    `$ACTION_n:1` and `$ACTION_KEY` **instead**, and no `$ACTION_ID` anywhere.
+    Batch 3's verification technique (grep for `$ACTION_ID`, post it) therefore
+    finds nothing, and the POST **silently re-renders with a 200** — identical
+    to trap 24's symptom, different cause. **Replay every hidden `<input>` on
+    the rendered form verbatim** and override only the visible fields; that
+    works for both shapes and needs no guessing.
+27. **`formatPaise` rounds to whole rupees for display.** *(Batch 4.)* A
+    1374450-paise payable renders **₹13,745**, not ₹13,744.50. A content
+    assertion written from the paise value will not match the page.
 
 ---
 
@@ -276,9 +288,12 @@ Small, and it unblocks the "vendor gets paid" half of the demo (AD10, §0b).
 
 > Crossing into Ali's lane by design (AD10). **Log it in `docs/LANE_OWNERSHIP.md`.**
 
-**Done when** a pickup collected in the agent app shows a real payable amount at
-the customer's `/payment/[id]`, settling it works, calling `confirmCollection`
-twice creates one `Payment` and one `WalletTxn`, and `npm run smoke -- --app=agent` is still green.
+**Done when** — ✅ **all met, 2026-08-29. See "Batch 4 — as built" at the foot
+of this file.**
+- [x] A pickup collected in the agent app shows a real payable amount at the customer's `/payment/[id]` — ₹13,745 on `PKP-2026-000104`, driven over real HTTP.
+- [x] Settling it works — `paid`, a `payout` ledger row, `INV-2026-000104`, and the vendor's wallet up by exactly the offer.
+- [x] Calling `confirmCollection` twice (four times, in fact) creates **one** `Payment` and **one** `WalletTxn`, and writes no second status event.
+- [x] `npm run smoke -- --app=agent` still green (30), and so are customer (46) and admin (22).
 
 ---
 
@@ -940,3 +955,133 @@ disturbed, and no reseed was needed.
   demo wants it.
 - **`assignPickup()` is exported alongside its form action** so a future bulk
   screen or a test can call it directly. Nothing calls it that way yet.
+
+---
+
+## Batch 4 — as built · 2026-08-29 · **A (Aamir), covering B's lane**
+
+🔴 **The vendor now actually gets paid.** Before this, `Payment` rows existed
+**only in the seed** — a pickup collected for real in the field agent app
+produced a receipt and an agent fee and no payable at all, so the vendor's
+"Choose how you get paid" button never appeared and `settlePayment`, fully
+built since customer Batch 8, had nothing to settle. `raisePayment()` closes it.
+
+**Green.** `npm run build` (all three apps, all three proxies) · `npm run lint`
+(0 errors; the 2 pre-existing agent warnings are untouched) · `npm run test`
+**229 passing** (was 220 — nine new) · `npm run smoke` **22 / 30 / 46** on
+admin / agent / customer, all three against **production builds** (trap 17) ·
+`npm run verify-seed` **21/21** after restoring the shared database.
+
+### What shipped
+
+```
+packages/core/src/payment-actions.ts             🔴 raisePayment() — the payable
+packages/core/src/payment-actions.test.ts        NEW — 9 tests, no DB
+apps/agent/src/app/(agent)/job/[id]/collect/actions.ts
+                                                 one call in the existing tx
+                                                 + the transaction timeout fix
+```
+
+No migration. Nothing in `apps/admin`. Nothing in `packages/database`.
+
+### Deviations from this sheet, and why
+
+1. 🔴 **The sheet's step 2 was not the whole job — `confirmCollection`'s
+   transaction timeout had to be raised too, and this is the one thing worth
+   reading in this section.** That transaction ran on Prisma's **5 s default**
+   and did **six** sequential round trips. Adding the payable makes it **eight**
+   — and `settlePayment`, in the same package, carries a *measured* comment
+   saying that exactly eight round trips against a remote Supabase Postgres took
+   **5.3 s and rolled the whole thing back**. Shipping step 2 alone would have
+   introduced "collection intermittently fails on a slow connection", which is
+   strictly worse than the bug being fixed, and would have looked like a flaky
+   demo rather than a timeout. The same `timeout: 20_000, maxWait: 10_000` is
+   now on it, with a comment pointing at the measurement. **Raised, not split:**
+   the five writes must land together, and splitting them to fit a timeout
+   trades a visible error for a silently half-collected pickup.
+
+2. **`raisePayment` guards on `findUnique`, not `upsert` or `createMany`.**
+   `ensureInvoice` — five lines below it in the same file, and the closest
+   sibling in shape — does exactly this: guard on a unique `pickupId`, return if
+   present, create. `upsert` would bump `updatedAt` on an already-*paid*
+   payment for no reason. `Payment.pickupId` is `@unique`, so the database is
+   the real backstop either way, and `confirmCollection`'s own
+   `updateMany({ where: { status: 'offered' } })` race guard means only one
+   caller ever reaches this line.
+
+3. **It rejects a negative or non-integer amount by throwing**, the way
+   `nextBalance` refuses a negative balance rather than clamping. A float
+   `amountPaise` means rupees leaked in somewhere; rounding it would destroy the
+   evidence of where. **Zero is allowed** — a load where every item is rejected
+   owes the vendor nothing, and that is an outcome, not a data bug. `NaN` is
+   caught explicitly: `Number(formData.get(…))` on a missing field is `NaN`, and
+   `NaN < 0` is `false`, so a bare range check would have let it through.
+
+4. **`method` is left to the schema default (`upi`).** Nothing has been chosen
+   at the moment a payable is raised — the vendor picks a destination on
+   `/payment/[id]` and `settlePayment` overwrites it. Writing a method here
+   would look like the vendor had already decided. The seed does the same.
+
+### How this batch was verified
+
+The same throwaway-script technique as Batch 3 — forge the `@supabase/ssr`
+session cookie the way `scripts/smoke.mjs` does, replay the rendered form's
+hidden fields, POST **`multipart/form-data`** (trap 24) — run against
+**`PKP-2026-000104`**, the seeded `offered` fixture, with **26 assertions**, all
+passing:
+
+| Step | Result |
+|---|---|
+| vendor accepts the offer (`:3000`) | `303 → /handover`; `acceptedAt` stamped, status **still `offered`** (D7), still no payable |
+| agent confirms collection (`:3001`) | `303 → /receipt`; status `collected`, **`Payment` created**: `pending`, **1374450 paise = the accepted offer**, right vendor, no `paidAt`, no `gatewayRef`, `method` default |
+| **re-submit ×3** | **one** payment, **one** `agent_fee` ledger row, **no** second status event |
+| vendor's `/track/[id]` | shows **"Choose how you get paid"** — the CTA that has never appeared off live data before |
+| vendor's `/payment/[id]` | renders **₹13,745**, not "No payment yet" |
+| vendor settles | `paid` · `payout` ledger row · **INV-2026-000104** · wallet 28608220 → **29982670**, up by exactly the offer |
+
+🔴 **A new trap came out of this** — see trap 26 below. The
+`useActionState` forms (`/payment/[id]`'s `confirmPayout`) do **not** carry a
+`$ACTION_ID_…` field at all, so Batch 3's technique found nothing to post and
+the settle step silently no-opped with a 200. Batches 6 and 7 will hit this the
+moment they script a form that uses `useActionState`.
+
+⚠ **The shared database was then restored** to fixture 4's seeded state — status
+`offered`, `agentFeePaise` 137445, `acceptedAt` null, both wallet balances, and
+the payment / receipt / invoice / ledger / status-event rows the test wrote —
+and `npm run verify-seed` re-run: **21/21**. Nobody else's work was disturbed
+and no reseed was needed.
+
+### 🔴 What the next batches must know
+
+1. **A collected pickup now has a `Payment`, and Batches 6/7 must not assume
+   otherwise.** `/pickups/[id]` (Batch 5) and the certification screens can read
+   `pickup.payment` for anything at `collected`+ and expect a row. Anything
+   collected *before* today does not have one — see the note below.
+
+2. **`raisePayment` takes a transaction client and opens nothing.** Any future
+   caller composes it into the write that justifies the payable. That is the
+   same shape as `creditWallet` and `ensureInvoice` and it is deliberate: a
+   payable that lands while the collection rolls back is money owed for
+   batteries nobody took.
+
+3. **The eight-round-trip ceiling is real, and Batch 7 will cross it.**
+   Certification mints a `Certificate` row **and** a PDF **and** a status event
+   **and** an `AdminAudit` row. Set `timeout` / `maxWait` explicitly on that
+   transaction from the start rather than discovering the 5 s default in a demo.
+
+### Notes for later, deliberately not done now
+
+- 🟠 **No backfill for pickups collected before today.** Every `collected`+ seed
+  fixture already has a payment, so the only rows affected are ones written
+  during development. Named here so nobody later reads it as a bug.
+- 🟠 **`confirmCollection` never checks that the signature file exists.** It
+  verifies only that the path is prefixed with the agent's own user id
+  (`photoPathsBelongTo`). That is the ownership check and it is sound — but a
+  "signed" collection can point at nothing in storage, which is how this
+  batch's own verification drove the form without uploading anything. Worth a
+  decision before the company sees a signed receipt; out of this batch's scope.
+- 🟠 **A payable is raised even when the offer is ₹0.** Deliberate — the row is
+  what lets the screen say "nothing owed" — but nobody has designed that screen,
+  and today it would render a ₹0 payout with a Confirm button.
+- **No `AdminAudit` row.** Correct: this is an *agent's* action, and the audit
+  table is for admin assertions. The `status_events` row already attributes it.

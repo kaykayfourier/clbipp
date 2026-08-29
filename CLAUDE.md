@@ -60,7 +60,8 @@ monorepo** (migrated 2026-08-09):
    no `actorId` and does **not** clear a reactivated pickup's stale agent.
 3. **Admin console** — `apps/admin` — **CURRENT SPRINT** (from 2026-08-25).
    Runs on **port 3002** (`npm run dev:admin`). All three can run at once.
-   **Batches 0, 1 and 3 are built** (0 + 1 on 2026-08-26, 3 on 2026-08-27):
+   **Batches 0, 1, 3 and 4 are built** (0 + 1 on 2026-08-26, 3 on 2026-08-27,
+   4 on 2026-08-29):
    **0** the app scaffold, the auth gate, the `ConsoleShell` desktop chrome,
    `/login` and **all 22 routes as stubs** · **1** the `admin_app_v1` migration
    (`EngineConfig`, `AdminAudit`, `ItemException`, `MarginTier`, W6's market
@@ -68,9 +69,13 @@ monorepo** (migrated 2026-08-09):
    §3 fixtures plus seven manifests and a consistent audit trail ·
    🔴 **3** the **dispatch board** (`/dispatch`, `/dispatch/[id]`,
    `assignPickup`) — `requested → scheduled` + `Pickup.agentId`, the first
-   lifecycle write this app owns.
+   lifecycle write this app owns ·
+   🔴 **4** **`raisePayment()`** — a real collection now raises a real payable,
+   so the vendor's payout runs off live data instead of a seeded row.
    Every other screen is still a heading with no data access, and **the second
    lifecycle hole — nothing past `collected` — is still open** (Batches 6, 7).
+   ⚠ **Batch 2 (C's console data kit) is the last unbuilt Day-1 P0**, and Batch
+   5 waits on it.
 
    **`apps/admin/src/lib/` now carries the app's server-side helpers**, and they
    are not optional: 🔴 **`requireAdmin()` in `admin-identity.ts` is the write
@@ -441,7 +446,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 220 (core 153, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 229 (core 162, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -650,6 +655,18 @@ letter means different things in each. **Quote the decision with its app.**
   `updatePhone` in `profile/actions.ts` is the pattern. Use Prisma for profile
   data only when you genuinely need a transaction, and then re-enforce ownership
   in code.
+- **A vendor's payable is raised by `raisePayment()` in
+  `packages/core/src/payment-actions.ts`, never by a `payment.create` in a
+  screen** (Admin Batch 4). It takes a **transaction client** and opens none of
+  its own, so the payable always lands with the write that justifies it —
+  `confirmCollection` in the agent app is the only caller today. Idempotent on
+  `Payment.pickupId` (`@unique`), and it never resets a `paid` payment back to
+  `pending`. ⚠ **Adding a write to that transaction has a ceiling:** it is at
+  **eight** sequential round trips, which is the number measured at **5.3 s**
+  against remote Supabase — both `raisePayment`'s caller and `settlePayment` set
+  `timeout: 20_000, maxWait: 10_000` for that reason. A new multi-write
+  transaction should set them from the start rather than discovering the 5 s
+  default in a demo.
 - **`AdminAudit.action` and `.subjectType` come from `@clbipp/core/audit`** —
   never a bare string literal. The column is a `String` because the values are
   dotted (`pickup.assign`) and so cannot be a Prisma enum; `ADMIN_AUDIT_ACTIONS`

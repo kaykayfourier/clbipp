@@ -5,9 +5,9 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { photoPathsBelongTo } from '@clbipp/core/intake'
+import { raisePayment } from '@clbipp/core'
 
 import { computeAgentFeePaise } from './agent-fee'
-import { raisePayment } from '@clbipp/core'
 // ─── confirmCollection (D7: offered → collected) — Batch 6 · Ali ────────────
 // Gated on Offer.acceptedAt by collect/page.tsx before this form is even
 // rendered; re-checked here too, same "never trust the screen that got you
@@ -17,11 +17,11 @@ import { raisePayment } from '@clbipp/core'
 // of this app's writes use (see job/[id]/actions.ts, items/actions.ts). This
 // is the one write in the whole agent app that touches real money — the
 // wallet balance — and the plan calls wallet idempotency out as the highest-
-// risk seam in the build. Four things have to land together or not at all:
-// the status flip, the receipt, the WalletTxn, and the balance cache update
+// risk seam in the build. Five things have to land together or not at all:
+// the status flip, the receipt, the WalletTxn, the balance cache update
 // (Profile.walletBalancePaise — "always write both in one transaction", per
-// the schema's own comment on that field). A partial write here is a wallet
-// bug, not a display bug.
+// the schema's own comment on that field), and — since Admin Batch 4 — the
+// VENDOR's payable. A partial write here is a wallet bug, not a display bug.
 
 export async function confirmCollection(formData: FormData) {
   const pickupId = String(formData.get('pickupId') ?? '')
@@ -138,11 +138,39 @@ export async function confirmCollection(formData: FormData) {
         },
       })
 
+      // ── The VENDOR's payable (Admin Batch 4 · AD10) ────────────────────
+      // Everything above this line is the AGENT's side of the collection —
+      // their fee, their ledger, their receipt. This is the other party's:
+      // we have just taken the batteries, so we now owe the vendor for them.
+      //
+      // Until this call existed, `Payment` rows came only from the seed. A
+      // real collection left the vendor with a receipt and no payout to
+      // claim — /track/[id] shows "Choose how you get paid" only when a
+      // payment is `pending`, so the CTA simply never appeared.
+      //
+      // Amount is the offer the vendor accepted, the same figure the receipt
+      // above records. Inside THIS transaction on purpose: a collection that
+      // succeeded while the payable it created did not is exactly the drift
+      // the single-transaction rule at the top of this file exists to stop.
       await raisePayment(tx, {
         pickupId,
         vendorId: pickup.vendorId,
         amountPaise: pickup.offer!.estimatedPrice,
       })
+    }, {
+      // Prisma's default interactive-transaction timeout is 5s, and this
+      // transaction now does EIGHT sequential round trips. settlePayment in
+      // @clbipp/core carries a measured note on exactly that number: against
+      // a remote Supabase Postgres, eight round trips took 5.3s and the whole
+      // thing rolled back. Atomicity did its job there, but an agent whose
+      // collection fails because the office wifi is slow is a real failure —
+      // and unlike a payout, they are standing in front of the customer.
+      //
+      // Raised rather than split: the five writes above MUST land together
+      // (see the header). Splitting them to fit a timeout would trade a
+      // visible error for a silently half-collected pickup.
+      timeout: 20_000,
+      maxWait: 10_000,
     })
   } catch (e) {
     if (e instanceof Error && e.message === 'ALREADY_COLLECTED') {

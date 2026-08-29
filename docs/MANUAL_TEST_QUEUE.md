@@ -370,6 +370,35 @@ What is left needs a browser or a human eye.
     not an accusation — a vendor rescheduling is normal, and the fee is data
     residue, not a payment.
 
+28. 🎯 **THE PAYOUT, from real screens.** *(Batch 4.)* The other half of the
+    demo path. As `business@test` on `:3000`, accept an offer. As `agent@test`
+    on `:3001`, complete the collection **with a real drawn signature** (the
+    scripted verification faked the signature path — `confirmCollection` checks
+    only that the path is prefixed with the agent's user id, never that the file
+    exists, so the canvas → upload → submit chain is genuinely untested). Back
+    as the vendor: `/track/[id]` should offer **"Choose how you get paid"**,
+    `/payment/[id]` should show the amount, and settling should land the wallet
+    credit and the invoice. *(Everything except the signature capture is already
+    verified programmatically — 26 assertions.)*
+
+29. **The ₹ figure on `/payment/[id]` is the offer the vendor accepted.**
+    *(Batch 4.)* Not the recommended price, not a rounded band — the exact
+    `Offer.estimatedPrice`. Check it against what `/offer` showed them, and note
+    that `formatPaise` rounds to whole rupees for display (₹13,744.50 → ₹13,745)
+    while the stored paise are exact. If those two ever look inconsistent to a
+    person, it is a wording problem, not an arithmetic one.
+
+30. 🟠 **A ₹0 payout, if one can be produced.** *(Batch 4.)* `raisePayment`
+    deliberately allows a zero payable — a load where every item is rejected
+    owes nothing, and the row is what lets a screen say so. But nobody has
+    designed that screen: today `/payment/[id]` would render ₹0 with a Confirm
+    button. Decide what it should say before the company sees it.
+
+31. **The agent's own "earned today" figure still agrees with their ledger.**
+    *(Batch 4.)* The collection transaction now writes one more row than it did.
+    Confirm the day view's tile, `/profile`, and the `agent_fee` `WalletTxn`
+    still tell the same story after a real collection.
+
 ---
 
 ## Standing checks for the end-of-sprint pass

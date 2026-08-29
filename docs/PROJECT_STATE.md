@@ -5,11 +5,58 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-27 — **the Admin console sprint is building. Batches 0
-(scaffold, auth gate, console shell, all route stubs), 1 (schema + seed delta)
-and 3 (🔴 the dispatch board) are done.** The Field Agent app is done except
-Batch 9 (deploy). Both existing apps are installable, and — as of Batch 3 — the
-**vendor → admin → agent** journey runs from screens alone, with no CLI step.
+**Last updated:** 2026-08-29 — **the Admin console sprint is building. Batches 0
+(scaffold, auth gate, console shell, all route stubs), 1 (schema + seed delta),
+3 (🔴 the dispatch board) and 4 (🔴 `raisePayment()`) are done.** The Field Agent
+app is done except Batch 9 (deploy). Both existing apps are installable, and the
+**vendor → admin → agent → vendor-gets-paid** journey now runs from screens
+alone, with no CLI step and no seeded row standing in for a real one.
+
+> ## 2026-08-29 — Admin console Batch 4: 🔴 the vendor actually gets paid (Aamir)
+>
+> **`Payment` rows used to exist only in the seed.** A pickup collected for real
+> in the field agent app produced a receipt and an agent fee and **no payable at
+> all** — so the vendor's "Choose how you get paid" button never appeared, and
+> `settlePayment`, fully built since customer Batch 8, had nothing to settle.
+>
+> **`raisePayment(tx, { pickupId, vendorId, amountPaise })`** is new in
+> `packages/core/src/payment-actions.ts` and is called inside
+> `confirmCollection`'s **existing** transaction, for `Offer.estimatedPrice` —
+> the amount the vendor actually accepted, the same figure the receipt records.
+> Idempotent on `Payment.pickupId` (`@unique`), and it never resets an
+> already-`paid` payment back to `pending`.
+>
+> 🔴 **The batch's real risk was not the feature.** That transaction ran on
+> Prisma's **5 s default** doing six sequential round trips; the payable makes it
+> **eight** — and `settlePayment` carries a *measured* note that eight round
+> trips against remote Supabase took **5.3 s and rolled the whole thing back**.
+> The timeout is now `20_000` / `maxWait 10_000`, raised rather than split,
+> because the five writes must land together.
+>
+> **Verified end to end over real HTTP** on `PKP-2026-000104`, 26 assertions:
+> vendor accepts (status stays `offered`, per D7) → agent collects → a `pending`
+> payment appears for exactly the offer → **three re-submits leave one payment,
+> one ledger row, no second status event** → `/track/[id]` offers the payout →
+> `/payment/[id]` shows **₹13,745** → settling writes the `payout` ledger row,
+> **INV-2026-000104**, and moves the wallet by exactly the offer. Database
+> restored afterwards; `npm run verify-seed` 21/21.
+>
+> **Green:** `npm run build` (three proxies), `lint`, `test` **229** (was 220),
+> `smoke` **22 / 30 / 46** — all three against **production builds** — and all
+> six role-gate directions.
+>
+> ⚠ **Two things to carry forward.** (1) 🔴 **Not every server-action form
+> carries `$ACTION_ID_…`** — a `useActionState` form (`/payment/[id]`) uses
+> `$ACTION_REF_n` / `$ACTION_n:0` / `$ACTION_KEY` instead, and Batch 3's
+> verification technique silently no-ops against one. Replay every hidden input
+> instead. (2) **Batch 7 will cross the same eight-round-trip ceiling** —
+> certification writes a certificate, a PDF, a status event and an audit row.
+> Set the timeout explicitly from the start.
+>
+> Next: **Batch 6 and 7** close the second lifecycle hole (custody batch →
+> `tested`, manifest dispatch/confirm, certification). **Batch 2 (C's console
+> kit) is the last unbuilt Day-1 P0** and Batch 5 waits on it.
+>
 
 > ## 2026-08-27 — Admin console Batch 3: 🔴 the dispatch board is built (Aamir)
 >

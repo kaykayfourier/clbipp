@@ -606,6 +606,54 @@ say so here first.
 
 ---
 
+## 2026-08-29 — Admin Batch 4 (`raisePayment()` + agent-collect wiring) · **B's lane, done by A (Aamir)**
+
+**Taken, not waited on.** Batch 4 is **B's** per §4 of `PLAN_ADMIN_APP.md`
+(`packages/core/src/payment-actions.ts` is B's outright). The sheet already flags
+the second half as **"crossing into Ali's lane by design (AD10)"** — the file it
+edits, `apps/agent/src/app/(agent)/job/[id]/collect/actions.ts`, was C's in the
+Field Agent sprint. So this batch crosses **two** lanes by construction, and both
+crossings are here.
+
+**Khalid — `packages/core/src/payment-actions.ts`:**
+- **`raisePayment(tx, { pickupId, vendorId, amountPaise })` is new**, exported
+  from the package barrel like everything else in that file. It creates the
+  `pending` `Payment` a collection owes and nothing else. It **takes a
+  transaction client and opens none of its own** — same contract as the private
+  `creditWallet` / `ensureInvoice` helpers beside it, so a caller composes it
+  into the write that justifies the payable.
+- `packages/core/src/payment-actions.test.ts` is new — **9 tests, no database**
+  (the module's Prisma import is mocked the way `market.test.ts` does it).
+  Package total 153 → 162; workspace 220 → **229**.
+- Nothing else in that file changed. `settlePayment` is byte-identical.
+
+**Ali — `apps/agent/.../collect/actions.ts`:**
+- One `raisePayment(tx, …)` call inside `confirmCollection`'s **existing**
+  `$transaction`, plus the header comment updated from "four things" to "five".
+- 🔴 **And the transaction's timeout was raised to `20_000` / `maxWait 10_000`.**
+  This is the edit worth knowing about. That transaction was on Prisma's **5 s
+  default** and did six sequential round trips; the payable makes it **eight** —
+  and the measured note on `settlePayment` in `@clbipp/core` says eight round
+  trips against remote Supabase took **5.3 s and rolled back**. Adding the call
+  without this would have introduced an intermittent collection failure on a
+  slow connection. Raised rather than split: the five writes must land together.
+
+**The shared database was written to and put back.** Verification meant actually
+accepting an offer and collecting `PKP-2026-000104` over HTTP. The fixture was
+restored field by field afterwards (status, `agentFeePaise`, `acceptedAt`, both
+wallet balances, and the payment / receipt / invoice / ledger / status-event rows
+the test wrote) and `npm run verify-seed` is **21/21**.
+
+🔴 **One thing every remaining batch inherits:** a pickup at `collected`+ now has
+a `Payment` row for real, not just in the seed. C's Batch 5 `/pickups/[id]` can
+read `pickup.payment` and expect one.
+
+**Still open, unchanged:** Batch 2 (C's console data kit) is the last Day-1 P0
+and is still not built — Batch 3's screens continue to carry local
+`Panel`/`Th`/`Td` stand-ins until it lands.
+
+---
+
 ## 2026-08-27 — Admin Batch 3 (dispatch board) — A (Aamir), in lane
 
 **In lane, nothing taken from anyone.** `(admin)/dispatch/**` and

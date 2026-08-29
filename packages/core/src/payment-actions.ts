@@ -1,7 +1,12 @@
 // ─── Payment write path ──────────────────────────────────────────────────────
-// Settling a payout touches four things that must agree: the Payment row, the
-// WalletTxn ledger, the cached balance on Profile, and the Invoice. This is the
-// only place that writes any of them.
+// A payout has two moments, and both live here:
+//
+//   raisePayment()  — the agent collects, so we now OWE the vendor.  → pending
+//   settlePayment() — the vendor picks a destination and we pay.     → paid
+//
+// Settling touches four things that must agree: the Payment row, the WalletTxn
+// ledger, the cached balance on Profile, and the Invoice. This is the only
+// place that writes any of them.
 //
 // Same contract as ./booking-actions: `vendorId` is an INPUT, not something
 // resolved from a session, so core never depends on @clbipp/auth and stays
@@ -12,6 +17,67 @@ import { prisma } from "@clbipp/database";
 import type { PaymentMethod, Prisma } from "@clbipp/database";
 import { invoiceNumber } from "./documents";
 import { nextBalance, paymentsMode, simulatedGatewayRef } from "./payments";
+
+export type RaisePaymentInput = {
+  pickupId: string;
+  vendorId: string;
+  amountPaise: number;
+};
+
+/**
+ * Raises the payable a collection creates — the money we now owe the vendor.
+ *
+ * Until this existed, `Payment` rows came only from the seed: a pickup collected
+ * for real in the field agent app produced a receipt and an agent fee but no
+ * payable at all, so the vendor's "Choose how you get paid" CTA never appeared
+ * and `settlePayment` had nothing to settle. (Admin sprint, Batch 4 / AD10.)
+ *
+ * **Takes a transaction client and opens nothing itself.** The caller composes
+ * it into the write that justifies the payable — see `confirmCollection` in the
+ * agent app, where the status flip, the receipt, the agent's ledger row and
+ * this must all land together or not at all. A second transaction here would
+ * mean a collection that succeeded while the payout it owes silently didn't.
+ *
+ * **Idempotent.** A pickup has at most one payment — `Payment.pickupId` is
+ * `@unique` in the schema, so the database enforces this even if the guard
+ * below were somehow raced. A re-submit must not raise a second payable, and it
+ * must never reset a payment that has already been settled back to `pending`.
+ *
+ * `method` is deliberately left to the schema default (`upi`). Nothing has been
+ * chosen yet at this point — the vendor picks a real destination on
+ * `/payment/[id]` and `settlePayment` overwrites it. The seed does the same.
+ */
+export async function raisePayment(
+  tx: Prisma.TransactionClient,
+  input: RaisePaymentInput,
+): Promise<{ created: boolean }> {
+  const { pickupId, vendorId, amountPaise } = input;
+
+  // Throw rather than coerce, the same way nextBalance() refuses a negative
+  // balance: a payable that is a float, or negative, means the caller handed us
+  // rupees or a bad subtraction. Writing it would put a wrong number in front
+  // of a vendor, and rounding it would destroy the evidence of which. Zero is
+  // allowed — a load where every item is rejected is a real outcome.
+  if (!Number.isSafeInteger(amountPaise) || amountPaise < 0) {
+    throw new Error(
+      `raisePayment: amountPaise must be a non-negative integer (got ${amountPaise}). Money is paise, never rupees, never a float.`,
+    );
+  }
+
+  const existing = await tx.payment.findUnique({ where: { pickupId } });
+  if (existing) return { created: false };
+
+  await tx.payment.create({
+    data: {
+      pickupId,
+      vendorId,
+      amountPaise,
+      status: "pending",
+    },
+  });
+
+  return { created: true };
+}
 
 export type SettlePaymentInput = {
   pickupId: string;
