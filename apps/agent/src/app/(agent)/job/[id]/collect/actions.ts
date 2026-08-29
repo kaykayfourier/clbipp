@@ -7,7 +7,7 @@ import { createClient } from '@clbipp/auth/server'
 import { photoPathsBelongTo } from '@clbipp/core/intake'
 
 import { computeAgentFeePaise } from './agent-fee'
-
+import { raisePayment } from '@clbipp/core'
 // ─── confirmCollection (D7: offered → collected) — Batch 6 · Ali ────────────
 // Gated on Offer.acceptedAt by collect/page.tsx before this form is even
 // rendered; re-checked here too, same "never trust the screen that got you
@@ -136,6 +136,12 @@ export async function confirmCollection(formData: FormData) {
           lng,
           photoUrls: photoPaths,
         },
+      })
+
+      await raisePayment(tx, {
+        pickupId,
+        vendorId: pickup.vendorId,
+        amountPaise: pickup.offer!.estimatedPrice,
       })
     })
   } catch (e) {

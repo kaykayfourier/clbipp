@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import { raisePayment } from './payment-actions'
 import {
   CUSTOMER_PAYMENT_METHODS,
   isCustomerPaymentMethod,
@@ -97,3 +98,42 @@ describe("nextBalance", () => {
     expect(() => nextBalance(400, -500)).toThrow(/negative/i);
   });
 });
+
+// Mock prisma tx client
+function makeTx(existingPayment: object | null = null) {
+  return {
+    payment: {
+      findUnique: vi.fn().mockResolvedValue(existingPayment),
+      create: vi.fn().mockResolvedValue({}),
+    },
+  }
+}
+
+describe('raisePayment', () => {
+  it('creates a pending Payment row with the correct amount', async () => {
+    const tx = makeTx(null)
+    await raisePayment(tx as any, {
+      pickupId: 'PKP-2026-000102',
+      vendorId: 'vendor-uuid',
+      amountPaise: 18450000,
+    })
+    expect(tx.payment.create).toHaveBeenCalledWith({
+      data: {
+        pickupId: 'PKP-2026-000102',
+        vendorId: 'vendor-uuid',
+        amountPaise: 18450000,
+        status: 'pending',
+      },
+    })
+  })
+
+  it('is idempotent — second call creates nothing', async () => {
+    const tx = makeTx({ id: 'existing', pickupId: 'PKP-2026-000102' })
+    await raisePayment(tx as any, {
+      pickupId: 'PKP-2026-000102',
+      vendorId: 'vendor-uuid',
+      amountPaise: 18450000,
+    })
+    expect(tx.payment.create).not.toHaveBeenCalled()
+  })
+})

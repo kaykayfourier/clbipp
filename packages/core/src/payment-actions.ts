@@ -204,3 +204,30 @@ async function ensureInvoice(
     },
   });
 }
+
+/**
+ * Creates a pending Payment row for the vendor at collection time.
+ *
+ * Called INSIDE confirmCollection's $transaction — takes a tx client so it
+ * composes atomically with the status flip, receipt, and wallet credit.
+ * Idempotent: a pickup has at most one Payment row (pickupId is @unique on
+ * Payment). A second call is a silent no-op, not an error.
+ */
+export async function raisePayment(
+  tx: Prisma.TransactionClient,
+  input: { pickupId: string; vendorId: string; amountPaise: number },
+): Promise<void> {
+  const existing = await tx.payment.findUnique({
+    where: { pickupId: input.pickupId },
+  })
+  if (existing) return
+
+  await tx.payment.create({
+    data: {
+      pickupId: input.pickupId,
+      vendorId: input.vendorId,
+      amountPaise: input.amountPaise,
+      status: 'pending',
+    },
+  })
+}
