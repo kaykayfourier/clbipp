@@ -1,29 +1,53 @@
+import { prisma } from '@clbipp/database'
+
+import { PageHead } from '@/components/console'
+import { formatIstDate } from '@/lib/ist'
+import { AgentsTable, type AgentRow } from './AgentsTable'
+
 // E02 · Agent roster — Batch 9, owner C — Ali.
 //
-// STUB, created in Batch 0. Every route in §2 of docs/PLAN_ADMIN_APP.md was
-// stubbed in one go so that no two lanes ever create the same file — each
-// owner only ever REPLACES their own stub. Replace this whole file when you
-// build the screen; do not add a second route beside it.
+// Zone, vehicle, safety training, rating, live job load. Read-only.
 //
-// Keep the <h1> text ("Agent roster") when you do: scripts/smoke.mjs asserts on it,
-// and that assertion is what stops this route silently 500ing or 404ing later.
-// A route that only ever returns a status code is asserting nothing (trap 9).
+// "Live load" = jobs this agent still has to act on — scheduled through
+// collected. Once a pickup reaches `tested` it has moved to the hub side of
+// the chain (Batch 6/7's territory); it stops counting against the agent even
+// though `Pickup.agentId` still points at them for the record.
 //
 // No shell here — (admin)/layout.tsx renders ConsoleShell for the whole group.
-// 🔴 Never import AppShell, PhoneFrame or hideNav: those are the mobile kit's
-// (AD11, trap 15).
-export default function AgentsPage() {
+// 🔴 Never import AppShell, PhoneFrame or hideNav (AD11, trap 15).
+export const dynamic = 'force-dynamic'
+
+const ACTIVE_STATUSES = ['scheduled', 'arrived', 'offered', 'collected'] as const
+
+export default async function AgentsPage() {
+  const agents = await prisma.profile.findMany({
+    where: { role: 'agent' },
+    select: {
+      id: true,
+      fullName: true,
+      agentZone: true,
+      agentVehicle: true,
+      safetyTrainedAt: true,
+      agentRating: true,
+      _count: { select: { assignedPickups: { where: { status: { in: [...ACTIVE_STATUSES] } } } } },
+    },
+    orderBy: { fullName: 'asc' },
+  })
+
+  const rows: AgentRow[] = agents.map((a) => ({
+    id: a.id,
+    name: a.fullName,
+    zone: a.agentZone,
+    vehicle: a.agentVehicle,
+    safetyTrainedLabel: a.safetyTrainedAt ? formatIstDate(a.safetyTrainedAt) : null,
+    rating: a.agentRating !== null ? Number(a.agentRating) : null,
+    liveLoad: a._count.assignedPickups,
+  }))
+
   return (
     <>
-      <div>
-        <h1 className="font-display text-[22px] font-medium tracking-[-0.01em] text-text-primary">
-          Agent roster
-        </h1>
-        <p className="mt-1 text-xs text-text-secondary">Zone, vehicle, safety training, rating and live job load.</p>
-      </div>
-      <p className="font-mono text-[10px] tracking-[0.09em] uppercase text-text-secondary">
-        Screen E02 · not built yet · batch 9
-      </p>
+      <PageHead title="Agent roster" description="Zone, vehicle, safety training, rating and live job load." />
+      <AgentsTable rows={rows} />
     </>
   )
 }
