@@ -52,7 +52,8 @@ export async function buildComplianceCsv(input: {
 
   const certificates = await prisma.certificate.findMany({
     where: {
-      vendorId: input.vendorId,
+      // empty string = admin export, no vendor scope
+      ...(input.vendorId ? { vendorId: input.vendorId } : {}),
       ...(filterYear
         ? {
             certifiedAt: {
@@ -62,7 +63,7 @@ export async function buildComplianceCsv(input: {
           }
         : {}),
     },
-    orderBy: { certifiedAt: 'desc' },
+    orderBy: { certifiedAt: "desc" },
     include: { pickup: { select: { category: true } } },
   })
 
