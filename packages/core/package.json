@@ -8,17 +8,21 @@
     "./market": "./src/market.ts",
     "./safety": "./src/safety.ts",
     "./intake": "./src/intake.ts",
-    "./audit": "./src/audit.ts"
+    "./audit": "./src/audit.ts",
+    "./certificate": "./src/certificate.ts",
+    "./compliance-export": "./src/compliance-export.ts"
   },
   "scripts": {
     "test": "vitest run"
   },
   "dependencies": {
     "@clbipp/database": "*",
+    "papaparse": "^5.7.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@clbipp/tsconfig": "*",
+    "@types/papaparse": "^5.5.2",
     "typescript": "^5",
     "vitest": "^4.1.7"
   }

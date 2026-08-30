@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentProfile } from '@clbipp/auth'
-import { buildComplianceCsv } from '@/lib/compliance-export'
+import { buildComplianceCsv } from '@clbipp/core/compliance-export'
 
 // ─── GET /api/exports/compliance[?year=2026] ─────────────────────────────────
 // Batch 9 (B5). Streams the caller's compliance log as CSV, for their CPCB
