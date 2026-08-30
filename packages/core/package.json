@@ -10,7 +10,8 @@
     "./intake": "./src/intake.ts",
     "./audit": "./src/audit.ts",
     "./certificate": "./src/certificate.ts",
-    "./compliance-export": "./src/compliance-export.ts"
+    "./compliance-export": "./src/compliance-export.ts",
+    "./engine-config": "./src/engine-config.ts"
   },
   "scripts": {
     "test": "vitest run"

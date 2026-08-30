@@ -9,7 +9,7 @@ import {
   EngineValidationError,
   StaleMarketDataError,
 } from "@clbipp/decision-engine"
-
+import { getActiveConfig } from "@clbipp/core/engine-config"
 // The D1 branch — li-ion goes through the engine, everything else is priced off
 // PricingRate. The list of li-ion families lives in @clbipp/core/intake
 // (LI_ION_CHEMISTRIES) so this route and the agent's item screens can never
@@ -42,16 +42,18 @@ export async function POST(req: NextRequest) {
   try {
     const marketData = await getMarketData()
 
+    const config = await getActiveConfig()
+
     const result = computeQuote(
       {
-        trace_id:   traceId,
-        battery:    body.battery,
-        damage:     body.damage,
+        trace_id:    traceId,
+        battery:     body.battery,
+        damage:      body.damage,
         distance_km: body.distance_km,
         inflow_type: body.inflow_type ?? "external",
         supplier_id: body.supplier_id,
       },
-      body.config,
+      config,
       marketData
     )
 
