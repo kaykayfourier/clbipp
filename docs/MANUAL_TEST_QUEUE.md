@@ -478,6 +478,33 @@ What is left needs a browser or a human eye.
     `api/documents/[kind]/[id]` routes **404 under Turbopack dev** (trap 17).
     Do this part against `npm run build && npm start`.
 
+43. **The exception resolve form reads as a decision, not an advance.**
+    *(Batch 14.)* Three `<select>` options with sentence-long labels
+    ("Override — the flag was wrong, clear it"). 🔴 Check that a person who has
+    just used `/lifecycle` does **not** expect the pickup to move when they pick
+    `override` here — that is the one confusion the screen exists to prevent,
+    and no script can test whether a wording succeeds at it. The footer note
+    pointing at `/lifecycle` is the mitigation; check it lands.
+
+44. **The flat-rate row on `/exceptions`.** *(Batch 14.)* One seeded open
+    exception is on a lead-acid item with **no `traceId`**, rendered as
+    "flat-rate · no trace" where every other row shows a `TRC-…`. Check that
+    reads as a fact about the item and not as missing data — it is the row a
+    trace-keyed table would have dropped (W2/AD1), so it is the one worth
+    getting right visually.
+
+45. **The `/audit` before/after diff, on a wide row.** *(Batch 14.)* A
+    `pickup.assign` row diffs five fields at once. Check the `→` columns line up
+    and stay readable at a laptop width, and that a `created — no prior value`
+    row (a config publish with no parent) reads as "this made something" rather
+    than as a rendering failure.
+
+46. ⚠ **`/audit`'s footer claim.** *(Batch 14.)* The page says a vendor's or
+    agent's action lives on the pickup's own timeline, not here. Follow that
+    link for a pickup that was actually collected and confirm the timeline does
+    show it — the footer is the only thing stopping the absence reading as data
+    loss, so it had better be true on the day.
+
 ---
 
 ## Standing checks for the end-of-sprint pass

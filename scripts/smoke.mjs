@@ -937,14 +937,33 @@ const ADMIN_APP_CONTENT = {
   '/market': ['Market feed'],
   '/quotes': ['Quote queue'],
   [`/trace/${ADMIN_TRACE}`]: ['Traceability'],
-  '/exceptions': ['Exception queue'],
+  // Batch 14. 🔴 Trap 28 — assert on strings only a real read could produce.
+  // `soh_below_gate` is seed fixture 6's machine-readable cause, the pickup id
+  // comes from a two-level join (exception → item → pickup), and "no trace" is
+  // the FLAT-RATE row a trace_id-keyed table would have dropped (W2/AD1).
+  '/exceptions': [
+    'Exception queue',
+    'soh_below_gate',
+    'PKP-2026-000106',
+    'no trace',
+    'Resolve',
+  ],
   '/suppliers': ['Suppliers'],
   '/agents': ['Agent roster'],
   // '&' renders as &amp; — assert the two halves, never the raw ampersand.
   '/facilities': ['Facilities', 'recyclers'],
   '/compliance': ['Compliance'],
   '/analytics': ['Analytics'],
-  '/audit': ['Audit log'],
+  // Batch 14. The three dotted action strings are read back out of
+  // `admin_audits` and rendered verbatim, so they prove the query ran — a stub
+  // could render the heading, but not `exception.resolve` next to an actor.
+  '/audit': [
+    'Audit log',
+    'config.publish',
+    'manifest.dispatch',
+    'exception.resolve',
+    'entries',
+  ],
 }
 
 const ADMIN_PUBLIC_ROUTES = ['/login']

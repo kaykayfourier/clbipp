@@ -60,8 +60,8 @@ monorepo** (migrated 2026-08-09):
    no `actorId` and does **not** clear a reactivated pickup's stale agent.
 3. **Admin console** — `apps/admin` — **CURRENT SPRINT** (from 2026-08-25).
    Runs on **port 3002** (`npm run dev:admin`). All three can run at once.
-   **Batches 0, 1, 3 and 4 are built** (0 + 1 on 2026-08-26, 3 on 2026-08-27,
-   4 on 2026-08-29):
+   **A's batches 0, 1, 3, 4, 6, 7 and 14 are built** (0 + 1 on 2026-08-26,
+   3 on 2026-08-27, 4 on 2026-08-29, 6 + 7 + 14 on 2026-08-31):
    **0** the app scaffold, the auth gate, the `ConsoleShell` desktop chrome,
    `/login` and **all 22 routes as stubs** · **1** the `admin_app_v1` migration
    (`EngineConfig`, `AdminAudit`, `ItemException`, `MarginTier`, W6's market
@@ -78,11 +78,17 @@ monorepo** (migrated 2026-08-09):
    🔴 **7** (2026-08-31) **manifest confirm + reconcile, and certification** —
    `tested → processed → recovered` **only for pickups AD6 says are covered**,
    then `recovered → certified`, which mints the `Certificate`. Plus B06's
-   manual override.
+   manual override. ·
+   🔴 **14** (2026-08-31) **`/exceptions` + `/audit`** — `resolveException()`
+   closes an engine flag with retest / override / reject, and W7's audit trail
+   finally has a reader. 🔴 **Resolving an exception advances NOTHING** — no
+   `PickupStatus`, no `status_events`, no pathway (AD4/AD6); `override` there
+   means "the engine's flag was wrong about this item", not "advance this
+   pickup". Asserted directly.
 
    **B's and C's batches (2, 5, 8, 9, 10, 11, 12, 13, 15, 16) are all pushed.**
-   The only work left is **A's Batch 14** (exceptions + `/audit`) and **B's
-   Batch 17** (deploy).
+   🎯 **Every screen in the sprint is now built. The only work left is B's
+   Batch 17 (deploy).**
 
    🎯 **BOTH LIFECYCLE HOLES ARE CLOSED (2026-08-31).** Every one of the nine
    stages is written by a screen now, and the journey runs end to end with no
@@ -167,13 +173,19 @@ resolved there. **Read §0 before building from the wireframe.**
 
 Headlines you need even if you read nothing else:
 
+- ✅ **Every screen is built (2026-08-31).** Batch 14 was the last feature
+  batch; only Batch 17 (deploy, B) remains. 🟠 **`npm run lint` is red on two
+  pre-existing one-liners** — `(admin)/market/page.tsx:31` (`react-hooks/purity`,
+  B's) and `(admin)/pickups/[id]/page.tsx:266` (an `<a>` where a `<Link>`
+  belongs, C's). Neither is on the pre-push list, but both should be green
+  before the deploy.
 - ✅ **The lifecycle is CLOSED — that priority is discharged.**
   `requested → scheduled` (Batch 3, 2026-08-27) · `collected → tested` and
   manifest build + dispatch (Batch 6, 2026-08-31) · `tested → processed →
   recovered` and `recovered → certified` (Batch 7, 2026-08-31). 🎯 **The full
   journey runs end to end, screens only — and it starts in the agent app with a
-  hub drop-off.** What is left is oversight: exceptions + `/audit` (Batch 14)
-  and deploy (Batch 17).
+  hub drop-off.** Oversight — exceptions + `/audit` (Batch 14) — landed
+  2026-08-31; **deploy (Batch 17) is all that is left.**
 - **The admin app is pickup-centric, not quote-centric** (AD1). `/pickups` +
   `/pickups/[id]` are the spine; `/quotes` is a lens over `BatteryItem`.
   🔴 **Flat-rate (non-li-ion) items must appear in every operational table** —
@@ -707,7 +719,10 @@ letter means different things in each. **Quote the decision with its app.**
   transaction should set them from the start rather than discovering the 5 s
   default in a demo.
 - **`AdminAudit.action` and `.subjectType` come from `@clbipp/core/audit`** —
-  never a bare string literal. The column is a `String` because the values are
+  never a bare string literal, and 🔴 **`/audit`'s filter chips come from
+  `ADMIN_AUDIT_ACTIONS` too** (Batch 14). Narrow a value read back out of the
+  database with `isAdminAuditAction(x) ? x : null` — a boolean flag beside it
+  leaves the value a bare `string`, which cannot index a `Record<AdminAuditAction, …>`. The column is a `String` because the values are
   dotted (`pickup.assign`) and so cannot be a Prisma enum; `ADMIN_AUDIT_ACTIONS`
   is what keeps it a closed set. `isReasonRequired()` says which actions must
   carry a typed reason. Same subpath-import reasoning as `@clbipp/core/format`.

@@ -5,12 +5,51 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-29 — **the Admin console sprint is building. Batches 0
-(scaffold, auth gate, console shell, all route stubs), 1 (schema + seed delta),
-3 (🔴 the dispatch board) and 4 (🔴 `raisePayment()`) are done.** The Field Agent
-app is done except Batch 9 (deploy). Both existing apps are installable, and the
-**vendor → admin → agent → vendor-gets-paid** journey now runs from screens
-alone, with no CLI step and no seeded row standing in for a real one.
+**Last updated:** 2026-08-31 — 🎯 **every screen in the Admin console sprint is
+built. Only Batch 17 (deploy, B) remains.** A's lane finished today with
+Batches 6 and 7 (the lifecycle holes) and **Batch 14 (`/exceptions` + `/audit`)**;
+B's and C's batches (2, 5, 8–13, 15, 16) are all pushed. The Field Agent app is
+done except Batch 9 (deploy). Both existing apps are installable, and the full
+**vendor → admin → agent → vendor-gets-paid → hub → recycler → certificate**
+journey runs from screens alone, with no CLI step and no seeded row standing in
+for a real one.
+
+> ## 2026-08-31 — Admin console Batch 14: exceptions + the audit reader (Aamir)
+>
+> The last two screens of the sprint. **W4's exception board finally has a table
+> under it** and **W7's audit trail finally has a reader.**
+>
+> `/exceptions` lists `ItemException` rows — the engine's HOLD and REVIEW flags,
+> per battery item — and `resolveException()` closes one as `retest`, `override`
+> or `reject`, writing an `AdminAudit` row in the same transaction.
+>
+> 🔴 **The whole point of the batch is what it does NOT do.** Resolving an
+> exception changes no `PickupStatus`, writes no `status_events` row and touches
+> no pathway. An `ItemException` is an engine flag and its resolution, per item —
+> not a lifecycle stage (AD4), and there is no per-item status column (AD6).
+> `override` there means *the engine's flag was wrong about this item*, never
+> *advance this pickup*; that remains B06's `lifecycle.override` with a typed
+> reason. **The absence is asserted directly** (61 status events before, 61
+> after; no pickup changed status).
+>
+> `/audit` reads `AdminAudit` newest-first, filtered by action / subject / actor
+> and paginated **server-side** (25/page — the table is append-only and only
+> grows). 🔴 Its filter list comes from `ADMIN_AUDIT_ACTIONS`, never a
+> hand-written array. 🟠 It deliberately does **not** merge `status_events`:
+> that column carries two spellings of one role (`'customer'` vs `'vendor'`), and
+> the sheet's own rule is "pick one and migrate, or handle both; do not
+> half-do it" — a B-lane migration, not a screen change. The screen says where a
+> vendor's or agent's action actually lives instead.
+>
+> **Verified over real HTTP** as `admin@test` with a throwaway harness (smoke
+> cannot POST): all three resolutions applied with one audit row each; an invalid
+> `resolution` posted past the `<select>` and an unknown id both rejected **by the
+> action**; a re-submit refused with the first resolution intact and still one
+> audit row. **Database fully restored; `npm run verify-seed` 24/24.**
+>
+> **Green:** `npm run build` (three proxies), `smoke --app=admin` **23/23**, both
+> admin role gates **23/23**. 🟠 `npm run lint` is still red on the same **two
+> pre-existing one-liners** in B's and C's files — see `LANE_OWNERSHIP.md`.
 
 > ## 2026-08-29 — Admin console Batch 4: 🔴 the vendor actually gets paid (Aamir)
 >

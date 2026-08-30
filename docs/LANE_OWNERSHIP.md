@@ -835,6 +835,28 @@ needed are not.
      vendor and agent names, which only a real join produces.
      🔴 **`npm run smoke -- --app=admin` is 23/23 for the first time.**
 
+## 2026-08-31 — Admin Batch 14 (exceptions + `/audit`), A — Aamir
+
+**Entirely inside A's lane.** Three files, all of them A's own Batch 0 stubs or
+new beside them: `(admin)/exceptions/page.tsx`, `(admin)/exceptions/actions.ts`,
+`(admin)/audit/page.tsx`, plus `scripts/smoke.mjs` (A's own). **Nobody else's
+file was touched.**
+
+One standing call, restated because it now applies to five A-lane screens:
+**C's console kit is deliberately not used on `/exceptions` or `/audit`.**
+`<DataTable>` and `<FilterChips>` are client components; both of these screens
+are server-rendered reads sitting next to a server-action form, and `/audit`
+paginates on the **server** because `admin_audits` only grows. Importing the kit
+would mean shipping the board to the browser to gain client-side sorting over
+rows that are already ordered by an index. Same reasoning as Batches 3, 6 and 7
+— this is a note, not a complaint about the kit.
+
+**Handed to B, and it is small:** 🟠 the two lint errors below are **still** the
+only thing keeping `npm run lint` red, and Batch 17 is the deploy batch.
+`market/page.tsx:31` is B's own file.
+
+---
+
 **Left alone deliberately, and B and C should know:** 🟠 **`npm run lint` is RED
 on two pre-existing errors** — `(admin)/market/page.tsx:31`
 (`react-hooks/purity`, B's) and `(admin)/pickups/[id]/page.tsx:266` (an `<a>`

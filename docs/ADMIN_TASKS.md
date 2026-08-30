@@ -923,19 +923,142 @@ apps/admin/src/app/(admin)/audit/page.tsx          ← replace A's stub
    not a blank panel.
 
 **Done when**
-- [ ] An open exception resolves to each of `retest` / `override` / `reject`, and
+- [x] An open exception resolves to each of `retest` / `override` / `reject`, and
       each writes an `AdminAudit` row with before, after and the notes.
-- [ ] Resolving the same exception twice updates zero rows the second time and
+- [x] Resolving the same exception twice updates zero rows the second time and
       writes one audit row in total.
-- [ ] 🔴 Resolving an exception leaves its item's pickup at the **same
+- [x] 🔴 Resolving an exception leaves its item's pickup at the **same
       `PickupStatus`**, with **no** new `status_events` row. Assert this — it is
       the mistake this screen invites.
-- [ ] An invalid `resolution` string, and a resolution posted for an
+- [x] An invalid `resolution` string, and a resolution posted for an
       already-resolved id, are both rejected by the action.
-- [ ] `/audit` shows the dispatch assignments from Batch 3, the payment-free
+- [x] `/audit` shows the dispatch assignments from Batch 3, the payment-free
       collections (correctly absent — an agent action writes no `AdminAudit`),
       and every write from Batches 6, 7, 9, 11 and 16.
-- [ ] Both routes carry content assertions in smoke.
+- [x] Both routes carry content assertions in smoke.
+
+### Batch 14 — as built (2026-08-31, A — Aamir)
+
+**Three files, exactly the three the sheet names.** No new `src/lib/` helper and
+no schema change.
+
+```
+apps/admin/src/app/(admin)/exceptions/page.tsx     replaced A's stub
+apps/admin/src/app/(admin)/exceptions/actions.ts   new — resolveException
+apps/admin/src/app/(admin)/audit/page.tsx          replaced A's stub
+```
+
+**Decisions worth knowing before touching either screen**
+
+1. 🔴 **`resolveException` advances nothing, and the harness asserts the
+   absence.** No `pickup.update`, no `statusEvent.create`, no
+   `batteryItem.update`. `override` on this screen means *the engine's flag was
+   wrong about this item*, never *advance this pickup*. The lifecycle escape
+   hatch is still B06's `lifecycle.override`, in a different file, with a typed
+   reason. This is step 3 of the sheet and it is the mistake the screen invites.
+
+2. **The three resolutions come off the Prisma enum object, in both directions.**
+   `Object.values(ExceptionResolution)` builds the `<select>` in the page and the
+   validator in the action, so the form and the check cannot drift, and a fourth
+   value added by a migration is honoured for free. Safe as a **value** import
+   only because both files are server-only — in a client component it would drag
+   the query engine into the bundle (trap 4's reasoning, applied to an enum).
+
+3. **`notes` is optional and stored as SQL NULL when blank**, so "no note" and
+   "a note that was blanked" stay distinguishable. `reason` is deliberately
+   *not* written: `isReasonRequired('exception.resolve')` is `false`, and the
+   typed reason belongs to the three escape hatches. The note lands in the audit
+   row's `after` instead, which is where `/audit` renders it.
+
+4. 🟠 **`/audit` does NOT merge `StatusEvent` into the trail** — sheet step 5,
+   answered by declining it. `status_events` carries **two spellings of one
+   role** (`'customer'` in the seed, `'vendor'` from `reschedulePickup`), and
+   the instruction is "pick one and migrate, or handle both; do not half-do it".
+   Migrating a column is a B-lane schema change on the last build day, so the
+   screen renders `AdminAudit` only and carries a footer saying where a vendor's
+   or agent's action actually lives. 🔴 **This is the batch's one deferral —
+   see "Known, deliberately not done".**
+
+5. **Both screens filter with `<Link>`s and a query string, not client state.**
+   `/audit` paginates **server-side** (25/page) because `admin_audits` is
+   append-only and only ever grows; C's `<DataTable>` is a client component that
+   paginates in the browser, which is the wrong shape for it. Same call every
+   A-lane screen in this app has made — logged in `docs/LANE_OWNERSHIP.md`.
+
+6. **`/audit`'s action chips come from `ADMIN_AUDIT_ACTIONS`**, filtered to the
+   ones that have actually fired (plus whatever the URL asks for, so a shared
+   link never loses its own filter). 🔴 An unknown `?action=` is dropped through
+   `isAdminAuditAction()` rather than passed to Prisma — otherwise a typo in a
+   pasted URL renders an empty page that looks exactly like "nothing happened".
+   ⚠ The row-level narrow is `isAdminAuditAction(row.action) ? row.action : null`,
+   **not a boolean** — a boolean flag leaves `row.action` a bare `string`, which
+   cannot index the label map. That was the batch's only type error.
+
+7. **Chip counts are computed over the WHOLE table, not the active filter.** A
+   chip reading "0" because another chip is on would be a lie about what is in
+   the log.
+
+### How this batch was verified
+
+Same technique as Batches 3, 6 and 7: `npm run smoke` cannot POST (traps 24/26),
+so `/exceptions` was driven **through the real HTTP path** — proxy, session
+cookie, server action, database — by a throwaway harness logging in as
+`admin@test`, replaying every hidden field and **replacing** the ones it
+overrode (trap 35).
+
+| Step | Outcome |
+|---|---|
+| `/exceptions` renders | 3 open exceptions, 3 resolve forms — one per open row |
+| 🔴 **`resolution=ignore` posted past the `<select>`** | rejected **by the action** — *"…is not a resolution. It has to be one of retest, override, reject."*, and the row stayed open |
+| unknown exception id | rejected — *"That exception does not exist."* |
+| resolve `retest` · `override` · `reject` | all three applied; each wrote **exactly one** `AdminAudit` row with `before` (four nulls), `after` (resolution + resolver + timestamp + notes) and a real `actorId` |
+| 🔴 **no pickup changed status** | **none** — asserted across every pickup in the table |
+| 🔴 **no `status_events` row written** | **61 → 61** |
+| `admin_audits` | **8 → 11**, exactly three added |
+| 🔴 **re-submitting a resolved exception** | `already=1`; the **first** resolution and its notes still stand, and still **exactly one** audit row for it |
+| `/audit?action=exception.resolve` | lists all three |
+| `/audit?action=nope.nope` · `?page=999` | both render the log rather than throwing or showing a false empty |
+| `/exceptions` open view, after | empty-stated — *"No open exceptions."* |
+| `/exceptions?state=resolved` · `?state=all&kind=hold` | both filter correctly; `kind=hold` shows `damage_score_high` and excludes `bms_entropy_anomaly` |
+
+⚠ **The shared database was then fully restored** — three exceptions reopened
+(`resolution`, `resolvedBy`, `resolvedAt`, `notes` back to null) and the three
+`exception.resolve` audit rows deleted. `admin_audits` back to 8.
+**`npm run verify-seed`: 24/24.** No reseed was needed.
+
+**Also green:** `npm run build` (all three apps, `ƒ Proxy (Middleware)` printed
+for each) · `npm run smoke -- --app=admin` **23/23** · both admin role gates
+(`--blocked business@test` and `--blocked agent@test`) **23/23**.
+
+### 🟠 Known, deliberately not done
+
+- 🟠 **`/audit` renders `AdminAudit` only** — decision 4 above. Merging
+  `status_events` needs the `'customer'` / `'vendor'` role spelling settled
+  first, which is a B-lane migration. **Not a gap in this batch; a prerequisite
+  that is not this batch's to buy.** The screen says so in a footer rather than
+  leaving the absence unexplained.
+- 🟠 **No date-range filter and no CSV export on `/audit`.** Action, subject and
+  actor cover every question the sprint has actually asked. A date range is the
+  obvious next one.
+- 🟠 **`notes` on a resolution is optional.** A bare `reject` with no note is
+  legal. Requiring one would be a defensible tightening, but it is not what the
+  sheet asked for and `isReasonRequired('exception.resolve')` is `false` —
+  changing that is a `@clbipp/core/audit` edit, not a screen edit.
+- 🟠 **`npm run lint` is STILL RED on the same two pre-existing errors** Batch 7
+  reported, in files this batch never touched: `(admin)/market/page.tsx:31`
+  (`react-hooks/purity` — `Date.now()` during render, **B's**) and
+  `(admin)/pickups/[id]/page.tsx:266` (an `<a href="/dispatch">` where a
+  `<Link>` belongs, **C's**). The three new files are lint-clean.
+  🔴 **These should be green before Batch 17 deploys** — both are one-liners.
+
+### ⚠ One correction to this sheet
+
+Step 6 above says fixture 6 seeds "two or three open `ItemException` rows and no
+resolved one". **It seeds three open AND one resolved** (`reset-demo.ts`'s
+`seedExceptions`, and `verify-seed` asserts `≥1 RESOLVED`). So the resolved view
+is **not** empty on a fresh seed — `/exceptions?state=resolved` shows
+`PKP-2026-000108`'s override from day 16. The `EmptyState` instruction still
+holds and is implemented; it just is not the state a fresh seed lands in.
 
 ---
 
