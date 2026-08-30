@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { prisma } from '@clbipp/database'
 import { chemistryLabel } from '@clbipp/core/intake'
+import { LIFECYCLE_STAGES, STAGE_LABELS } from '@clbipp/ui'
 
 import { formatAge, formatIstDateTime } from '@/lib/ist'
 import {
@@ -10,7 +11,11 @@ import {
   MANIFEST_STATUS_LABELS,
 } from '@/lib/lifecycle-units'
 
-import { advanceCustodyBatchAction } from './actions'
+import {
+  advanceCustodyBatchAction,
+  certifyPickupAction,
+  overrideLifecycleAction,
+} from './actions'
 
 // B06 · Lifecycle control — Batch 6, owner A — Aamir.
 //
@@ -28,10 +33,17 @@ import { advanceCustodyBatchAction } from './actions'
 //   processed → recovered  the same manifest, on RECONCILIATION (Batch 7)
 //   recovered → certified  one Pickup at a time, and it mints a Certificate
 //
-// Batch 6 wires the FIRST row. The other three render with their real units and
-// their real blockers so the board is honest about what is waiting — Batch 7
-// adds the buttons. Every "Batch 7" note below is a deliberate placeholder, not
-// an unfinished thought.
+// Batch 6 wired the first row; Batch 7 wired the rest. Rows two and three are
+// driven from `/manifests/[id]` rather than from here, because their unit is a
+// MANIFEST and a manifest is not a row on this board — this screen shows the
+// pickups waiting on one and links to it. Row four is the only per-pickup
+// button on the page, and it is the only advance in the platform that issues a
+// document to a third party.
+//
+// 🔴 The manual override at the foot of this page is risk R1's escape hatch: one
+// pickup, one step, a mandatory typed reason, and an `AdminAudit` row. It
+// bypasses AD5's unit and AD6's coverage gate on purpose. It refuses to reach
+// `certified` — see the action.
 //
 // 🔴 AD6 is rendered, not just enforced: a pickup at `tested` shows which of
 // its items are on which manifest, because chemistry segregation splits one
@@ -47,9 +59,16 @@ export const dynamic = 'force-dynamic'
 export default async function LifecyclePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; advanced?: string }>
+  searchParams: Promise<{
+    error?: string
+    advanced?: string
+    certified?: string
+    already?: string
+    overrode?: string
+    to?: string
+  }>
 }) {
-  const { error, advanced } = await searchParams
+  const { error, advanced, certified, already, overrode, to } = await searchParams
 
   const [batches, staged, itemIndex] = await Promise.all([
     prisma.custodyBatch.findMany({
@@ -137,6 +156,29 @@ export default async function LifecyclePage({
         <Banner tone="success">
           Advanced {advanced} pickup{advanced === '1' ? '' : 's'} to tested. They are now shippable
           from <span className="font-mono text-[11px]">/manifests/new</span>.
+        </Banner>
+      ) : null}
+
+      {certified ? (
+        <Banner tone="success">
+          {already ? (
+            <>
+              <span className="font-mono text-[11px]">{certified}</span> was already certified — one
+              certificate, not two. Certification is idempotent by design.
+            </>
+          ) : (
+            <>
+              <span className="font-mono text-[11px]">{certified}</span> is certified. Its EPR
+              certificate now exists and the vendor can download it from their own compliance
+              screen. 🎯 That is the journey, end to end.
+            </>
+          )}
+        </Banner>
+      ) : null}
+      {overrode ? (
+        <Banner tone="success">
+          Override applied: <span className="font-mono text-[11px]">{overrode}</span> → {to}. The
+          reason is on the audit trail; nothing else about this pickup was changed.
         </Banner>
       ) : null}
 
@@ -265,9 +307,13 @@ export default async function LifecyclePage({
         ) : (
           <CoverageTable rows={processed} floorLabel="reconciled" now={now} />
         )}
-        <BatchSevenNote>
-          Reconciling is <span className="font-mono text-[11px]">reconcileManifest()</span>, Batch 7.
-        </BatchSevenNote>
+        <FootNote>
+          Reconciling happens on the manifest, not here — open the manifest each pickup is waiting
+          on (linked in the column above) and record what came back.{' '}
+          <Link href="/manifests" className="font-bold underline underline-offset-2">
+            All manifests
+          </Link>
+        </FootNote>
       </Section>
 
       {/* ── recovered → certified ──────────────────────────────────────────── */}
@@ -287,6 +333,7 @@ export default async function LifecyclePage({
                   <Th>Vendor</Th>
                   <Th>Items</Th>
                   <Th>Waiting</Th>
+                  <Th>Issue certificate</Th>
                 </tr>
               </thead>
               <tbody>
@@ -313,16 +360,111 @@ export default async function LifecyclePage({
                         {formatAge(p.updatedAt, now)}
                       </span>
                     </Td>
+                    <Td>
+                      {/* POST, never a link. A GET here would let a link
+                          prefetcher ISSUE A COMPLIANCE DOCUMENT — the worst
+                          version of the bug the customer app shipped with
+                          `acceptOffer`. */}
+                      <form action={certifyPickupAction}>
+                        <input type="hidden" name="pickupId" value={p.id} />
+                        <button
+                          type="submit"
+                          className="inline-flex items-center rounded-lg bg-primary-black px-3 py-1.5 text-xs font-bold text-primary-green transition-opacity hover:opacity-90"
+                        >
+                          Certify
+                        </button>
+                      </form>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <BatchSevenNote>
-          Certifying is <span className="font-mono text-[11px]">certifyPickup()</span>, Batch 7 — it
-          mints the certificate and the PDF, and it is idempotent.
-        </BatchSevenNote>
+        <FootNote>
+          Certifying mints the <span className="font-mono text-[11px]">Certificate</span> row, its
+          public token and its CO₂e figure, and hands the PDF to the customer app&rsquo;s lazy
+          renderer — the same pipeline every receipt and invoice already uses. Idempotent: a second
+          click returns the certificate that exists rather than issuing a second one.
+        </FootNote>
+      </Section>
+
+      {/* ── The escape hatch ───────────────────────────────────────────────── */}
+      <Section
+        stage="Manual override"
+        unit="Unit: one pickup, one step"
+        blurb="Risk R1's escape hatch. It bypasses the unit rules above and AD6's coverage gate, so it demands a typed reason and writes an audit row that says the normal path was skipped. Reach for it when something is genuinely stuck — not to save a click."
+      >
+        <form
+          action={overrideLifecycleAction}
+          className="rounded-xl border border-warning-border bg-warning-bg p-4"
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-warning-text">
+                Pickup id
+              </span>
+              <input
+                type="text"
+                name="pickupId"
+                required
+                placeholder="PKP-2026-000105"
+                className="rounded-lg border border-console-line bg-surface px-2.5 py-1.5 font-mono text-xs text-text-primary"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-warning-text">
+                Advance to
+              </span>
+              <select
+                name="to"
+                required
+                defaultValue=""
+                className="rounded-lg border border-console-line bg-surface px-2.5 py-1.5 text-xs text-text-primary"
+              >
+                <option value="" disabled>
+                  Choose the next stage…
+                </option>
+                {/* 🔴 Straight off LIFECYCLE_STAGES — never a hand-typed list
+                    (trap 13). `requested` is omitted because nothing advances
+                    INTO it, and `certified` because certification mints a
+                    document and belongs to the button above; the action refuses
+                    it too, so the omission is a convenience, not the control. */}
+                {LIFECYCLE_STAGES.filter((st) => st !== 'requested' && st !== 'certified').map(
+                  (st) => (
+                    <option key={st} value={st}>
+                      {STAGE_LABELS[st]} ({st})
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          </div>
+          <label className="mt-3 flex flex-col gap-1">
+            <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-warning-text">
+              Reason (required — it is the only record of why the gate was bypassed)
+            </span>
+            <textarea
+              name="reason"
+              required
+              minLength={12}
+              rows={2}
+              placeholder="Recycler confirmed receipt by phone; their portal upload failed."
+              className="rounded-lg border border-console-line bg-surface px-2.5 py-1.5 text-xs text-text-primary"
+            />
+          </label>
+          <button
+            type="submit"
+            className="mt-3 inline-flex items-center rounded-lg bg-primary-black px-4 py-2 text-xs font-bold text-primary-green transition-opacity hover:opacity-90"
+          >
+            Apply override
+          </button>
+          <p className="mt-2 max-w-[620px] text-[11px] leading-relaxed text-warning-text">
+            One step forward only — no skipping and no reversing. The status event it writes says
+            <span className="font-mono"> actorRole: admin</span>, like every other advance this
+            console makes.
+          </p>
+        </form>
       </Section>
     </>
   )
@@ -465,8 +607,8 @@ function Section({
   )
 }
 
-function BatchSevenNote({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs leading-relaxed text-text-secondary">{children}</p>
+function FootNote({ children }: { children: React.ReactNode }) {
+  return <p className="max-w-[680px] text-xs leading-relaxed text-text-secondary">{children}</p>
 }
 
 function Empty({ children }: { children: React.ReactNode }) {

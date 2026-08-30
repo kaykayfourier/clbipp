@@ -788,6 +788,13 @@ const ADMIN_PICKUP = 'PKP-2026-000102' // seeded `scheduled`, 3 mixed items
 // item on a `draft` manifest, so 🔴 confirming this manifest must NOT advance
 // that pickup (AD6). Batch 7 is where that gets tested for real.
 const ADMIN_MANIFEST = '00000000-0000-4000-8000-000000000401'
+// Seeded `received`, i.e. the one manifest state where the Batch 7 reconcile
+// form is on screen. ⚠ Like verify-seed's fixtures, this is a FRESH-SEED fact:
+// reconciling it in a demo legitimately removes that form and fails the two
+// assertions below. Reseed before reading such a failure as a bug (trap 30's
+// sibling — the board being empty and the form being gone are both correct
+// outcomes of the app having been used).
+const ADMIN_MANIFEST_RECEIVED = '00000000-0000-4000-8000-000000000404'
 // PKP-2026-000113's li-ion item. Its OTHER item is flat-rate lead-acid and has
 // no trace at all — which is the point of the fixture, and why no admin table
 // may be keyed on trace_id.
@@ -806,6 +813,7 @@ const ADMIN_ROUTES = [
   '/manifests',
   '/manifests/new',
   `/manifests/${ADMIN_MANIFEST}`,
+  `/manifests/${ADMIN_MANIFEST_RECEIVED}`,
   // D · Engine
   '/config',
   '/market',
@@ -856,7 +864,22 @@ const ADMIN_APP_CONTENT = {
     'Recent status events',
   ],
   '/pickups': ['Pickups'],
-  [`/pickups/${ADMIN_PICKUP}`]: ['Pickup detail', ADMIN_PICKUP],
+  // ⚠ 'Pickup detail' was asserted here from Batch 0 until Admin Batch 7 and had
+  // been RED ever since Batch 5 replaced the stub: C's real screen uses the
+  // pickup id itself as its <h1>, which is a better heading, and the stub's
+  // wording simply stopped existing. Trap 28 in the opposite direction — the
+  // stub's string outlived the stub.
+  //
+  // 🔴 The id alone is NOT a sufficient assertion: it comes from the URL and a
+  // page could echo it without reading anything. 'Sharma Logistics Pvt Ltd' and
+  // 'Ravi Kumar' are the vendor and agent names, reachable only through joins,
+  // so they prove the row was actually loaded.
+  [`/pickups/${ADMIN_PICKUP}`]: [
+    ADMIN_PICKUP,
+    'Sharma Logistics Pvt Ltd',
+    'Ravi Kumar',
+    'Chain of custody',
+  ],
   // Built in Batch 6. Every string below is chosen to survive a DEMO as well as
   // a build, which on this screen is load-bearing: on a FRESH SEED the board has
   // nothing to advance at all (CB-2026-000301 holds no pickup at `collected`,
@@ -869,6 +892,12 @@ const ADMIN_APP_CONTENT = {
     'Unit: one custody batch',
     'Pending drop-off',
     'Awaiting certification',
+    // Batch 7. The override panel is the only part of this screen that renders
+    // at EVERY data state — it is a form, not a table, so it survives both a
+    // fresh seed and a fully-worked-through demo.
+    'Manual override',
+    'Unit: one pickup, one step',
+    'Apply override',
   ],
   '/inventory': ['Inventory'],
   // The four ManifestStatus stat tiles always render, even at zero — unlike the
@@ -887,6 +916,22 @@ const ADMIN_APP_CONTENT = {
     'MFT-2026-000401',
     'Items on this manifest',
     'Meridian Metals Recovery',
+    // 🔴 Batch 7's AD6 readiness panel. This string is only reachable after the
+    // page has resolved itemIds → pickups → EVERY item of each of those pickups
+    // → the manifest index, which is the whole coverage computation — exactly
+    // what trap 28 asks a content assertion to prove. It renders while the
+    // manifest is `dispatched` or `received`; reconciling …401 in a demo
+    // removes it, same caveat as ADMIN_MANIFEST_RECEIVED above.
+    'What this will move',
+  ],
+  // Batch 7's reconcile form. `Nickel (kg)` comes from RECOVERY_METALS, so it
+  // also proves the metal allowlist reached the page.
+  [`/manifests/${ADMIN_MANIFEST_RECEIVED}`]: [
+    'Manifest detail',
+    'MFT-2026-000404',
+    'Reconcile',
+    'Nickel (kg)',
+    'what actually came back',
   ],
   '/config': ['Engine config'],
   '/market': ['Market feed'],

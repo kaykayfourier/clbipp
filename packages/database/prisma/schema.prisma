@@ -804,6 +804,19 @@ model DispatchManifest {
   dispatchedAt  DateTime? @map("dispatched_at")
   confirmedAt   DateTime? @map("confirmed_at")
 
+  // What actually came back, per metal, for the WHOLE load — captured at
+  // reconciliation (Admin Batch 7). Shape: [{ material, recovered_kg }], the
+  // same stable keys Certificate.materialSummary and aggregateMaterials() use.
+  //
+  // Null until reconciled, and it is the only MEASURED recovery figure the
+  // platform holds: everything upstream of it (Offer.materialBreakdown, the
+  // engine's yields) is an estimate made before the batteries were opened. The
+  // certificate prefers this and falls back to the estimate, saying which.
+  //
+  // A manifest carries items from several pickups, so a certificate takes this
+  // pro-rated by that pickup's share of the load — see buildCertificatePayload.
+  recoveryData Json? @map("recovery_data")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   facility Facility @relation(fields: [facilityId], references: [id])

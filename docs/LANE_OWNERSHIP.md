@@ -791,6 +791,58 @@ that order afterwards. If your local Prisma client is stale, `npm run db:generat
 
 ---
 
+## 2026-08-31 — Admin Batch 7, and four things taken out of other lanes · **A (Aamir)**
+
+Batch 7 itself is squarely A's ("every lifecycle write"). Four of the files it
+needed are not.
+
+1. 🔴 **`packages/database/prisma/schema.prisma` + a new migration — B's lane.**
+   `reconcileManifest(id, recoveryData)` is step 2 of the batch and
+   `PLAN_ADMIN_APP.md` §3's schema delta never gave the recovery figures a home.
+   **Aamir was asked before the migration was written and chose the column** over
+   stashing the figures in `AdminAudit.after`; the alternative would have made
+   the audit log the queryable store for operational data and put
+   `certifyPickup` in the business of parsing it by `subject_id`.
+   `20260831120000_manifest_recovery_data` adds **one nullable jsonb column**,
+   no default, no backfill, no table rewrite, and is **applied to the shared
+   project** with `migrate deploy` (never `migrate dev` — it can offer to reset).
+
+2. 🔴 **`packages/core/src/certificate.ts` — B's lane (Batch 8), rewritten.**
+   Batch 7 is its first caller and it had a defect that only a caller could
+   find: it fed `Offer.materialBreakdown`'s `weight_kg` lines into
+   `aggregateMaterials()`, which reads `recovered_kg`, so it returned an **empty
+   materials list and threw nothing**. Every certificate Batch 7 minted would
+   have had a blank materials table on the vendor's EPR PDF. Fixed, plus the
+   measured/estimated source ranking the new column makes possible.
+   **`packages/core/src/certificate.test.ts` is new** (12 tests) — Batch 8's
+   done-when asked for tests over the payload builder and there were none.
+
+3. **`packages/database/prisma/reset-demo.ts` + `verify-seed.ts` — B's lane.**
+   Reconciled manifests now carry recovery figures (`seededRecovery()`), so a
+   fresh seed can demo a **measured** certificate rather than always falling
+   back to the estimate. Three new fixture checks; **24 assertions now.** The
+   live shared database was back-filled to match, so no reseed is needed.
+
+4. **`scripts/smoke.mjs` — A's own**, but two of the edits are other people's
+   screens:
+   - 🔴 **The malformed manifest uuids are repaired in the LIVE database.**
+     Batch 6 fixed the seed and left the one-off for the existing rows; it is
+     run. Seven `dispatch_manifests.id` and six `admin_audits.subject_id` values
+     updated (no FK points at that column — verified in the script first).
+   - **`'Pickup detail'` had been a red assertion on C's `/pickups/[id]` since
+     Batch 5.** C's screen uses the pickup id as its `<h1>`, which is better;
+     the Batch 0 stub's wording simply outlived the stub. Replaced with the
+     vendor and agent names, which only a real join produces.
+     🔴 **`npm run smoke -- --app=admin` is 23/23 for the first time.**
+
+**Left alone deliberately, and B and C should know:** 🟠 **`npm run lint` is RED
+on two pre-existing errors** — `(admin)/market/page.tsx:31`
+(`react-hooks/purity`, B's) and `(admin)/pickups/[id]/page.tsx:266` (an `<a>`
+where a `<Link>` belongs, C's). Both look like one-liners. Not fixed here to
+keep the batch scoped, but **they should be green before Batch 17 deploys.**
+
+---
+
 ## Superseded policy (2026-06-27 → 2026-08-20) — kept for the record
 
 Entries logged above under dates before 2026-08-20 were made under this rule,

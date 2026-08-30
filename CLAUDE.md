@@ -74,17 +74,24 @@ monorepo** (migrated 2026-08-09):
    so the vendor's payout runs off live data instead of a seeded row ·
    🔴 **6** (2026-08-31) **`/lifecycle` + the three `/manifests` screens** —
    `collected → tested` per **custody batch**, and a real `DispatchManifest`
-   built and dispatched to a recycler with **AD7 enforced in the action**.
+   built and dispatched to a recycler with **AD7 enforced in the action** ·
+   🔴 **7** (2026-08-31) **manifest confirm + reconcile, and certification** —
+   `tested → processed → recovered` **only for pickups AD6 says are covered**,
+   then `recovered → certified`, which mints the `Certificate`. Plus B06's
+   manual override.
 
    **B's and C's batches (2, 5, 8, 9, 10, 11, 12, 13, 15, 16) are all pushed.**
-   The only work left is **A's Batch 7** (manifest confirm → `processed` /
-   `recovered`, then `certified`) and **Batch 14** (exceptions + `/audit`), plus
-   **B's Batch 17** (deploy).
+   The only work left is **A's Batch 14** (exceptions + `/audit`) and **B's
+   Batch 17** (deploy).
 
-   🔴 **The second lifecycle hole is HALF closed.** Nothing still writes
-   `processed`, `recovered` or `certified` — Batch 7 is the whole of it, and
-   `apps/admin/src/lib/lifecycle-units.ts` is the foundation it must import
-   (`pickupCoverage()` **is** the AD6 gate) rather than re-derive.
+   🎯 **BOTH LIFECYCLE HOLES ARE CLOSED (2026-08-31).** Every one of the nine
+   stages is written by a screen now, and the journey runs end to end with no
+   CLI and no seed edit: vendor books → admin dispatches → agent arrives,
+   assesses, offers → vendor accepts → agent collects → **vendor is paid** →
+   agent drops at hub → admin advances the batch → admin builds and dispatches a
+   manifest → admin confirms and reconciles → admin certifies → **the vendor
+   downloads a real EPR certificate PDF from `/compliance`.** Verified in that
+   order through the real HTTP path; see "Batch 7 — as built".
 
    🎯 **A fresh seed cannot demo Batch 6 or 7 on its own, and that is correct.**
    `CB-2026-000301` holds no pickup at `collected`, and the one `collected`
@@ -100,11 +107,17 @@ monorepo** (migrated 2026-08-09):
    7 and 9 import them rather than re-deriving.
    `(admin)/dispatch/actions.ts` is the **reference admin lifecycle write** —
    copy its shape, the way the agent app's `job/[id]/actions.ts` is copied there.
-   🔴 **`lifecycle-units.ts` (Batch 6) holds AD5's unit-of-advance logic and the
-   AD6 coverage query.** `pickupCoverage(pickupId, items, index, floor)` is what
-   makes "a pickup advances only when EVERY item is covered" true; Batch 7 calls
-   it with `floor: 'received'` and `floor: 'reconciled'`. Never re-derive it in
-   a screen. ⚠ Its `loadManifestBuildStock()` is deliberately NARROWER than
+   🔴 **`lifecycle-units.ts` (Batches 6–7) holds AD5's unit-of-advance logic and
+   the AD6 gate.** `pickupCoverage(pickupId, items, index, floor)` answers "is
+   every item of this pickup covered?", and **`advanceCoveredPickups(tx, …)` is
+   that rule APPLIED** — it is what `confirmManifestReceived` and
+   `reconcileManifest` both call, and the reason "advance the pickups on this
+   manifest" is never written anywhere. Never re-derive either in a screen.
+   ⚠ `loadItemManifestIndex()` takes an optional **transaction client** and
+   callers inside a `$transaction` MUST pass it — the default client is a
+   different connection and cannot see the transaction's own uncommitted
+   UPDATE, which fails silently and looks exactly like AD6 working (trap 31).
+   ⚠ Its `loadManifestBuildStock()` is deliberately NARROWER than
    `lib/facility-stock.ts`'s `computeFacilityStock()` — "what may I ship?"
    excludes items on a draft manifest, "what is on hand?" does not. Both are
    right; do not unify them.
@@ -154,14 +167,13 @@ resolved there. **Read §0 before building from the wireframe.**
 
 Headlines you need even if you read nothing else:
 
-- **The first priority is closing the lifecycle, not building oversight.**
-  ✅ `requested → scheduled` is done (Batch 3, 2026-08-27) — a real booking now
-  reaches an agent from a screen. ✅ `collected → tested`, and manifest build +
-  dispatch, are done (Batch 6, 2026-08-31). ❌ Nothing still writes `processed`,
-  `recovered` or `certified`, so a real collection never becomes a certificate;
-  **Batch 7 is the last piece.** Engine config, exceptions and analytics come
-  after. 🎯 **The full journey runs end to end, screens only, once Batch 7 lands
-  — and it starts in the agent app with a hub drop-off.**
+- ✅ **The lifecycle is CLOSED — that priority is discharged.**
+  `requested → scheduled` (Batch 3, 2026-08-27) · `collected → tested` and
+  manifest build + dispatch (Batch 6, 2026-08-31) · `tested → processed →
+  recovered` and `recovered → certified` (Batch 7, 2026-08-31). 🎯 **The full
+  journey runs end to end, screens only — and it starts in the agent app with a
+  hub drop-off.** What is left is oversight: exceptions + `/audit` (Batch 14)
+  and deploy (Batch 17).
 - **The admin app is pickup-centric, not quote-centric** (AD1). `/pickups` +
   `/pickups/[id]` are the spine; `/quotes` is a lens over `BatteryItem`.
   🔴 **Flat-rate (non-li-ion) items must appear in every operational table** —
@@ -174,7 +186,9 @@ Headlines you need even if you read nothing else:
   🔴 **Every stage past the hub is an admin recording something on behalf of a
   party that has no app** (there is no hub-staff app and no recycler portal).
   That is only defensible because `StatusEvent.actorRole` says `'admin'` —
-  **never write `actorRole: 'recycler'`.**
+  **never write `actorRole: 'recycler'`.** All three of those writes exist now
+  and every one of them says `'admin'`; there are zero `'recycler'` / `'hub'`
+  rows in `status_events`, asserted directly in Batch 7's verification.
 - 🔴 **A pickup advances only when EVERY one of its items is covered** (AD6).
   Chemistry segregation sends one pickup's items to different recyclers on
   different manifests, so "advance the pickups on this manifest" is **wrong**.
@@ -471,7 +485,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 229 (core 162, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 246 (core 179, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -499,7 +513,7 @@ cd packages/core && npx vitest run src/booking.test.ts
 npm run db:migrate --workspace=@clbipp/database        # Apply schema changes (LOCAL/new DB)
 npm run reset-demo                                     # Wipe + reseed the demo data
 # Assert the seeded FIXTURES still have the shape the next batch is built
-# against — 21 checks, read-only, non-zero exit. `smoke` proves a route renders
+# against — 24 checks, read-only, non-zero exit. `smoke` proves a route renders
 # and `test` proves pure logic; neither can catch a fixture quietly vanishing.
 # 🔴 Run it after every reseed, and add a check when you add a fixture.
 # ⚠ Dispatching a seeded request from /dispatch legitimately BREAKS two of its
@@ -697,6 +711,25 @@ letter means different things in each. **Quote the decision with its app.**
   dotted (`pickup.assign`) and so cannot be a Prisma enum; `ADMIN_AUDIT_ACTIONS`
   is what keeps it a closed set. `isReasonRequired()` says which actions must
   carry a typed reason. Same subpath-import reasoning as `@clbipp/core/format`.
+- 🔴 **A `Certificate`'s materials come from `buildCertificatePayload` in
+  `packages/core/src/certificate.ts`, and it has TWO sources ranked on purpose.**
+  It prefers `DispatchManifest.recoveryData` — what a recycler actually
+  MEASURED, captured at reconciliation and pro-rated onto the pickup by mass
+  share — and only falls back to `Offer.materialBreakdown`, the engine's
+  pre-teardown ESTIMATE, when no covering manifest was ever reconciled. The
+  returned `materialSource` (`measured` | `estimated` | `none`) says which, and
+  it is recorded on the `pickup.certify` audit row. 🔴 **Never collapse the
+  two:** a certificate is a compliance document, and presenting an estimate as a
+  measurement is the failure the split exists to prevent. ⚠ **The two blobs use
+  DIFFERENT keys** — offers write `weight_kg`, certificates and
+  `aggregateMaterials()` read `recovered_kg`. Feeding one to the other yields an
+  empty list and throws nothing; that shipped undetected until Batch 7 and is
+  pinned by `certificate.test.ts`.
+- **A certificate's PDF is rendered LAZILY, never at certification.**
+  `certifyPickup` writes `pdfUrl: ''` and `apps/customer/src/lib/documents.ts`
+  renders, uploads and caches the object path on first download — the same
+  pipeline receipts and invoices use, and the reason the seed writes `""` too.
+  Don't add an eager render.
 - **CO₂e factors live only in `packages/core/src/impact.ts`** — never write CO₂
   arithmetic in a screen or a seed. ⚠ **The values there are a placeholder and
   the citations are unverified** (only the relative ordering is defensible) —

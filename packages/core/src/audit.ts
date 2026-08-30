@@ -45,6 +45,19 @@ export const ADMIN_AUDIT_ACTIONS = [
   "manifest.dispatch",
   /** `dispatched → received`, and `received → reconciled`. */
   "manifest.confirm",
+  /**
+   * `recovered → certified` for ONE pickup, and the `Certificate` row it mints.
+   *
+   * ⚠ Added in Admin Batch 7, not in PLAN_ADMIN_APP.md §3's original list —
+   * the same oversight as `custody.advance` in Batch 6, and `"pickup"` is
+   * already in ADMIN_AUDIT_SUBJECTS below. This is the one admin action that
+   * issues a COMPLIANCE DOCUMENT to a third party, so it is the last one that
+   * should have been left without its own verb. Folding it into
+   * `lifecycle.override` would have been wrong twice over: `isReasonRequired()`
+   * forces a typed reason on that one, and `/audit` could then never tell a
+   * routine certification apart from a manual escape-hatch correction.
+   */
+  "pickup.certify",
   /** B06's single-step manual advance. Requires a typed `reason`. */
   "lifecycle.override",
   /** A supplier's `Profile.marginTier` changed. */

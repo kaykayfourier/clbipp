@@ -77,6 +77,35 @@ async function main() {
   )
   check("≥1 draft and ≥1 dispatched manifest", byStatus.draft >= 1 && byStatus.dispatched >= 1, JSON.stringify(byStatus))
 
+  // 5b — Admin Batch 7. 🔴 EVERY reconciled manifest carries recovery figures,
+  //      and nothing before `reconciled` does. `buildCertificatePayload` prefers
+  //      this MEASURED figure over the offer's engine estimate, so a reconciled
+  //      manifest with a null column silently sends every certificate from that
+  //      load back to the estimate — which looks identical on the screen.
+  const recon = await prisma.dispatchManifest.findMany({
+    select: { manifestNo: true, status: true, recoveryData: true, totalWeightKg: true },
+  })
+  const reconciledRows = recon.filter((m) => m.status === "reconciled")
+  const lines = (raw: unknown) =>
+    Array.isArray(raw)
+      ? raw.filter((e): e is { material: string; recovered_kg: number } =>
+          typeof e === "object" && e !== null &&
+          typeof (e as Record<string, unknown>).material === "string" &&
+          Number.isFinite(Number((e as Record<string, unknown>).recovered_kg)))
+      : []
+  check("every reconciled manifest has recovery figures",
+    reconciledRows.length > 0 && reconciledRows.every((m) => lines(m.recoveryData).length > 0),
+    reconciledRows.map((m) => `${m.manifestNo}=${lines(m.recoveryData).length}`).join(" "))
+  check("nothing before reconciled has recovery figures",
+    recon.filter((m) => m.status !== "reconciled").every((m) => m.recoveryData === null),
+    recon.filter((m) => m.status !== "reconciled" && m.recoveryData !== null).map((m) => m.manifestNo).join(",") || "none")
+  // 🔴 Mass conservation, the same rule `reconcileManifest` enforces at the
+  // action. A seed that violated it would be a fixture the app would refuse to
+  // create.
+  check("recovered mass never exceeds shipped mass",
+    reconciledRows.every((m) => lines(m.recoveryData).reduce((s, l) => s + Number(l.recovered_kg), 0) <= Number(m.totalWeightKg ?? 0)),
+    reconciledRows.map((m) => `${m.manifestNo}: ${lines(m.recoveryData).reduce((s, l) => s + Number(l.recovered_kg), 0).toFixed(1)}/${m.totalWeightKg}kg`).join(" "))
+
   // 6 — open exceptions, incl. one on an item with no trace
   const open = await prisma.itemException.findMany({ where: { resolvedAt: null }, include: { batteryItem: { select: { traceId: true } } } })
   check("≥2 OPEN ItemExceptions", open.length >= 2, `${open.length} open`)
@@ -118,7 +147,7 @@ async function main() {
     // ⚠ Adding a verb there means adding it here, or the first real use of it
     // fails this check after a demo. `custody.advance` (Admin Batch 6) is the
     // first one that happened to.
-    ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","lifecycle.override","supplier.margin"].includes(a.action)),
+    ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin"].includes(a.action)),
     `${audits.length} rows`)
 
   console.log("")

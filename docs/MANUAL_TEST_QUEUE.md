@@ -429,10 +429,54 @@ What is left needs a browser or a human eye.
     is the hardest idea in the console. Check a person can tell from the row
     alone *why* that pickup is not moving.
 
-36. ⚠ **`/manifests/<id>` after a reseed.** *(Batch 6.)* The seed was minting
-    malformed manifest uuids and is fixed, but a database seeded **before**
-    2026-08-31 still has the old ids and that smoke line stays red. After the
-    next `npm run reset-demo`, confirm `npm run smoke -- --app=admin` is 22/22.
+36. ✅ **`/manifests/<id>` after a reseed.** *(Batch 6 — RESOLVED in Batch 7.)*
+    The seed's malformed manifest uuids were fixed in Batch 6, and Batch 7 ran
+    the one-off repair against the **live shared database** as well. No reseed
+    needed; `npm run smoke -- --app=admin` is **23/23**. Nothing to test by hand.
+
+37. 🎯 **THE WHOLE JOURNEY, IN ONE SITTING.** *(Batch 7.)* This is the single
+    most valuable item in this file now that the lifecycle is closed. It was
+    verified action-by-action through a scripted HTTP harness, but **never once
+    by a person clicking through three apps in order.** Do it on a fresh seed:
+    vendor books (`:3000`) → admin dispatches (`:3002` `/dispatch`) → agent
+    arrives, assesses, offers (`:3001`) → vendor accepts → agent collects →
+    vendor is paid → **agent does a hub drop-off** (this is where a fresh seed
+    has to start — see trap 30) → admin advances the batch on `/lifecycle` →
+    admin builds and dispatches a manifest → admin confirms and reconciles it →
+    admin certifies → **vendor downloads the EPR certificate from
+    `/compliance`.** Watch for wording that only makes sense to whoever built
+    the screen, and for a step where it is not obvious what to click next.
+
+38. 🔴 **The AD6 readiness panel on `/manifests/<id>`.** *(Batch 7.)* It is the
+    hardest idea in the console after `/lifecycle`'s coverage table: "confirming
+    this will move 0 of 2 pickups". Set up fixture 4's split (dispatch `…402`
+    while `…401` is still short of `received`) and check a person can tell,
+    **before clicking**, which pickups will not move and why — and that
+    "Held (AD6)" does not read as an error.
+
+39. **The reconcile form.** *(Batch 7.)* Eight numeric inputs. Check: the
+    shipped-weight line is noticed before someone types a wrong figure; the
+    mass-conservation rejection reads as a helpful catch rather than a bug; and
+    the yield percentage on the reconciled view looks plausible to someone who
+    knows the domain.
+
+40. 🔴 **The manual override panel.** *(Batch 7.)* It is deliberately a free-text
+    pickup id rather than a picker, because an escape hatch should not be a
+    one-click affordance beside the normal buttons. Check that reads as
+    intentional friction and not as an unfinished screen — and that the amber
+    treatment says "last resort", not "warning, broken".
+
+41. **Certification wording, on both sides.** *(Batch 7.)* The admin sees
+    "Certify"; the vendor sees a certificate appear on `/compliance` and can
+    download the PDF. Open that PDF **on a phone** and check the materials table
+    is readable. ⚠ Also confirm a certificate whose load was never reconciled
+    (so `materialSource: estimated`) does not *look* different in a way that
+    would worry a vendor — the distinction is for the audit trail, not for them.
+
+42. ⚠ **PDF rendering is production-only in spirit.** *(Batch 7.)* The
+    certificate PDF is rendered lazily on first download and the three
+    `api/documents/[kind]/[id]` routes **404 under Turbopack dev** (trap 17).
+    Do this part against `npm run build && npm start`.
 
 ---
 
@@ -446,6 +490,6 @@ What is left needs a browser or a human eye.
   no material-by-material ₹. The inverse rule is deliberate; the leak is not.
 - **Camera and gallery fallback** on a real phone, not a desktop browser.
 - The **offline / flaky-connection** behaviour of anything that writes.
-- **`npm run verify-seed` after any reseed** (added Admin Batch 1). 21 assertions
+- **`npm run verify-seed` after any reseed** (added Admin Batch 1). 24 assertions
   over the §3 fixtures, read-only, non-zero exit. It catches "the row the next
   batch is built against quietly stopped existing", which no other check can.

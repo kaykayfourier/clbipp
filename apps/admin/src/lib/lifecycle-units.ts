@@ -1,7 +1,9 @@
 import 'server-only'
 
-import { prisma } from '@clbipp/database'
-import type { BatteryCategory, BatteryType, ManifestStatus } from '@clbipp/database'
+import { Prisma, prisma } from '@clbipp/database'
+import type { BatteryCategory, BatteryType, ManifestStatus, PickupStatus } from '@clbipp/database'
+import { LIFECYCLE_STAGES, isLifecycleStage } from '@clbipp/ui'
+import type { LifecycleStage } from '@clbipp/ui'
 
 // ─── AD5's "unit of advance", expressed once ─────────────────────────────────
 // Admin Batch 6, owner A — Aamir. Shared by `/lifecycle`, the three
@@ -73,8 +75,18 @@ export interface ItemManifestRef {
  * `createManifest` refuses to build that situation in the first place; this is
  * the belt to its braces.
  */
-export async function loadItemManifestIndex(): Promise<Map<string, ItemManifestRef>> {
-  const manifests = await prisma.dispatchManifest.findMany({
+export async function loadItemManifestIndex(
+  /**
+   * 🔴 Pass the TRANSACTION CLIENT when calling this from inside a
+   * `$transaction`. Batch 7's confirm/reconcile update the manifest's own
+   * status and then ask "is this pickup covered now?" — the default `prisma`
+   * client is a different connection and cannot see that uncommitted UPDATE, so
+   * it would answer against the manifest's OLD status and refuse to advance
+   * anything. That failure is silent and looks exactly like AD6 working.
+   */
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<Map<string, ItemManifestRef>> {
+  const manifests = await client.dispatchManifest.findMany({
     select: {
       id: true,
       manifestNo: true,
@@ -253,4 +265,209 @@ export async function loadManifestBuildStock(): Promise<BuildableItem[]> {
   }
 
   return stock
+}
+
+// ─── Batch 7: recovered mass, the one-step guard, and the AD6-gated advance ──
+// Admin Batch 7, owner A — Aamir. Everything below is what turns a CONFIRMED
+// manifest into a pickup that has actually moved.
+
+/**
+ * The metals the reconcile form collects. Not an enum and not a constraint —
+ * `recovery_data` is untyped jsonb precisely so an unexpected metal can be
+ * recorded — this is the list the FORM renders, so an admin does not free-type
+ * "nickle" next to "Nickel" and split one line into two on the certificate.
+ *
+ * Chosen to match what the seed's `materialSummary` and the engine's
+ * `materialBreakdown` already name, so `aggregateMaterials()` folds a measured
+ * line and an estimated line of the same metal together rather than listing
+ * both. 🔴 Renaming one of these does not migrate the rows already written.
+ */
+export const RECOVERY_METALS = ['Nickel', 'Cobalt', 'Lithium', 'Copper', 'Lead', 'Manganese', 'Aluminium', 'Steel'] as const
+export type RecoveryMetal = (typeof RECOVERY_METALS)[number]
+
+/** One line of `DispatchManifest.recoveryData`. Stable keys — shared with
+ *  `Certificate.materialSummary`, which is what lets `aggregateMaterials()`
+ *  read both. 🔴 NOT `weight_kg`; that is `Offer.materialBreakdown`'s key, and
+ *  confusing the two is the defect Batch 7 found in buildCertificatePayload. */
+export interface RecoveryLine {
+  material: string
+  recovered_kg: number
+}
+
+/** Read `recoveryData` back out of the column. Defensive for the usual reason:
+ *  a malformed row should render as "no figures", not throw on a detail page. */
+export function parseRecoveryData(raw: unknown): RecoveryLine[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const { material, recovered_kg } = entry as Record<string, unknown>
+    if (typeof material !== 'string' || material.length === 0) return []
+    const kg = Number(recovered_kg)
+    if (!Number.isFinite(kg) || kg <= 0) return []
+    return [{ material, recovered_kg: Math.round(kg * 100) / 100 }]
+  })
+}
+
+// ─── The one-step-forward guard (Batch 7 step 6, trap 13) ────────────────────
+
+/**
+ * The stage after `stage`, or null at the end of the line.
+ *
+ * 🔴 Derived from `LIFECYCLE_STAGES` in `@clbipp/ui`, never from a local list
+ * (trap 13). There is one source of truth per layer and they must agree; a
+ * tenth stage added there has to reach this file for free.
+ */
+export function nextLifecycleStage(stage: string): LifecycleStage | null {
+  if (!isLifecycleStage(stage)) return null
+  const i = LIFECYCLE_STAGES.indexOf(stage)
+  return i >= 0 && i < LIFECYCLE_STAGES.length - 1 ? LIFECYCLE_STAGES[i + 1] : null
+}
+
+/**
+ * 🔴 Batch 7 step 6: EVERY advance in this app validates one step forward.
+ * No skipping (`tested → certified` would issue a compliance document for
+ * batteries nobody confirmed a recycler ever received) and no reversing (the
+ * lifecycle is a claim trail, not a state machine you can rewind).
+ *
+ * ⚠ `cancelled` is deliberately not reachable through this. It is re-enterable
+ * (trap 11) and sits outside `LIFECYCLE_STAGES` entirely, so `isLifecycleStage`
+ * rejects it and every caller here refuses — cancelling and reactivating are
+ * the customer app's writes, not this console's.
+ */
+export function isOneStepForward(from: string, to: string): boolean {
+  return nextLifecycleStage(from) === to
+}
+
+// ─── The AD6-gated advance, shared by confirm and reconcile ──────────────────
+
+export interface AdvancedPickup {
+  pickupId: string
+  itemCount: number
+}
+
+export interface HeldPickup {
+  pickupId: string
+  status: PickupStatus
+  /** How many of its items are still short of `floor` — the reason it is held. */
+  uncovered: number
+  itemCount: number
+}
+
+export interface CoveredAdvanceResult {
+  advanced: AdvancedPickup[]
+  held: HeldPickup[]
+}
+
+/**
+ * 🔴 THE AD6 GATE, APPLIED. This is the function Batch 7 exists to get right.
+ *
+ * Given a manifest that has just moved to `floor`, advance `from → to` exactly
+ * those pickups EVERY one of whose items now sits on a manifest at or past
+ * `floor` — and leave the rest alone, with a reason.
+ *
+ * The obvious implementation ("advance the pickups on this manifest") is WRONG
+ * and this is the whole point of the batch. Chemistry segregation sends one
+ * pickup's items to different recyclers on different manifests: seed fixture 4,
+ * `PKP-2026-000113`, has its li-ion item on one manifest and its lead-acid item
+ * on another. Confirming the first must NOT advance it — half its load is still
+ * at the hub, and saying otherwise puts a false statement in a chain of custody.
+ *
+ * 🔴 MUST be called inside the same `$transaction` that moved the manifest, and
+ * with that transaction's client, or the index it builds cannot see the move.
+ *
+ * Four round trips (index · touched pickups · updateMany · createMany). With the
+ * caller's own manifest update and audit row that is SIX — inside the eight
+ * measured at 5.3 s in Batch 4. Do not add a fifth read here without checking
+ * that budget again.
+ */
+export async function advanceCoveredPickups(
+  tx: Prisma.TransactionClient,
+  input: {
+    /** The manifest's item-id snapshot. Passed in rather than re-read: the
+     *  caller already has it, and re-reading costs a round trip for nothing. */
+    snapshotIds: readonly string[]
+    /** The manifest state being asserted: `'received'` or `'reconciled'`. */
+    floor: ManifestStatus
+    from: LifecycleStage
+    to: LifecycleStage
+    actorId: string
+    /** The `status_events.notes` line, per pickup. */
+    note: (pickupId: string) => string
+  },
+): Promise<CoveredAdvanceResult> {
+  // Step 6's guard, applied to the caller's own arguments rather than trusted.
+  // A future edit that passes `tested → recovered` should fail loudly here, not
+  // quietly skip a stage on a compliance trail.
+  if (!isOneStepForward(input.from, input.to)) {
+    throw new Error(
+      `Refusing to advance ${input.from} → ${input.to}: not one step forward on LIFECYCLE_STAGES.`,
+    )
+  }
+
+  if (input.snapshotIds.length === 0) return { advanced: [], held: [] }
+
+  const index = await loadItemManifestIndex(tx)
+
+  // Every pickup this manifest touches, WITH ALL OF ITS ITEMS — including the
+  // ones that are not on this manifest. That "including" is AD6: the question
+  // is never "did this manifest carry the pickup?", it is "is every item of the
+  // pickup accounted for?". One query rather than items→pickupIds→pickups,
+  // which keeps this inside the round-trip budget above.
+  const touched = await tx.pickup.findMany({
+    where: { items: { some: { id: { in: [...input.snapshotIds] } } } },
+    select: {
+      id: true,
+      status: true,
+      items: { select: { id: true, chemistry: true } },
+    },
+  })
+
+  const advanced: AdvancedPickup[] = []
+  const held: HeldPickup[] = []
+
+  for (const pickup of touched) {
+    const coverage = pickupCoverage(pickup.id, pickup.items, index, input.floor)
+    // Only pickups actually sitting at `from` are candidates. One already past
+    // it is not "held" — it is finished, and reporting it would make a correct
+    // confirmation read like a partial failure.
+    if (pickup.status !== input.from) continue
+    if (coverage.covered) {
+      advanced.push({ pickupId: pickup.id, itemCount: pickup.items.length })
+    } else {
+      held.push({
+        pickupId: pickup.id,
+        status: pickup.status,
+        uncovered: coverage.uncovered.length,
+        itemCount: pickup.items.length,
+      })
+    }
+  }
+
+  if (advanced.length === 0) return { advanced: [], held }
+
+  const ids = advanced.map((a) => a.pickupId)
+
+  // Guarded on `status: from` for the same reason every other write in this app
+  // is: a concurrent caller may have advanced these between the read above and
+  // this UPDATE, and the WHERE re-evaluates against committed rows.
+  const updated = await tx.pickup.updateMany({
+    where: { id: { in: ids }, status: input.from },
+    data: { status: input.to },
+  })
+  if (updated.count === 0) return { advanced: [], held }
+
+  await tx.statusEvent.createMany({
+    data: ids.map((pickupId) => ({
+      pickupId,
+      status: input.to,
+      actorId: input.actorId,
+      // 🔴 'admin', NEVER 'recycler'. There is no recycler portal; this is an
+      // admin recording something on a party's behalf, and the trail has to say
+      // so (AD5). Writing 'recycler' would be a fabricated attestation.
+      actorRole: 'admin' as const,
+      notes: input.note(pickupId),
+    })),
+  })
+
+  return { advanced, held }
 }

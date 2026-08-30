@@ -1482,6 +1482,23 @@ const DRAFT_GROUP = { stage: "dispatched" as ManifestStatus, recycler: "lead" as
  */
 const MANIFEST_ID_BASE = 401
 
+/**
+ * Indicative per-metal recovery for a reconciled manifest of `totalKg`.
+ *
+ * ⚠ Rounded to one decimal and deliberately summing to well under `totalKg` —
+ * a recycler does not return 100% of what it receives, and `reconcileManifest`
+ * rejects a figure that exceeds the shipped weight. Nothing prices off these.
+ */
+function seededRecovery(totalKg: number): Array<{ material: string; recovered_kg: number }> {
+  const at = (fraction: number) => Math.round(totalKg * fraction * 10) / 10
+  return [
+    { material: "Nickel", recovered_kg: at(0.16) },
+    { material: "Cobalt", recovered_kg: at(0.06) },
+    { material: "Lithium", recovered_kg: at(0.04) },
+    { material: "Copper", recovered_kg: at(0.08) },
+  ].filter((l) => l.recovered_kg > 0)
+}
+
 async function seedManifests(
   facilityId: string,
   recyclerIds: Record<RecyclerKey, string>,
@@ -1562,6 +1579,27 @@ async function seedManifests(
         // that is what `/manifests/new` is for.
         dispatchedAt: status === "draft" ? null : dispatchedAt,
         confirmedAt: status === "received" || status === "reconciled" ? confirmedAt : null,
+        // 🔴 What actually came back, per metal — only on a RECONCILED
+        // manifest, because that is the state the figure is captured in
+        // (`reconcileManifest`, Admin Batch 7). Null everywhere else, and the
+        // difference is load-bearing: `buildCertificatePayload` prefers this
+        // MEASURED figure over the offer's engine estimate and records which it
+        // used, so a seeded reconciled manifest without it would make every
+        // demo certificate quote an estimate.
+        //
+        // ⚠ Stable keys `material` / `recovered_kg` — the same shape
+        // `certificates.material_summary` uses, which is what lets one
+        // `aggregateMaterials()` read both. NOT `weight_kg`; that is
+        // `offers.material_breakdown`'s key.
+        //
+        // Rates are the same indicative fractions the seeded certificates use
+        // (see the materialSummary above), minus a couple of points for real
+        // process loss, so a demo shows a yield under 100% rather than a
+        // suspiciously perfect one. Indicative only — no price depends on them.
+        recoveryData:
+          status === "reconciled"
+            ? seededRecovery(lines.reduce((sum, l) => sum + l.weightKg, 0))
+            : undefined,
         createdAt: day(Math.max(ref - LIFECYCLE.indexOf("tested"), 0)),
       },
     })

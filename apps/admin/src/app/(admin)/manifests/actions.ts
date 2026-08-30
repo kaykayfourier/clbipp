@@ -11,6 +11,12 @@ import { manifestNumber } from '@clbipp/core/format'
 import { chemistryLabel } from '@clbipp/core/intake'
 
 import { requireAdmin } from '@/lib/admin-identity'
+import {
+  advanceCoveredPickups,
+  parseRecoveryData,
+  RECOVERY_METALS,
+  type RecoveryLine,
+} from '@/lib/lifecycle-units'
 
 // ─── Manifests: build a draft, then dispatch it ──────────────────────────────
 // Admin Batch 6, owner A — Aamir. The screens the wireframe has none of (W9),
@@ -26,6 +32,7 @@ import { requireAdmin } from '@/lib/admin-identity'
 // recycler received a load that is still on the lorry.
 
 const CREATE_AUDIT_ACTION: AdminAuditAction = 'manifest.dispatch'
+const CONFIRM_AUDIT_ACTION: AdminAuditAction = 'manifest.confirm'
 const AUDIT_SUBJECT: AdminAuditSubject = 'dispatch_manifest'
 
 // ⚠ Trap 23 — only async functions may be EXPORTED from a 'use server' file.
@@ -356,6 +363,282 @@ export async function dispatchManifest(manifestId: string): Promise<ManifestResu
   return { error: null, manifestId: id }
 }
 
+// ─── Batch 7: confirm, then reconcile ────────────────────────────────────────
+// Admin Batch 7, owner A — Aamir. The second half of AD5 and the end of the
+// road for a manifest.
+//
+//   dispatched → received    the recycler has the load. Advances the covered
+//                            pickups `tested → processed`.
+//   received → reconciled    what actually came back, per metal. Advances the
+//                            covered pickups `processed → recovered`.
+//
+// 🔴 "The covered pickups", not "the pickups on this manifest" — see
+// advanceCoveredPickups() in @/lib/lifecycle-units. That distinction IS AD6 and
+// it is the single thing this batch has to get right.
+//
+// 🔴 Both write `actorRole: 'admin'`, never `'recycler'`. There is no recycler
+// portal and no hub-staff app: an admin is recording an assertion on a party's
+// behalf, and a compliance trail that claimed otherwise would be a fabrication
+// (AD5). This is the uncomfortable part of the design and it is deliberate.
+
+export type ManifestAdvanceResult = {
+  error: string | null
+  /** Pickups that moved a stage. */
+  advanced: number
+  /** Pickups this manifest touched that AD6 held back, with items elsewhere. */
+  held: number
+}
+
+/**
+ * `dispatched → received`. The recycler has it.
+ *
+ * Stamps `confirmedAt` and advances `tested → processed` for every pickup all
+ * of whose items now sit on a manifest at or past `received`.
+ *
+ * Idempotent the way every other write in this app is: the guarded `updateMany`
+ * on `status: 'dispatched'` is the race guard, so a double-submit moves nothing
+ * and writes no second event.
+ */
+export async function confirmManifestReceived(manifestId: string): Promise<ManifestAdvanceResult> {
+  const gate = await requireAdmin()
+  if (!gate.ok) return { error: gate.error, advanced: 0, held: 0 }
+  const admin = gate.admin
+
+  const id = manifestId.trim()
+  if (!id) return { error: 'No manifest selected.', advanced: 0, held: 0 }
+
+  const before = await prisma.dispatchManifest.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      manifestNo: true,
+      status: true,
+      itemIds: true,
+      recycler: { select: { name: true } },
+    },
+  })
+  if (!before) return { error: 'That manifest does not exist.', advanced: 0, held: 0 }
+  if (before.status !== 'dispatched') {
+    return {
+      error:
+        before.status === 'draft'
+          ? `${before.manifestNo} has not been dispatched yet — it cannot have been received.`
+          : `${before.manifestNo} is already ${before.status}.`,
+      advanced: 0,
+      held: 0,
+    }
+  }
+
+  const snapshotIds = Array.isArray(before.itemIds)
+    ? (before.itemIds as unknown[]).filter((i): i is string => typeof i === 'string')
+    : []
+  if (snapshotIds.length === 0) {
+    return { error: 'That manifest has no items on it.', advanced: 0, held: 0 }
+  }
+
+  const confirmedAt = new Date()
+
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const updated = await tx.dispatchManifest.updateMany({
+        where: { id, status: 'dispatched' },
+        data: { status: 'received', confirmedAt },
+      })
+      if (updated.count === 0) return null
+
+      // 🔴 AD6. Called with `tx`, and it MUST be — the index it builds has to
+      // see the UPDATE above, which no other connection can.
+      const moved = await advanceCoveredPickups(tx, {
+        snapshotIds,
+        floor: 'received',
+        from: 'tested',
+        to: 'processed',
+        actorId: admin.id,
+        note: () =>
+          `Received by ${before.recycler.name} — manifest ${before.manifestNo}. Recorded by an admin; there is no recycler portal.`,
+      })
+
+      await tx.adminAudit.create({
+        data: {
+          actorId: admin.id,
+          action: CONFIRM_AUDIT_ACTION,
+          subjectType: AUDIT_SUBJECT,
+          subjectId: id,
+          before: { status: 'dispatched', confirmedAt: null },
+          after: {
+            status: 'received',
+            confirmedAt: confirmedAt.toISOString(),
+            manifestNo: before.manifestNo,
+            itemCount: snapshotIds.length,
+            // 🔴 Both lists, not just the winners. "Which pickups did this
+            // confirmation NOT advance, and why" is the question an auditor
+            // asks about a split load, and AdminAudit is the only place that
+            // can answer it — status_events by definition has no row for a
+            // pickup that did not move.
+            advancedPickupIds: moved.advanced.map((a) => a.pickupId),
+            heldPickupIds: moved.held.map((h) => h.pickupId),
+          },
+        },
+      })
+
+      return moved
+    },
+    { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
+  )
+
+  if (!result) {
+    return {
+      error: 'This manifest was confirmed by someone else a moment ago. Reload to see it.',
+      advanced: 0,
+      held: 0,
+    }
+  }
+
+  return { error: null, advanced: result.advanced.length, held: result.held.length }
+}
+
+/**
+ * `received → reconciled`, capturing what actually came back.
+ *
+ * Advances `processed → recovered` for every pickup all of whose items now sit
+ * on a manifest at or past `reconciled`.
+ *
+ * 🔴 `recoveryData` is the only MEASURED recovery figure the platform holds —
+ * everything upstream of it is an engine estimate made before a battery was
+ * opened — and `buildCertificatePayload` prefers it over that estimate. So this
+ * refuses to reconcile with no figures at all: an empty reconciliation would
+ * silently send every downstream certificate back to the estimate while looking
+ * like it had been measured.
+ */
+export async function reconcileManifest(
+  manifestId: string,
+  recovery: readonly RecoveryLine[],
+): Promise<ManifestAdvanceResult> {
+  const gate = await requireAdmin()
+  if (!gate.ok) return { error: gate.error, advanced: 0, held: 0 }
+  const admin = gate.admin
+
+  const id = manifestId.trim()
+  if (!id) return { error: 'No manifest selected.', advanced: 0, held: 0 }
+
+  // Re-parse rather than trust the caller: this runs the same defensive filter
+  // the column is read back through, so what is stored is exactly what will
+  // parse. It also folds away zeroes and blanks the form submits for the metals
+  // nobody typed into.
+  const lines = parseRecoveryData(recovery)
+  if (lines.length === 0) {
+    return {
+      error: `Enter the recovered mass for at least one metal (${RECOVERY_METALS.slice(0, 4).join(', ')}, …). Reconciling with no figures would leave every certificate from this load quoting an estimate.`,
+      advanced: 0,
+      held: 0,
+    }
+  }
+
+  const before = await prisma.dispatchManifest.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      manifestNo: true,
+      status: true,
+      itemIds: true,
+      totalWeightKg: true,
+      recycler: { select: { name: true } },
+    },
+  })
+  if (!before) return { error: 'That manifest does not exist.', advanced: 0, held: 0 }
+  if (before.status !== 'received') {
+    return {
+      error:
+        before.status === 'reconciled'
+          ? `${before.manifestNo} has already been reconciled.`
+          : `${before.manifestNo} is ${before.status} — confirm receipt before reconciling it.`,
+      advanced: 0,
+      held: 0,
+    }
+  }
+
+  // 🔴 Mass conservation, as a control. You cannot recover more metal than you
+  // shipped, and a fat-fingered "1240" where "124.0" was meant would otherwise
+  // land on a vendor's EPR certificate and on a CPCB return. Checked against
+  // the manifest's own frozen `totalWeightKg` rather than a live item sum: the
+  // shipped weight is what was shipped, whatever the item rows say now.
+  const recoveredKg = lines.reduce((sum, l) => sum + l.recovered_kg, 0)
+  const shippedKg = Number(before.totalWeightKg ?? 0)
+  if (shippedKg > 0 && recoveredKg > shippedKg) {
+    return {
+      error: `Recovered mass (${recoveredKg.toFixed(1)} kg) exceeds what was shipped (${shippedKg.toFixed(1)} kg). Check the figures — a recycler cannot return more than it received.`,
+      advanced: 0,
+      held: 0,
+    }
+  }
+
+  const snapshotIds = Array.isArray(before.itemIds)
+    ? (before.itemIds as unknown[]).filter((i): i is string => typeof i === 'string')
+    : []
+
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const updated = await tx.dispatchManifest.updateMany({
+        where: { id, status: 'received' },
+        // ⚠ No second timestamp column: the schema stamps `confirmedAt` at
+        // `received` and has no `reconciledAt`. The AdminAudit row below is
+        // where "when was this reconciled" lives, which is what that table is
+        // for (W7). Adding a column for it would be a migration for a value the
+        // trail already holds.
+        // The cast is the price of a typed shape meeting an untyped column:
+        // `InputJsonValue` wants an index signature that a named interface does
+        // not carry. `parseRecoveryData` above is what actually guarantees the
+        // contents, and the same function reads them back.
+        data: { status: 'reconciled', recoveryData: lines as unknown as Prisma.InputJsonValue },
+      })
+      if (updated.count === 0) return null
+
+      const moved = await advanceCoveredPickups(tx, {
+        snapshotIds,
+        floor: 'reconciled',
+        from: 'processed',
+        to: 'recovered',
+        actorId: admin.id,
+        note: () =>
+          `Reconciled against ${before.recycler.name}'s recovery report — manifest ${before.manifestNo}. Recorded by an admin; there is no recycler portal.`,
+      })
+
+      await tx.adminAudit.create({
+        data: {
+          actorId: admin.id,
+          action: CONFIRM_AUDIT_ACTION,
+          subjectType: AUDIT_SUBJECT,
+          subjectId: id,
+          before: { status: 'received' },
+          after: {
+            status: 'reconciled',
+            manifestNo: before.manifestNo,
+            reconciledAt: new Date().toISOString(),
+            recoveredKg: Math.round(recoveredKg * 100) / 100,
+            shippedKg,
+            recovery: lines as unknown as Prisma.InputJsonValue,
+            advancedPickupIds: moved.advanced.map((a) => a.pickupId),
+            heldPickupIds: moved.held.map((h) => h.pickupId),
+          },
+        },
+      })
+
+      return moved
+    },
+    { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
+  )
+
+  if (!result) {
+    return {
+      error: 'This manifest was reconciled by someone else a moment ago. Reload to see it.',
+      advanced: 0,
+      held: 0,
+    }
+  }
+
+  return { error: null, advanced: result.advanced.length, held: result.held.length }
+}
+
 // ─── Form actions ────────────────────────────────────────────────────────────
 // POST, never a <Link>. Redirect-after-POST so a refresh re-renders instead of
 // re-submitting.
@@ -395,4 +678,53 @@ export async function dispatchManifestAction(formData: FormData) {
   revalidatePath('/inventory')
 
   redirect(`${href}?dispatched=1`)
+}
+
+export async function confirmManifestReceivedAction(formData: FormData) {
+  const manifestId = String(formData.get('manifestId') ?? '')
+  if (!manifestId) redirect('/manifests')
+
+  const href = `/manifests/${encodeURIComponent(manifestId)}`
+  const { error, advanced, held } = await confirmManifestReceived(manifestId)
+
+  if (error) redirect(`${href}?error=${encodeURIComponent(error)}`)
+
+  revalidatePath('/manifests')
+  revalidatePath(href)
+  revalidatePath('/lifecycle')
+  revalidatePath('/pickups')
+  revalidatePath('/inventory')
+
+  redirect(`${href}?confirmed=1&advanced=${advanced}&held=${held}`)
+}
+
+export async function reconcileManifestAction(formData: FormData) {
+  const manifestId = String(formData.get('manifestId') ?? '')
+  if (!manifestId) redirect('/manifests')
+
+  const href = `/manifests/${encodeURIComponent(manifestId)}`
+
+  // One numeric field per metal, named `kg:<Metal>`. Read from RECOVERY_METALS
+  // rather than from whatever the form happened to send: a hand-crafted POST
+  // must not be able to invent a material name that then appears verbatim on a
+  // vendor's EPR certificate.
+  const recovery = RECOVERY_METALS.flatMap((metal) => {
+    const raw = formData.get(`kg:${metal}`)
+    if (raw === null) return []
+    const kg = Number(String(raw).trim())
+    if (!Number.isFinite(kg) || kg <= 0) return []
+    return [{ material: metal, recovered_kg: kg }]
+  })
+
+  const { error, advanced, held } = await reconcileManifest(manifestId, recovery)
+
+  if (error) redirect(`${href}?error=${encodeURIComponent(error)}`)
+
+  revalidatePath('/manifests')
+  revalidatePath(href)
+  revalidatePath('/lifecycle')
+  revalidatePath('/pickups')
+  revalidatePath('/inventory')
+
+  redirect(`${href}?reconciled=1&advanced=${advanced}&held=${held}`)
 }

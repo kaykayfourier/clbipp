@@ -1,0 +1,42 @@
+-- ============================================================================
+-- manifest_recovery_data — Admin Batch 7 (2026-08-31).
+--
+--   dispatch_manifests + recovery_data (jsonb, NULL)
+--
+-- ONE nullable column, no default, no backfill, no table rewrite: every
+-- existing manifest keeps reading exactly as it did, with NULL meaning "never
+-- reconciled". Adding a nullable column with no default is a catalogue-only
+-- change in Postgres 11+, so this takes an ACCESS EXCLUSIVE lock for the
+-- duration of the catalogue update and nothing more — safe against the shared
+-- project mid-sprint.
+--
+-- WHY IT EXISTS. Batch 7 step 2, `reconcileManifest(id, recoveryData)`, has to
+-- "capture recovered mass per metal", and PLAN_ADMIN_APP.md §3's schema delta
+-- never gave it a home. This is that home.
+--
+-- 🔴 It is the only MEASURED recovery figure the platform holds. Everything
+-- upstream — `offers.material_breakdown`, the decision engine's yield
+-- assumptions — is an estimate made before a battery was opened. A certificate
+-- is a COMPLIANCE document, so it prefers this and only falls back to the
+-- estimate when a manifest was never reconciled (and says so in that case).
+--
+-- Shape: `[{ "material": "Nickel", "recovered_kg": 12.4 }, ...]` — the same
+-- stable keys as `certificates.material_summary`, so `aggregateMaterials()` in
+-- packages/core/src/impact.ts parses it with no second parser. 🔴 NOT
+-- `weight_kg`; that key is `offers.material_breakdown`'s, and confusing the two
+-- is exactly the defect this batch found in buildCertificatePayload.
+--
+-- Values are for the WHOLE load. A manifest carries items from several pickups,
+-- so a per-pickup certificate takes this pro-rated by that pickup's share of
+-- the manifest weight — see buildCertificatePayload in packages/core.
+--
+-- ⚠ RLS: none needed. `dispatch_manifests` is reached only through Prisma (as
+-- table owner) and the service role, per AD3 — same posture as every other
+-- admin-written table. Nothing in supabase/policies.sql changes.
+--
+-- 🔴 NO PickupStatus value is added. NO per-item status column (AD6). The nine
+-- stages stay locked, for the third sprint running.
+-- ============================================================================
+
+-- AlterTable
+ALTER TABLE "dispatch_manifests" ADD COLUMN     "recovery_data" JSONB;

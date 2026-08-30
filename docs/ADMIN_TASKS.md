@@ -122,6 +122,38 @@ Every one of these has already cost this team an hour, in an earlier sprint.
     the one `collected` pickup deliberately has no custody batch so that
     "pending drop-off" (D5) is a real state. 🎯 **The demo starts in the AGENT
     app** with a hub drop-off. Do not read the empty board as a broken screen.
+31. 🔴 **A helper that reads inside a `$transaction` MUST take the transaction
+    client.** *(Batch 7.)* `loadItemManifestIndex()` used the module-level
+    `prisma` — a different connection, which cannot see the transaction's own
+    uncommitted UPDATE. Calling it after moving a manifest to `received` would
+    have answered against the manifest's OLD status and advanced nothing, and
+    **that failure looks exactly like AD6 working correctly**. It now takes an
+    optional `Prisma.TransactionClient`. Check every shared read you call from
+    inside a transaction for this.
+32. 🔴 **React splits `{expr} literal` with an HTML comment, and a content
+    assertion cannot see across it.** *(Batch 7.)* `{metal} (kg)` renders as
+    `Nickel<!-- --> (kg)`, so `smoke.mjs`'s grep for `'Nickel (kg)'` never
+    matched. Trap 19's cousin — the file greps HTML, it does not run a browser.
+    Emit one text node (`` {`${metal} (kg)`} ``) or assert on a substring that
+    does not straddle the boundary.
+33. 🔴 **`{ set: null }` on a `Json?` column is stored VERBATIM as
+    `{"set": null}`.** *(Batch 7.)* Prisma treats an object assigned to a Json
+    field as the VALUE, not as an update operator, so the column reads as "set"
+    forever after and every `row.jsonCol ? …` check sees a truthy object. This
+    bit a database-restore script, not app code. Trap 21's third face: to write
+    SQL NULL use `Prisma.DbNull`, or raw SQL.
+34. ⚠ **A dev server already running on the port serves STALE code, silently.**
+    *(Batch 7.)* `npm run dev:admin` exits with `EADDRINUSE` while the old
+    server keeps answering, so a brand-new screen renders as its previous
+    version and the failure reads exactly like a broken component. Sibling of
+    traps 6 and 25: **`lsof -ti :3002` before believing a page did not change.**
+35. ⚠ **Replaying every hidden field (trap 26) COLLIDES with overriding a field
+    of the same name.** *(Batch 7.)* `FormData` allows duplicates and
+    `formData.get()` returns the FIRST, so an appended override is silently
+    ignored and the action runs against the page's own subject — which reads
+    exactly like a bypass attempt being correctly blocked when it was never
+    attempted. In a verification harness, **replace** the replayed field, don't
+    append beside it.
 
 ---
 
@@ -1857,3 +1889,190 @@ script (updates 7 `dispatch_manifests` rows and the matching
 - 🟠 **Nobody accepts `nimh` or `other`.** Unchanged from Batch 1, but Batch 6
   made it reachable: such an item would be permanently un-manifestable, and the
   builder now says so out loud. A conversation for the company, not a bug.
+
+---
+
+## Batch 7 — as built · 2026-08-31 · **A (Aamir)**
+
+🎯 **THE LIFECYCLE IS CLOSED.** `processed`, `recovered` and `certified` are all
+written now, and the journey runs end to end from screens only: vendor books →
+admin dispatches → agent arrives, assesses, offers → vendor accepts → agent
+collects → vendor is paid → agent drops at hub → admin advances the batch →
+admin builds and dispatches a manifest → **admin confirms and reconciles** →
+**admin certifies** → **the vendor downloads a real EPR certificate PDF from
+`/compliance`.** Verified in that order, through the real HTTP path — see below.
+
+### What shipped
+
+| File | What it is |
+|---|---|
+| `packages/database/prisma/migrations/20260831120000_manifest_recovery_data/` | **new.** One nullable `jsonb` column, `dispatch_manifests.recovery_data`. Applied to the shared project with `migrate deploy`. |
+| `packages/database/prisma/schema.prisma` | `DispatchManifest.recoveryData Json?`. |
+| `packages/core/src/audit.ts` | `"pickup.certify"` added to the closed vocabulary. |
+| `packages/core/src/certificate.ts` | 🔴 **rewritten.** Prefers MEASURED recovery over the offer's estimate, pro-rates by mass share, reports `materialSource`. **Fixes a defect that would have blanked every certificate** — see below. |
+| `packages/core/src/certificate.test.ts` | **new.** 12 tests over the arithmetic and the source precedence. |
+| `apps/admin/src/lib/lifecycle-units.ts` | `loadItemManifestIndex(tx)` made transaction-aware · `RECOVERY_METALS` · `parseRecoveryData()` · `nextLifecycleStage()` / `isOneStepForward()` · 🔴 **`advanceCoveredPickups()` — the AD6 gate, applied.** |
+| `(admin)/manifests/actions.ts` | `confirmManifestReceived`, `reconcileManifest`, both form actions. |
+| `(admin)/manifests/[id]/page.tsx` | The confirm button, the reconcile form, the recovered-materials table, and 🔴 **the AD6 readiness panel** — "what this click will and will not move, and why". |
+| `(admin)/lifecycle/actions.ts` | `certifyPickup`, `overrideLifecycle`, both form actions. |
+| `(admin)/lifecycle/page.tsx` | Per-pickup **Certify** buttons and the **manual override** panel (risk R1's escape hatch). |
+| `packages/database/prisma/reset-demo.ts` | `seededRecovery()` — reconciled manifests now carry recovery figures. |
+| `packages/database/prisma/verify-seed.ts` | +3 checks (recovery figures present, absent before `reconciled`, mass conserved) and the audit vocabulary synced. **24 assertions now.** |
+| `scripts/smoke.mjs` | Batch 7 assertions, a second pinned manifest, and a **stale assertion from Batch 0 finally fixed** — see below. |
+
+### 🔴 A defect this batch found, which is NOT its own
+
+**`buildCertificatePayload` would have minted every certificate with an empty
+materials table.** It fed `Offer.materialBreakdown` — whose lines are
+`{ material, weight_kg }` — straight into `aggregateMaterials()`, which reads
+`{ material, recovered_kg }`. The keys do not match, so the fold returned `[]`
+**and nothing threw**. Batch 7 is the first caller, so this had never run.
+
+Fixed by mapping the key explicitly (and accepting either), pinned by two tests.
+🔴 **Do not "simplify" that mapping back into one call.**
+
+### Decisions taken, and why
+
+1. 🔴 **`recovery_data` is a new column, not a field on the audit row.** Batch 7
+   step 2 says "capture recovered mass per metal" and §3's schema delta never
+   gave it a home. Approved by Aamir before the migration was written. The audit
+   log is a *trail*; making it the queryable store for operational figures would
+   have put `certifyPickup` in the business of parsing `admin_audits` by
+   `subject_id`, and B's Batch 8 yield aggregate with it. One nullable jsonb
+   column, no default, no backfill, no table rewrite.
+
+2. 🔴 **A certificate prefers the MEASURED figure and says which it used.**
+   `materialSource` is `measured` | `estimated` | `none`, recorded on the
+   `pickup.certify` audit row and in the `status_events` note. A certificate is
+   a compliance document; presenting an engine estimate as a measured recovery
+   is the failure this distinction exists to prevent. The estimate is still the
+   fallback for a load that was never reconciled — it is *labelled*, not hidden.
+
+3. ⚠ **`certifyPickup` does NOT render the PDF, though step 4 says "and the
+   PDF".** `apps/customer/src/lib/documents.ts` renders and uploads every
+   document **lazily on first download** and caches the object path back into
+   `pdfUrl`; the seed has always written `""` for exactly that reason. Eagerly
+   rendering here would duplicate that pipeline in a second app, put a ~1 s
+   `@react-pdf` render inside a lifecycle transaction, and break the property
+   that a template change reaches old certificates by deleting a cached object
+   rather than by a backfill. Writing `""` hands it to the pipeline that exists
+   — and the verification below downloads a real 4,878-byte PDF to prove it.
+
+4. **A manifest's recovery is PRO-RATED onto each pickup by mass share.** A
+   recycler reports "this lorry-load yielded 41 kg of nickel", not per-consignor
+   assay figures. Mass share is the only division the data supports; it is exact
+   when a manifest holds one pickup (the common case) and an approximation
+   otherwise. Stated in `prorate()`'s own comment. 🟠 If the company wants
+   per-consignor figures, that is a richer `recoveryData` shape plus the
+   reconcile form — one function, not a redesign.
+
+5. 🔴 **The override refuses to reach `certified`.** Certification mints a row, a
+   public token and a PDF a vendor files with the CPCB. An override that only
+   moved the status would leave a pickup reading "certified" and a vendor whose
+   compliance screen has nothing to download. It also cannot touch `cancelled`,
+   which sits outside `LIFECYCLE_STAGES` and is re-enterable (trap 11).
+
+6. **`reconcileManifest` refuses an empty reconciliation, and enforces mass
+   conservation.** Empty figures would silently send every certificate from that
+   load back to the estimate while looking measured; and a recycler cannot
+   return more than it received. Both are checked in the action.
+
+7. **No `reconciledAt` column.** The schema stamps `confirmedAt` at `received`
+   and has nothing for `reconciled`. The `AdminAudit` row carries the timestamp,
+   which is what that table is for (W7) — a column for it would be a migration
+   for a value the trail already holds.
+
+8. **`"pickup.certify"` added to `ADMIN_AUDIT_ACTIONS`**, same omission and same
+   reasoning as `custody.advance` in Batch 6. Folding it into
+   `lifecycle.override` would have forced a typed reason onto the normal path
+   and made `/audit` unable to tell a routine certification from a correction.
+
+### How this batch was verified
+
+Same technique as Batches 3 and 6: `npm run smoke` cannot POST (traps 24/26), so
+both screens were driven **through the real HTTP path** — proxy, session cookie,
+server action, database — by a throwaway harness logging in as `admin@test`.
+
+🔴 **The seed is armed for exactly this, and every AD6 assertion below is one a
+naive implementation fails.** `MFT-2026-000401` carries items from two pickups,
+and *both* of those pickups have their other item on a *different* manifest.
+
+| Step | Outcome |
+|---|---|
+| `/manifests/…401` readiness panel | "What this will move — **0 of 2** pickups", two **Held (AD6)** badges |
+| 🔴 **confirm `…401`** | `advanced=0&held=2`. **Advanced NOTHING.** `PKP-…106`'s lfp item is on `…403` (dispatched); `PKP-…113`'s lead-acid is on `…402` (draft) |
+| confirm `…403` | `advanced=1` — `PKP-…106` now fully covered → `tested → processed`. `…113` still held |
+| reconcile: empty figures | rejected — *"Enter the recovered mass for at least one metal…"* |
+| 🔴 **reconcile: 9999 kg on a 7.8 kg load** | rejected — *"Recovered mass (9999.0 kg) exceeds what was shipped (7.8 kg)"* |
+| reconcile: negative / non-numeric / zero | all dropped, then rejected as empty |
+| 🔴 **reconcile: `kg:Plutonium` posted past the form** | ignored — `RECOVERY_METALS` is a server-side allowlist |
+| reconcile `…404` | `advanced=0&held=1` — `PKP-…107`'s other item is on `…405`, still only `received` |
+| reconcile `…405` | `advanced=1` — `PKP-…107` → `recovered` |
+| 🔴 **reconcile an already-reconciled manifest, action id borrowed from another page** | rejected **by the action**: *"MFT-2026-000404 has already been reconciled."* |
+| reconcile a draft · unknown id | both rejected |
+| 🎯 **dispatch + confirm `…402`** | `PKP-…113` **finally** advances `tested → processed` — held through six prior writes, released the moment its second manifest arrived. **This is fixture 4's whole purpose.** |
+| reconcile `…402` | `PKP-…113` → `recovered` |
+| **certify `PKP-…107`** | certificate minted, `materialSource: measured` |
+| 🔴 **certify it again** | `already=1` — **one certificate, not two** |
+| certify `PKP-…108` (its manifest has no figures) | minted with `materialSource: estimated`, materials **non-empty** — the key-bug fix, proven |
+| certify a `collected` pickup · unknown pickup | both rejected |
+| override: reason < 12 chars · empty | both rejected |
+| 🔴 **override: skip two stages · reverse** | both rejected — *"the only legal next stage is tested"* |
+| 🔴 **override: `to=cancelled`** | rejected — not in `LIFECYCLE_STAGES` |
+| 🔴 **override: `to=certified`** | rejected — *"Certification is not an override"* |
+| override a `certified` pickup | rejected — end of the lifecycle |
+| override one legal step | applied, reason recorded |
+
+**Rows written, checked directly:**
+- **8 status events, every one `actorRole: 'admin'` with a real `actorId`.**
+  🔴 **Zero rows with `'recycler'` or `'hub'` anywhere in the table.** (AD5.)
+- **12 `AdminAudit` rows**, all attributed. The single `lifecycle.override` row
+  carries its reason; nothing else does, which is `isReasonRequired()` working.
+- **Certificates**: `pdfUrl: ""` as designed, and `publicToken` a real 36-char
+  uuid — 🔴 proving that a **`dbgenerated()` Postgres default DOES apply** to a
+  service-role write, which Prisma-side `@default(uuid())` does not (trap 3).
+- **Pro-rating arithmetic verified by hand**: `PKP-…107`'s certificate reads
+  Nickel **70.6** = 52.4 (`…404`) + 18.2 (`…405`), Copper 43.7 = 31.0 + 12.7.
+
+**🎯 And the vendor's half, driven as `business@test` on `:3000`:**
+
+| Step | Outcome |
+|---|---|
+| `/compliance` | the newly-minted certificates are listed |
+| 🎯 **`/api/documents/certificate/PKP-…107`** | **200, `application/pdf`, 4,878 bytes, magic `%PDF`** — rendered on demand from `pdfUrl: ""` by the existing lazy pipeline |
+| `/api/exports/compliance` | `CERT-2026-PKP-2026-000107-EV,…,458,2850,Nickel: 70.6 kg; Copper: 43.7 kg; …` — the **measured** figures on the CPCB return |
+
+⚠ **The shared database was then fully restored** — every status event, audit
+row and certificate deleted, every manifest and pickup status put back.
+`npm run verify-seed`: **24/24**. No reseed was needed.
+
+### Two things repaired along the way (neither is Batch 7's own)
+
+1. 🔴 **The malformed manifest uuids are FIXED IN THE LIVE DATABASE.** Batch 6
+   fixed the seed and left a one-off repair for the existing rows; it is now
+   run. Seven `dispatch_manifests.id` values and six `admin_audits.subject_id`
+   values updated (no foreign key points at that column — checked first, in the
+   script). `/manifests/<id>` is green without a reseed.
+
+2. **`scripts/smoke.mjs` asserted `'Pickup detail'` on `/pickups/[id]`, and had
+   been RED since Batch 5.** C's real screen uses the pickup id as its `<h1>`,
+   which is better; the Batch 0 stub's wording simply outlived the stub — trap
+   28 running backwards. Replaced with the vendor and agent names, which are
+   only reachable through joins. 🔴 **`npm run smoke -- --app=admin` is now
+   23/23 for the first time.**
+
+### 🟠 Known, deliberately not done
+
+- 🟠 **`npm run lint` is RED on two pre-existing errors** in files this batch
+  never touched: `(admin)/market/page.tsx:31` (`react-hooks/purity` — an impure
+  call during render) and `(admin)/pickups/[id]/page.tsx:266` (an `<a>` where a
+  `<Link>` belongs). **B's and C's screens.** Not fixed here to keep the batch
+  scoped; both look like one-liners. Lint is not on the pre-push list, but it
+  should be green before Batch 17.
+- 🟠 **No `reconciledAt`, no manifest editing, no pagination** — see decision 7
+  and Batch 6's equivalent notes.
+- 🟠 **Pro-rating is an allocation, not a measurement.** Decision 4.
+- 🟠 **The override is a free-text pickup id**, not a picker. An escape hatch
+  should not be a one-click affordance sitting next to the normal buttons.
+- **Batch 14 (`/audit`) is what makes the override's reason visible.** Until it
+  lands, the reason is written and stored but only readable in the database.
