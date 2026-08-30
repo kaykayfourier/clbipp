@@ -423,19 +423,595 @@ customer app *(against a production build — trap 17)*.
 
 ## Batches 9–16 — the oversight tier
 
-Detailed the same way once the P0 spine lands. Headlines and the traps that
-apply:
+Everything below sits **on top of a working demo**. The journey (0, 1, 2, 3, 4,
+6, 7, 8, 17) is what must never be cut; these eight are what make the console an
+oversight tool rather than a lifecycle remote control.
 
-| # | Batch | Owner | The thing not to get wrong |
-|---|---|---|---|
-| 9 | Network — suppliers / agents / facilities / recyclers | C | Margin-tier override writes `Profile.marginTier` **and** an `AdminAudit`; it is a live pricing lever (`selection.ts` already honours it). |
-| 10 | Inventory | C | Stock is derived from `CustodyBatch` + item state, not a stored counter. Dwell alerts compute off `handedOffAt`. |
-| 11 | Engine config | B | 🔴 Tier 3 fields are **read-only** (AD8/W3). `getActiveConfig()` server-side; the quote route stops reading `body.config` (AD9) — **a pricing-surface change: say so in the commit message**, even though AD8 makes it price-neutral. Validator: weights sum to 1.00, tiers ordered, efficiencies in 0..1. "Simulate" is a stub with a `// TODO` (§2). |
-| 12 | Quote queue + traceability | C | 🔴 **Flat-rate items must appear** (W2/AD1) — pathway `—`, a `FLAT RATE` chip. Trace reads `BatteryItem.quoteData`, which is exactly what the schema's own TODO hands to this app. |
-| 13 | Compliance | B | Reuse Batch 8's export. No EPR-credit figure (open question 17). |
-| 14 | Exceptions + `/audit` | A | Every resolution writes `AdminAudit` with before/after and a reason. Resolutions are `retest` / `override` / `reject`, per the wireframe. |
-| 15 | Dashboard + analytics | C | Every tile is an aggregate of screens already built — build it **last**, not first. Margin % is fine here (AD12) and must never reach a vendor screen. |
-| 16 | Market feed | B | The override writes a **new `MarketPrices` snapshot row** with `source` / `note` / `createdBy`, never an update in place. `market.ts` reads `fxRateUsdInr` instead of the hardcoded 83.2. |
+**At a glance** — the same table that used to stand alone here, kept because it
+is the fastest way to see the shape. **The detail follows, one section each, in
+the same format as Batches 0–8.**
+
+| # | Batch | Owner | Tier | Depends on | The thing not to get wrong |
+|---|---|---|---|---|---|
+| 9 | Network — suppliers / agents / facilities + recyclers | C | P1 | 0, 1, 2 | Margin-tier override writes `Profile.marginTier` **and** an `AdminAudit`; it is a live pricing lever (`selection.ts` already honours it). |
+| 10 | Inventory | C | P1 | 2, 6 | Stock is derived from `CustodyBatch` + item state, not a stored counter. Dwell alerts compute off `handedOffAt`. |
+| 11 | Engine config + `getActiveConfig()` + the AD9 fix | B | P1 | 1 | 🔴 Tier 3 fields are **read-only** (AD8/W3). The quote route stops reading `body.config` (AD9) — **a pricing-surface change: say so in the commit message.** |
+| 12 | Quote queue + traceability | C | P1 | 2 | 🔴 **Flat-rate items must appear** (W2/AD1) — pathway `—`, a `FLAT RATE` chip. Trace reads `BatteryItem.quoteData`. |
+| 13 | Compliance | B | P1 | 8 | Reuse Batch 8's export — one CPCB format, one file. No EPR-credit figure (open question 17). |
+| 14 | Exceptions + `/audit` | A | P2 | 1 | Every resolution writes `AdminAudit` with before/after and a reason. Resolutions are `retest` / `override` / `reject`. |
+| 15 | Dashboard + analytics | C | P2 | most | Every tile is an aggregate of screens already built — build it **last**, not first. Margin % is fine here (AD12) and must never reach a vendor screen. |
+| 16 | Market feed | B | P2 | 1, 11 | The override writes a **new `MarketPrices` snapshot row**, never an update in place. |
+
+> **Cut order if Day 6 runs out (§5, pre-agreed):** 16 → 15 → 14 → 12. Nothing
+> else in this tier is on the list, and nothing in the P0 spine ever is.
+
+---
+
+## Batch 9 — Network: suppliers, agents, facilities · **C** · P1
+
+The three directory screens (E01–E03). Read-only but for **one** write, and that
+one write is a live pricing lever — treat it with Batch 3's seriousness, not a
+directory screen's.
+
+**Files**
+```
+apps/admin/src/app/(admin)/suppliers/page.tsx     ← replace C's stub
+apps/admin/src/app/(admin)/agents/page.tsx        ← replace C's stub
+apps/admin/src/app/(admin)/facilities/page.tsx    ← replace C's stub
+apps/admin/src/app/(admin)/suppliers/actions.ts   ← new — the margin override
+```
+
+**Steps**
+
+1. `/suppliers` (E01) — `profile.findMany({ where: { role: 'customer' } })`.
+   Columns: company / full name, `vendorType`, **`eprRegId`**, `kycStatus`,
+   pickups YTD, certified mass, `marginTier`, wallet balance.
+   - 🔴 **The column is `eprRegId`, not `eprRegNo`.** W11's EPR half is factually
+     wrong and Batch 1 did not add a second column — see Batch 1 deviation 2. A
+     screen written against `eprRegNo` will not compile, and one that "fixes" it
+     by adding the column starts null for every real vendor.
+   - Wallet balance and any ₹ via `formatPaise` from **`@clbipp/core/format`**
+     *(traps 4, 5)*; it rounds to whole rupees *(trap 27)*.
+2. Margin-tier override — a `<select>` over the `MarginTier` enum
+   (`aggressive | standard | generous`) posting to `setMarginTier`.
+3. `setMarginTier(profileId, tier, reason)` in `suppliers/actions.ts` —
+   **copy `(admin)/dispatch/actions.ts`'s shape verbatim**, which is this app's
+   reference lifecycle write:
+   - `requireAdmin()` from `@/lib/admin-identity` first. Under AD3 that plus
+     `src/proxy.ts` is the entire access boundary.
+   - Validate `tier` against the enum server-side and re-read the target profile
+     to confirm `role === 'customer'` — never trust the posted role.
+   - 🔴 **A typed reason is REQUIRED.** `isReasonRequired('supplier.margin')`
+     from `@clbipp/core/audit` returns `true`. Reject an empty one in the action.
+   - `$transaction { profile.update, adminAudit.create }` — action
+     `'supplier.margin'`, `subjectType: 'profile'`, `before: { marginTier: old }`,
+     `after: { marginTier: new }`, both from `@clbipp/core/audit`, never a bare
+     string literal.
+   - 🔴 `before` / `after` are `Json?` — **`null` is a type error** *(trap 21)*.
+     Omit the field or use `Prisma.DbNull` deliberately.
+   - POST, not GET; `revalidatePath('/suppliers')`; redirect-after-POST with the
+     error in the query string.
+4. 🔴 **The lever is recorded but INERT until Batch 11.** `computePricingBand`
+   ([`selection.ts:92`](../packages/decision-engine/src/decisionEngine/layers/selection.ts))
+   already honours `config.supplier_margin_overrides[supplier_id]` — but nothing
+   populates that map from `Profile.marginTier`. Batch 11's `getActiveConfig()`
+   is what wires it. Say so in this screen's own comment, so nobody demos a
+   margin change and believes it moved a price. **The commit that wires it is a
+   price-moving commit and must say so.**
+5. `/agents` (E02) — `role: 'agent'`: `fullName`, `agentZone`, `agentVehicle`,
+   `safetyTrainedAt`, `agentRating`, and live load from **`liveJobCounts()` in
+   `@/lib/job-load`**. 🔴 Import it; do not re-derive the count. `LIVE_JOB_STATUSES`
+   (`scheduled | arrived | offered`) is the definition of "live", and a pickup at
+   `requested` with a stale `agentId` is deliberately **not** counted.
+   - ⚠ **Only one agent account is seeded** (`agent@test`, Ravi Kumar) — Batch 3
+     note 4. The roster is a one-row table until B seeds a second, which needs a
+     Supabase auth user and a `verify-seed` check.
+6. `/facilities` (E03) — **two tables on one screen**, because E03 is "facilities
+   we operate **+** CPCB-registered recyclers" and there is deliberately no
+   `/recyclers` route in `nav.ts`:
+   - `Facility`: name, location, `capacityKg`, `isActive`, current stock, open
+     manifests.
+   - `Recycler`: name, `cpcbRegNo`, `acceptedChemistries`, `capacityKg`,
+     `isActive`, manifests received.
+   - 🔴 `acceptedChemistries` is **`BatteryType[]`** (`li_ion_nmc`…), not the
+     engine's `Chemistry` (`NMC622`…). Never merge the two *(trap 14, W13)*.
+   - ⚠ **No recycler accepts `nimh` or `other`.** That is AD7's gate having
+     something real to reject, not a gap — render it plainly rather than
+     papering over it.
+7. Everything else on all three screens is read-only. Every other write in the
+   console belongs to A's batches.
+
+**Done when**
+- [ ] All three render off real seeded data, with a content assertion each in
+      `scripts/smoke.mjs` — 🔴 not a bare status code *(trap 9)*.
+- [ ] A margin-tier change writes **both** `Profile.marginTier` and an
+      `AdminAudit` row carrying before, after and the reason; submitting it with
+      an empty reason is rejected **by the action**, not only by the form.
+- [ ] Double-submitting the override writes one audit row, not two.
+- [ ] A forged `profileId` (an agent's, or an admin's) is rejected.
+- [ ] `/agents` shows the same live-load number `/dispatch/[id]` does — because
+      both call `liveJobCounts()`.
+- [ ] The screen states, in the UI, that a margin tier does not price anything
+      until Batch 11 lands. *(Delete that line in Batch 11.)*
+- [ ] `docs/LANE_OWNERSHIP.md` notes that C wrote a lifecycle-shaped action
+      (A's lane by the standing map) — do-it-and-note-it.
+
+---
+
+## Batch 10 — Inventory · **C** · P1
+
+C01. What is physically sitting in our facilities right now, and how long it has
+been there. **Every number on this screen is derived; nothing is stored.**
+
+**Files**
+```
+apps/admin/src/app/(admin)/inventory/page.tsx    ← replace C's stub
+apps/admin/src/lib/stock.ts                      ← new — the one definition of "in this facility"
+```
+
+**Steps**
+
+1. 🔴 **Stock is derived, not counted.** There is no stock column, no counter,
+   and none is being added. An item is *at* a facility when its pickup is in one
+   of that facility's `CustodyBatch`es and the item is not yet on a manifest at
+   `dispatched` or past it. `DispatchManifest.itemIds` is a **Json snapshot**
+   (deliberately, so a dispatched manifest is immutable) — so this is a read of
+   `itemIds` across the facility's manifests, not a join.
+2. 🔴 **Put that rule in `@/lib/stock.ts` and have Batch 6's `/manifests/new`
+   picker import it.** Both screens answer "what is in this facility"; if they
+   answer differently, one of them is lying and the manifest one moves batteries.
+   Refactoring A's `/manifests/new` to the shared helper is the cross-lane touch
+   here — do it, and note it in `docs/LANE_OWNERSHIP.md`. If they must genuinely
+   differ (the picker filters to `tested`; the screen shows everything at the
+   hub), express that as an argument to one function, not two implementations.
+3. Group by chemistry using **`BatteryType`** chips *(trap 14)*. 🔴 **Flat-rate
+   lead-acid items must appear** — they have no `traceId`, and a table keyed on
+   one silently drops roughly half the seeded data (W2/AD1).
+4. Capacity gauge per facility — summed `confirmedWeightKg` (falling back to the
+   customer-declared `weightKg × quantity` where the agent has not confirmed;
+   🔴 **never overwrite either half**) against `Facility.capacityKg`. Both are
+   Prisma `Decimal` — `.toNumber()` at the read boundary, and keep weights out of
+   the paise rule: paise is for money, not mass.
+5. Dwell alerts off `CustodyBatch.handedOffAt`. Thresholds are **literals in
+   `@/lib/stock.ts` with a comment saying so** — they are not `EngineConfig`
+   parameters and must not be added to one (AD8 is about pricing, not ops).
+6. Custody-batch list: `batchNo`, agent, `itemCount`, `totalWeightKg`,
+   `handedOffAt`, `receivingStaffName`, and the current stage of its pickups.
+   ⚠ `receivingStaffName` is typed by the **agent**, not the hub — open question
+   18. Label it honestly ("attested by the agent"), do not present it as a hub
+   signature.
+7. Empty / loading / error states from Batch 2's kit — a facility with no stock
+   is the normal case mid-demo, not an error *(W14)*.
+
+**Done when**
+- [ ] `/inventory` renders with a content assertion in smoke, off real seeded
+      custody batches.
+- [ ] The stock figure for a facility **equals** the row count `/manifests/new`
+      offers for that facility at `tested` — same helper, same answer.
+- [ ] Dispatching a manifest (Batch 6) reduces the facility's stock on the next
+      render, with no counter anywhere to update.
+- [ ] A lead-acid item with no `traceId` appears in the chemistry breakdown.
+- [ ] A facility with zero stock renders `EmptyState`, not a crash and not a
+      blank card.
+
+---
+
+## Batch 11 — `getActiveConfig()` + `/config` + the AD9 fix · **B** · P1
+
+D01, and 🔴 **the one place in this sprint where a bug moves money silently**
+(risk R3). It also closes a live security defect (W3b/AD9).
+
+**Files**
+```
+packages/core/src/engine-config.ts                    ← new — getActiveConfig() + the validator
+packages/core/src/engine-config.test.ts               ← new
+apps/admin/src/app/(admin)/config/page.tsx            ← replace B's stub
+apps/admin/src/app/(admin)/config/actions.ts          ← new — publish
+apps/agent/src/app/api/quote/route.ts                 ← 🔴 the AD9 fix
+```
+
+**Steps**
+
+1. `getActiveConfig(): Promise<Config>` in `packages/core/src/engine-config.ts` —
+   `engineConfig.findFirst({ where: { isActive: true } })`. It lives in
+   `packages/core`, **not `apps/admin/src/lib`**, because the *agent* app's quote
+   route is its most important caller.
+   - 🔴 **Batch 1 contract 3 — two version strings, and this is where someone
+     picks.** `EngineConfig.version` is `v2026-08-26-r1` (the row's publish
+     identity); `config.config_version` inside the JSON is `v0.1.0-placeholder`
+     (the engine's build stamp). They disagree on a fresh seed, deliberately.
+     **Return `{ ...row.config, config_version: row.version }`** so a quote's
+     audit trail names the *published* config. 🔴 **Do not fix this by editing
+     `defaults.ts`** — that rewrites every existing quote's audit trail.
+   - No active row: fall back to `DEFAULT_CONFIG` and log loudly. A quote that
+     silently prices off a fallback is worse than one that says it did.
+2. 🔴 **AD9 — the quote route stops trusting the client.**
+   [`apps/agent/src/app/api/quote/route.ts`](../apps/agent/src/app/api/quote/route.ts)
+   passes **`body.config`** straight into `computeQuote`. An agent's browser can
+   POST `margin_tiers: { aggressive: 0 }` and reprice its own quote. Replace it
+   with `await getActiveConfig()` and drop `config` from the request contract
+   entirely — do not accept-and-ignore it.
+   - 🔴 **This is a pricing-surface change and the commit message must say so**,
+     even though AD8 makes it price-**neutral** today: the seeded `EngineConfig`
+     is byte-identical to `DEFAULT_CONFIG`, which is exactly what
+     `body.config` carried. Prove that claim, don't assert it (see done-when).
+3. Merge the supplier lever: build `supplier_margin_overrides` from
+   `Profile.marginTier` (Batch 9's column) — `{ [vendorId]: tier }` for every
+   non-null one. 🔴 **This DOES move prices** for any vendor with a tier set, via
+   `computePricingBand`'s `p_recommended`. Separate commit from step 2 if you can,
+   so the price-neutral change and the price-moving one are not one diff.
+4. `/config` UI, per AD8 / W3:
+   - **Tier 1 + 2 editable** — processing / QA / refurb-labour / cell-replacement
+     / hydromet rates, caps, chemistry composition, recovery efficiencies, margin
+     tiers, hurdle rate, reuse + refurb rate cards, chemistry multipliers,
+     logistics, overhead, refining %, yield loss, SoH restoration delta, flat
+     repackaging fee.
+   - 🔴 **Tier 3 read-only**, with a "changing this is a code change" note naming
+     the files: damage weights `0.4 / 0.35 / 0.25` and bands `1.5 / 2.5` in
+     `layers/damage.ts`, SoH gates `75 / 50` in `layers/sohGating.ts`. They are
+     literals in the engine, not `Config` parameters — a screen cannot move them.
+   - Chemistry rows use the engine's **`Chemistry`** (`NMC622 | NMC811 | LFP |
+     LCO | NCA`), which is **not** the operational `BatteryType` *(trap 14, W13)*.
+     This is the one screen in the console that legitimately uses the engine
+     vocabulary.
+5. `publishConfig` in `config/actions.ts` — **append-only**:
+   - `requireAdmin()`, then validate (step 6) **server-side**, then
+     `$transaction { engineConfig.updateMany({ where: { isActive: true }, data: { isActive: false } }), engineConfig.create({...}), adminAudit.create({...}) }`.
+   - 🔴 **Generate the uuid in the action** — `@default(uuid())` does not apply to
+     a service-role write *(trap 3)*.
+   - `parentVersion` = the version just deactivated. `publishedBy` = `admin.id`.
+   - Audit: `'config.publish'`, `subjectType: 'engine_config'`, and 🔴 **before /
+     after carry the two version strings and the changed fields only** — the
+     schema comment is explicit that it must not be two 4KB blobs.
+   - 🔴 Nothing is updated in place. Exactly one row is `isActive`, enforced by
+     this transaction and not by a partial index (Prisma cannot express one).
+6. The validator, in `packages/core` so it is testable and runs server-side (the
+   form is not the boundary — same posture as AD7):
+   - margin tiers ordered `aggressive > standard > generous`, each in 0..1;
+   - every `recovery_efficiency` in 0..1;
+   - every percentage (`overhead_rate_pct`, `refining_rate_pct`, `yield_loss_pct`)
+     in 0..1; every rate ≥ 0; `cycle_cap` / `age_cap` > 0;
+   - each chemistry's composition fractions sum to ≤ 1.0;
+   - 🔴 "damage weights sum to 1.00" is a **tier-3 assertion against the literals
+     in `damage.ts`**, not a check on submitted input — there is no input to check.
+7. Version string minted server-side: `v<YYYY-MM-DD>-r<n>`, `n` incrementing
+   within the day; the column is `@unique`, so collide and you get a 500 — derive
+   it from a count, don't guess.
+8. **"Simulate — replay the last 142 quotes" is a stub with a `// TODO`** (§2's
+   named cut). The TODO should say *why*: it is genuinely buildable off
+   `BatteryItem.quoteData`, but 🔴 **`quoteData` is not seeded** (Batch 1 note 6),
+   so there is nothing to replay yet.
+9. The drift test stays green: the seeded row must remain equal to
+   `DEFAULT_CONFIG` **by value** — 🔴 Postgres `jsonb` does not preserve key
+   order, so a `JSON.stringify` comparison fails on identical data *(trap 20)*.
+
+**Done when**
+- [ ] 🎯 **A quote computed through `/api/quote` with `config` omitted from the
+      body returns the identical numbers it returned with `body.config` before
+      this batch** — same item, same market row. That is the proof step 2 is
+      price-neutral, and it belongs in the commit message.
+- [ ] POSTing `body.config` with `margin_tiers: { aggressive: 0 }` changes
+      **nothing** about the returned band. The defect is closed.
+- [ ] Publishing writes a new `EngineConfig` row, deactivates exactly one, and
+      leaves exactly one `isActive` — asserted by querying, not by reading the UI.
+- [ ] A config failing any validator rule is rejected **by the action** when the
+      check is bypassed in the form.
+- [ ] The audit row names both versions and the changed fields, and carries no
+      bare `null` in `before` / `after` *(trap 21)*.
+- [ ] Tier 3 renders and **cannot be submitted** — no input, no hidden field, no
+      accepted key.
+- [ ] The drift test and all engine tests still pass; `npm run test` green.
+- [ ] 🔴 The commit message states the pricing-surface change explicitly, and
+      names step 3 as the price-moving half.
+
+---
+
+## Batch 12 — Quote queue + traceability · **C** · P1
+
+D03 + D04. The wireframe's flagship pair, and the two screens W2 gets most wrong.
+
+**Files**
+```
+apps/admin/src/app/(admin)/quotes/page.tsx          ← replace C's stub
+apps/admin/src/app/(admin)/trace/[traceId]/page.tsx ← replace C's stub
+```
+
+**Steps**
+
+1. 🔴 **`/quotes` is keyed on `BatteryItem`, never on `trace_id`** (W2/AD1). A
+   `trace_id`-keyed table drops every flat-rate item — roughly half the seeded
+   data — silently and with no error. Flat-rate rows render pathway `—` and a
+   **`FLAT RATE`** chip; they are not a missing row, they are the other half of
+   the business.
+2. Columns: item, pickup (linking `/pickups/[id]`), vendor, category, chemistry
+   (`BatteryType` chips — *trap 14*), confirmed weight, `damageScore`, pathway,
+   `unitPricePaise` / `linePricePaise`, `traceId` or `—`. Money through
+   `formatPaise` from `@clbipp/core/format` *(traps 4, 5)*; it rounds to whole
+   rupees, so write smoke assertions from the **rendered** string *(trap 27)*.
+3. Filters and pagination from Batch 2's `DataTable` / `FilterChips`: pathway,
+   chemistry, engine-vs-flat-rate, lifecycle stage. Status chips render from
+   `STAGE_LABELS` — 🔴 never a hand-written label *(trap 13)*.
+4. `/trace/[traceId]` — look up by `BatteryItem.traceId`.
+   - 🔴 **The index is not unique.** A flat-rate item has no `traceId` at all and
+     a re-quote reuses one; `pathway_decisions.trace_id` is the unique side of
+     that join. Take the most recent and say so if there is more than one.
+   - A miss renders the kit's `EmptyState`, not a throw — a hand-typed trace id
+     is exactly as likely as a clicked one.
+5. The screen shows: verdict and pathway, the P_min / P_recommended / P_max band
+   and margin % (fine here — AD12; 🔴 **never on a vendor screen**), the
+   `quoteData` `{ input, output }` breakdown, the item's pickup timeline via
+   `buildStages` from `@clbipp/ui` *(traps 12, 13)*, and the immutable audit
+   block (config version, market snapshot id, fx rate, engine version).
+6. 🔴 **The breakdown has no data yet, and that is expected.** Batch 1 note 6:
+   `quoteData` is **not seeded** — running the engine in the seed needs BMS
+   fields no screen collects (the Batch 5a workaround). Note 7: `PathwayDecision`
+   rows do not exist either, so `traceId` points at nothing on that side. So
+   every seeded trace has pathway + prices and **no engine breakdown**. Render
+   that section as an `EmptyState` reading "no engine run recorded for this item"
+   — 🔴 do not crash, and do not fabricate one. Whether the demo needs seeded
+   `quoteData` is a call for the team; if yes it is B's seed change plus a
+   `verify-seed` check, not a screen change.
+7. Read-only. Resolving a flag is Batch 14; re-pricing is not in this sprint.
+
+**Done when**
+- [ ] `/quotes` shows **both** a li-ion item with a `traceId` and a lead-acid one
+      without, on the same page, with content assertions for both in smoke.
+- [ ] `PKP-2026-000113`'s two items both appear — that is fixture 4, and it is
+      the row a `trace_id`-keyed table loses.
+- [ ] `/trace/TRC-2026-1130` renders verdict, prices and timeline, and an honest
+      empty breakdown.
+- [ ] An unknown trace id renders `EmptyState` with a 200, not a 500.
+- [ ] No recovery-rate % and no margin figure has leaked into any customer-app
+      screen — 🔴 nothing from `apps/admin` is imported by `apps/customer`, and
+      nothing here moved into `packages/ui` (AD11/AD12).
+
+---
+
+## Batch 13 — Compliance · **B** · P1
+
+F01. The reporting face of everything Batches 7 and 8 made real.
+
+**Files**
+```
+apps/admin/src/app/(admin)/compliance/page.tsx              ← replace B's stub
+apps/admin/src/app/api/exports/compliance/route.ts          ← new — the admin-scoped export
+packages/core/src/compliance-export.ts                      ← Batch 8's lifted module; extend, don't fork
+```
+
+**Steps**
+
+1. 🔴 **Reuse Batch 8's lifted `compliance-export.ts`. One CPCB format, one file,
+   both apps.** Forking the column set is how the customer's return and the
+   admin's stop agreeing, and the customer's output is asserted byte-identical.
+2. The admin export differs from the customer's in **exactly one argument**: the
+   customer's is scoped by `vendorId`, this one is not. Under AD3 there is no RLS
+   behind it — **`requireAdmin()` is the gate on the route**, and it must be the
+   first thing the handler does.
+3. The screen: batteries handled and **certified mass** by period; per-metal
+   input vs recovered vs yield (Batch 8 step 3's aggregate); recovery against
+   target — 🔴 targets are literals/config in this module, **not schema** (W5);
+   and a certificate feed off `Certificate`, which Batch 7 finally mints for real
+   rather than `reset-demo.ts` writing them.
+4. 🔴 **No EPR-credit number anywhere.** The wireframe's "EPR credits earned —
+   31.8" is backed by nothing; the conversion is a regulatory rule we do not have
+   (open question 17). Report certified mass and label it as such. Inventing the
+   conversion is the one failure on this screen a regulator would catch.
+5. CO₂e comes **only** from `@clbipp/core/impact` (`co2eAvoidedKg`,
+   `aggregateMaterials`, `formatMaterials`) — 🔴 never CO₂ arithmetic in a screen
+   or a route. ⚠ **Read that file's header before quoting a number**: the factors
+   are placeholders with unverified citations and only their relative ordering is
+   defensible (open question 7).
+6. Year filter mirrors the customer's `?year=` — unparseable input is **ignored,
+   not a 500**; a bad query string must not turn a download into an error.
+
+**Done when**
+- [ ] The customer's `/api/exports/compliance` output is **byte-identical**
+      before and after this batch — the same assertion Batch 8 shipped, re-run.
+- [ ] The admin export returns every vendor's rows; the customer's still returns
+      only its own.
+- [ ] The export route 307s a vendor session and an agent session to `/login`,
+      and `requireAdmin()` rejects anything that gets past the proxy.
+- [ ] `/compliance` renders with a content assertion in smoke, against a
+      **production build** *(trap 17)*.
+- [ ] 🔴 A grep of the built screen finds no credit figure and no invented
+      conversion factor.
+
+---
+
+## Batch 14 — Exceptions + `/audit` · **A** · P2
+
+D05 + F03. W4's screen finally has a table under it, and W7's audit trail finally
+has a reader.
+
+**Files**
+```
+apps/admin/src/app/(admin)/exceptions/page.tsx     ← replace A's stub
+apps/admin/src/app/(admin)/exceptions/actions.ts   ← new — resolve
+apps/admin/src/app/(admin)/audit/page.tsx          ← replace A's stub
+```
+
+**Steps**
+
+1. `/exceptions` — 🔴 **"open" is `resolvedAt: null`.** There is no open/closed
+   boolean and none is being added; the schema comment says so explicitly, and a
+   second source of truth would drift out of step with the resolution fields.
+   Columns: `kind` (`hold` / `review`), `cause` (machine-readable) and `detail`
+   (the human sentence), the item, its pickup, the vendor, `openedAt` and age.
+   The `@@index([resolvedAt])` does not sort open rows to the front (nulls sort
+   last on a DESC index) — **filter, do not rely on ordering.**
+2. `resolveException(id, resolution, notes)` — the `dispatch/actions.ts` shape
+   again: `requireAdmin()` → validate `resolution` against the
+   `ExceptionResolution` enum (`retest | override | reject`, exactly those three)
+   → `$transaction { itemException.updateMany({ where: { id, resolvedAt: null }, data: {...} }), adminAudit.create(...) }`.
+   - The guarded `updateMany` **is** the idempotency story — a second submit
+     updates zero rows rather than re-resolving. Keep it.
+   - Audit: `'exception.resolve'`, `subjectType: 'item_exception'`, before/after
+     carrying the resolution fields only, from `@clbipp/core/audit`.
+3. 🔴 **Resolving an exception changes NO pickup status and NO item pathway.** An
+   `ItemException` is an engine flag and its resolution, per **battery item**; it
+   is not a lifecycle stage (AD4) and there is no per-item status column (AD6). If
+   a `reject` ought to stop a pickup advancing, that is **Batch 7's per-pickup
+   manual override with a typed reason** (`lifecycle.override`), a different
+   action in a different file. Wiring it here would put a lifecycle write behind
+   a screen that does not own one.
+4. `/audit` — `AdminAudit` newest first (the `createdAt DESC` index exists for
+   this), filterable by action / `subjectType` / actor, paginated, with a
+   before/after diff per row.
+   - 🔴 The filter list comes from **`ADMIN_AUDIT_ACTIONS` in
+     `@clbipp/core/audit`**, never a hand-written array — same reason writes go
+     through the type: a typo-variant makes every `where: { action }` read
+     under-count, silently.
+   - Actor is a real FK with no `onDelete` (Prisma's `Restrict`) — an actor
+     cannot vanish out of the trail. Leave that alone.
+5. 🟠 **If `/audit` ever renders `StatusEvent` alongside `AdminAudit`, handle two
+   spellings of one role** — seeded vendor events say `'customer'`;
+   `reschedulePickup` in the customer app writes `'vendor'` (Batch 1's notes).
+   Pick one and migrate, or handle both; do not half-do it. And 🔴 **never write
+   `actorRole: 'recycler'` or `'hub'`** — every admin-written stage past the hub
+   is an admin asserting on a party's behalf, and the trail has to say `'admin'`.
+6. Fixture 6 seeds **two or three open** `ItemException` rows and no resolved
+   one — so the resolved view is empty until you resolve something. `EmptyState`,
+   not a blank panel.
+
+**Done when**
+- [ ] An open exception resolves to each of `retest` / `override` / `reject`, and
+      each writes an `AdminAudit` row with before, after and the notes.
+- [ ] Resolving the same exception twice updates zero rows the second time and
+      writes one audit row in total.
+- [ ] 🔴 Resolving an exception leaves its item's pickup at the **same
+      `PickupStatus`**, with **no** new `status_events` row. Assert this — it is
+      the mistake this screen invites.
+- [ ] An invalid `resolution` string, and a resolution posted for an
+      already-resolved id, are both rejected by the action.
+- [ ] `/audit` shows the dispatch assignments from Batch 3, the payment-free
+      collections (correctly absent — an agent action writes no `AdminAudit`),
+      and every write from Batches 6, 7, 9, 11 and 16.
+- [ ] Both routes carry content assertions in smoke.
+
+---
+
+## Batch 15 — Dashboard + analytics · **C** · P2
+
+B01 + F02. 🔴 **Build this LAST.** Every tile is an aggregate of a screen that
+already exists; built first, it becomes a set of numbers with nothing behind them.
+
+**Files**
+```
+apps/admin/src/app/(admin)/page.tsx           ← replace A's Batch 0 placeholder dashboard
+apps/admin/src/app/(admin)/analytics/page.tsx ← replace C's stub
+```
+
+**Steps**
+
+1. 🔴 **If a number has no screen behind it, do not put it on the dashboard.**
+   That rule is what keeps this batch a day's work instead of three.
+2. `/` — five KPI tiles, each **linking to the screen it aggregates** (a KPI with
+   no drill-through is decoration):
+   - awaiting dispatch — `status: 'requested'` → `/dispatch`;
+   - in flight — `scheduled | arrived | offered` → `/pickups`;
+   - at the hub awaiting a manifest — Batch 10's `@/lib/stock.ts` → `/inventory`;
+   - certified this month → `/compliance`;
+   - **open exceptions** — the kit's dark "exception" `KpiTile` variant →
+     `/exceptions`.
+3. Plus: pathway split (`SplitBar` over `BatteryItem.pathway`, 🔴 with flat-rate
+   as its own segment rather than dropped — W2/AD1), market state
+   (`MarketPrices.updatedAt` freshness and fx — see Batch 16 step 2 for why
+   freshness is an alarm), and the queue head (oldest `requested` rows).
+4. `/analytics` — throughput by stage over time, margin trend, pathway mix YTD,
+   top vendors by mass and value. Margin % is fine here (AD12) and 🔴 **must
+   never reach a vendor screen**; the no-recovery-rate-% rule is absolute on the
+   customer app and untouched by this.
+5. Charts are Batch 2's `MiniBarChart` / `SplitBar` / `CapacityGauge`. 🔴 **No new
+   chart library** (standing stack rule), and 🔴 nothing here moves into
+   `packages/ui` (AD11) — it is a mobile kit two shipped apps import.
+6. Money via `formatPaise` from `@clbipp/core/format` *(traps 4, 5)*, rounded to
+   whole rupees, so smoke assertions come from the rendered string *(trap 27)*.
+7. Admin is a **desktop** app — no `AppShell`, no `PhoneFrame`, no `hideNav`
+   *(trap 15, AD11)*. The dashboard is the screen most likely to attract a
+   copy-pasted mobile card.
+8. ⚠ **Second on the cut list** (§5): keep the dashboard, drop `/analytics` if
+   Day 6 is short. Build `/` first for that reason.
+
+**Done when**
+- [ ] Every tile's number is reproducible by opening the screen it links to and
+      counting — checked for all five, by hand, once.
+- [ ] Every tile links somewhere, and no tile shows a figure no other screen can
+      explain.
+- [ ] The pathway split accounts for **100% of items**, flat-rate included.
+- [ ] `/` and `/analytics` both carry content assertions in smoke, and the
+      ConsoleShell chrome assertion on `/` still passes.
+- [ ] `npm run smoke` for the **customer** app still shows no margin, no recovery
+      rate and no recovered value on any vendor screen.
+
+---
+
+## Batch 16 — Market feed · **B** · P2
+
+D02. Small, and it is the second live pricing lever in the console.
+
+> ⚠ **Half of this batch already shipped in Batch 1.** The plan's one-liner said
+> "`market.ts` reads `fxRateUsdInr` instead of the hardcoded 83.2" — that is
+> **done**: `getMarketData()` reads `row.fxRateUsdInr.toNumber()` today, and it
+> moved no price because the column defaults to exactly 83.2 and the engine only
+> echoes the rate into its audit output. What is left is the **screen** and the
+> **override**. (Batch 1's as-built note 4 addresses "Batch 12" for this — it
+> means this batch; the market feed is D02 / Batch 16.)
+
+**Files**
+```
+apps/admin/src/app/(admin)/market/page.tsx     ← replace B's stub
+apps/admin/src/app/(admin)/market/actions.ts   ← new — the override
+```
+
+**Steps**
+
+1. Read the latest row: `marketPrices.findFirst({ orderBy: { updatedAt: 'desc' } })`
+   — 🔴 **the same read `getMarketData()` does**, so the screen shows what the
+   engine actually prices against, not a different row.
+2. Render the six metal prices (₹/kg), `fxRateUsdInr`, `source`, `note`, the
+   author (`createdBy` → `Profile`), `updatedAt`, and **freshness** against
+   `Config.marketFreshnessMaxHours`. Freshness is an **operational alarm**: a
+   stale snapshot makes `computeQuote` throw `StaleMarketDataError`, which the
+   quote route turns into a 503 and an agent sees as a dead quote button.
+   - ⚠ **But it cannot fire today, and the screen must not pretend otherwise.**
+     `getMarketData()` stamps `snapshot_timestamp: new Date().toISOString()` at
+     read time (the defect-1 fix), so the engine never sees an old row. Show the
+     row's real `updatedAt` and label the freshness reading for what it is.
+3. `overrideMarket(...)` — 🔴 **writes a NEW snapshot row. Never an update in
+   place.** `marketPrices.create({ id: <generated in the action — trap 3>, Li, Co,
+   Ni, Mn, Cu, Al, fxRateUsdInr, source: 'manual-override', note, createdBy: admin.id })`
+   inside a `$transaction` with `adminAudit.create({ action: 'market.override', subjectType: 'market_prices', before: <the previous row's values>, after: <the new ones>, reason })`.
+   - `requireAdmin()` first; POST not GET; `revalidatePath('/market')`.
+   - 🔴 **A typed reason is REQUIRED** — `isReasonRequired('market.override')` is
+     `true`. Reject an empty one **in the action**.
+   - Append-only gives the screen a real history for free; there is nothing to
+     migrate and no previous value to lose.
+4. 🔴 **This moves prices — every quote computed after the write uses the new
+   row.** Say so explicitly in the commit message. It is the standing rule and
+   this is its clearest case: unlike Batch 11's config publish, there is no
+   byte-identical-default argument to fall back on.
+5. Validate server-side: every metal price > 0, `fxRateUsdInr` > 0, each within a
+   sane band with the bound stated in a comment. The columns are Prisma
+   `Decimal` — pass a string or a `Prisma.Decimal`, never a float that has
+   already lost precision. ⚠ These are **rates, not money owed**, which is why
+   they are Decimal and not integer paise; do not "fix" them to paise.
+6. History table: previous snapshots newest first with each one's author, source
+   and note. `@@index([updatedAt(sort: Desc)])` is the index that read uses.
+7. ⚠ **First on the cut list** (§5). If Day 6 runs out, ship steps 1, 2 and 6 —
+   `/market` read-only — and drop the override form. The screen still earns its
+   place; the lever is what goes.
+
+**Done when**
+- [ ] `/market` renders the current row with a content assertion in smoke, and
+      the fx rate shown is the one `getMarketData()` returns.
+- [ ] An override writes a **new** row — the previous one is still readable, with
+      its own author and timestamp — plus one `AdminAudit` row carrying before,
+      after and the reason.
+- [ ] An override submitted with an empty reason, a zero price, or a negative fx
+      rate is rejected **by the action** when the form is bypassed.
+- [ ] 🎯 A quote computed after the override reflects the new prices, and one
+      computed before still shows the old snapshot id in its audit trail.
+- [ ] 🔴 The commit message states the pricing-surface change.
 
 ---
 
