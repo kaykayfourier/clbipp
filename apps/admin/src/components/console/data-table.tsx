@@ -30,6 +30,19 @@ export interface DataTableProps<T> {
    * search text contains the query (case-insensitive substring). */
   getSearchText?: (row: T) => string
   searchPlaceholder?: string
+  /**
+   * Seeds the search box on first render. Exists for the topbar search in
+   * ConsoleShell, which is a real GET form posting to `/pickups?q=…` (Batch 0
+   * contract 1) — the server component reads `searchParams.q` and hands it
+   * down, so the box arrives already filtered and already showing the term.
+   *
+   * ⚠ Deliberately an INITIAL value, not a controlled one: once the page is
+   * open the box is the user's, and a later URL change does not yank what they
+   * are typing. A fresh navigation to `/pickups?q=…` remounts this component
+   * (different `key` is not needed — Next re-renders the route), so a second
+   * search from the topbar does land.
+   */
+  initialQuery?: string
   onRowClick?: (row: T) => void
   pageSize?: number
   initialSort?: SortState
@@ -46,6 +59,7 @@ export function DataTable<T>({
   getRowKey,
   getSearchText,
   searchPlaceholder,
+  initialQuery,
   onRowClick,
   pageSize = 20,
   initialSort,
@@ -54,7 +68,7 @@ export function DataTable<T>({
   rowNounPlural = 'rows',
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<SortState | null>(initialSort ?? null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery ?? '')
   const [page, setPage] = useState(0)
 
   const filtered = useMemo(() => {

@@ -39,7 +39,14 @@ const FILTER_OPTIONS: FilterChipOption[] = [...LIFECYCLE_STAGES, 'cancelled'].ma
   label: s.charAt(0).toUpperCase() + s.slice(1),
 }))
 
-export function PickupsTable({ rows }: { rows: readonly PickupRow[] }) {
+export function PickupsTable({
+  rows,
+  initialQuery,
+}: {
+  rows: readonly PickupRow[]
+  /** From `searchParams.q` — the topbar search posts here (Batch 0 contract 1). */
+  initialQuery?: string
+}) {
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
 
   const counts = useMemo(() => {
@@ -128,6 +135,7 @@ export function PickupsTable({ rows }: { rows: readonly PickupRow[] }) {
         getRowKey={(r) => r.id}
         getSearchText={(r) => `${r.id} ${r.vendorName} ${r.vendorCompany ?? ''} ${r.agentName ?? ''}`}
         searchPlaceholder="Search pickup id, vendor, agent…"
+        initialQuery={initialQuery}
         initialSort={{ key: 'created', direction: 'desc' }}
         emptyHeading="No pickups match this filter"
         emptyDescription="Try a different stage, or clear the search box."

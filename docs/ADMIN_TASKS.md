@@ -2351,3 +2351,60 @@ Both halves were measured against the live seeded config, read-only:
 checked** rather than taken from a commit subject: `grep -rl "not built yet"
 apps/admin/src` matches nothing, and every `page.tsx` under `(admin)/` is real
 code. Run that grep before believing any "all screens built" claim.
+
+---
+
+## Fix pass — as built · 2026-08-31 · **A (Aamir), covering B's and C's lanes**
+
+Not a batch. A review of everything B and C pushed in `bac7bde` (batches 2, 5,
+8, 9, 10, 12, 13, 15, 16), and the six defects it found. **All six were in work
+already recorded as done, and none was caught by build, lint or tests.** Full
+write-up and file list in `docs/LANE_OWNERSHIP.md` under this date.
+
+### What was wrong, and what it cost
+
+| | Defect | Batch | Effect |
+|---|---|---|---|
+| 1 | Export route committed at `(admin)/exports/compliance.ts/route.ts`; screen linked to a third path | 13 (B) | CPCB download 404'd from every angle |
+| 2 | `CATEGORY_LABELS.ev` `'EV pack'` → `'EV'` in the lift | 8 (B) | Every EV row in a filed return changed wording |
+| 3 | `/pickups` never read `searchParams.q` | 5 (C) | Topbar search navigated and showed an unfiltered list |
+| 4 | `/agents` declared its own four-status live load; `job-load.ts` said three | 9 (C) | Same agent, two different numbers on two screens |
+| 5 | All five dashboard KPI tiles were inert `<div>`s | 15 (C) | Read "3 in exception", no way to reach the three |
+| 6 | Eleven screens asserted only their Batch 0 stub `<h1>` | 2–16 | A green suite that proved nothing about content |
+
+### 🔴 What the next session must know
+
+1. **No seeded certificate is an EV pickup.** `PKP-2026-000109` is `portable`,
+   so the live compliance export never exercises the `ev` label — which is
+   exactly why defect 2 survived a working export, a passing build and a green
+   smoke run. `packages/core/src/compliance-export.test.ts` (14 tests) is the
+   only cover for it. **Do not delete that file as redundant.**
+2. **`LIVE_JOB_STATUSES` now includes `collected`, and that changed
+   `/dispatch/[id]`.** A collected pickup is in the agent's van until the hub
+   drop-off — the hand-over is the `CustodyBatch`, not the status. Both
+   `/agents` and the dispatch picker import the constant; neither declares one.
+3. **`/trace/[traceId]` asserts its EMPTY state, deliberately.** `quoteData` is
+   still unseeded (Batch 1 note 6), so no trace screen renders an engine
+   breakdown. The assertion names `'No engine record for this trace id yet'`.
+   🔴 **Whoever seeds `quoteData` must edit that line in `scripts/smoke.mjs`** —
+   pinning the empty state is what keeps the gap visible instead of
+   rediscovered on the screen.
+4. **`ADMIN_ISOLATION` is new in `scripts/smoke.mjs`** and asserts that no
+   EPR-credit figure appears on `/compliance`. Open question 17 is still open;
+   the wireframe's "31.8 credits" is backed by nothing. That absence is now a
+   test, because a deliberate omission looks exactly like a missing feature to
+   whoever reads the wireframe next.
+5. **`DataTable` gained `initialQuery`**, seeded from the URL. It is an
+   *initial* value, not a controlled one — once the page is open the box belongs
+   to the user. `KpiTile` gained an optional `href`; both are Batch 2 console-kit
+   files and 🔴 neither may move into `packages/ui` (AD11).
+
+### Verification — all green, 2026-08-31
+
+`npm run lint` · `npm run test` **291** (core 224, auth 40, engine 27) ·
+`npm run build` (three apps, `ƒ Proxy (Middleware)` on each) ·
+`npm run smoke` **admin 24 / customer 46 / agent 30** ·
+**all six role-gate directions bounce.**
+
+⚠ The admin smoke count rose 23 → 24: `/pickups?q=PKP-2026-000102` is a new
+probe. Eleven other routes kept their path and gained real assertions.

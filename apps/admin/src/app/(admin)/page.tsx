@@ -66,16 +66,27 @@ export default async function OverviewPage() {
         <p className="mt-1 text-xs text-text-secondary">Quotes, throughput, margin and the head of the queue.</p>
       </div>
 
+      {/*
+        🔴 Every tile drills through to the screen it aggregates (Batch 15's own
+        rule: a KPI with no drill-through is decoration). These were unlinked
+        until 2026-08-31, which made the dashboard a dead end — an admin could
+        read "3 in exception" and had no way to reach the three.
+
+        The two money tiles both point at /quotes because that is where a margin
+        and a net value are computed per item; /analytics shows the same two
+        over time and is linked from the trend panel below.
+      */}
       <div className="flex flex-wrap gap-3">
-        <KpiTile label="Pickups today" value={String(pickupsToday)} delta="requested since midnight IST" deltaTone="neutral" />
-        <KpiTile label="Active pickups" value={String(activePickups)} delta="requested → recovered" deltaTone="neutral" />
-        <KpiTile label="Avg margin" value={avgMargin !== null ? `${avgMargin.toFixed(1)}%` : '—'} delta={`last ${MARGIN_WINDOW_DAYS}d, engine-priced`} deltaTone="neutral" />
-        <KpiTile label="Net value" value={formatPaise(netValuePaise)} delta={`last ${MARGIN_WINDOW_DAYS}d`} deltaTone="neutral" />
+        <KpiTile label="Pickups today" value={String(pickupsToday)} delta="requested since midnight IST" deltaTone="neutral" href="/dispatch" />
+        <KpiTile label="Active pickups" value={String(activePickups)} delta="requested → recovered" deltaTone="neutral" href="/pickups" />
+        <KpiTile label="Avg margin" value={avgMargin !== null ? `${avgMargin.toFixed(1)}%` : '—'} delta={`last ${MARGIN_WINDOW_DAYS}d, engine-priced`} deltaTone="neutral" href="/quotes" />
+        <KpiTile label="Net value" value={formatPaise(netValuePaise)} delta={`last ${MARGIN_WINDOW_DAYS}d`} deltaTone="neutral" href="/quotes" />
         <KpiTile
           label="In exception"
           value={String(openExceptions)}
           delta={openExceptions > 0 ? 'open — needs review' : 'none open'}
           tone={openExceptions > 0 ? 'exception' : 'default'}
+          href="/exceptions"
         />
       </div>
 

@@ -2,6 +2,7 @@ import { prisma } from '@clbipp/database'
 
 import { PageHead } from '@/components/console'
 import { formatIstDate } from '@/lib/ist'
+import { LIVE_JOB_STATUSES } from '@/lib/job-load'
 import { AgentsTable, type AgentRow } from './AgentsTable'
 
 // E02 · Agent roster — Batch 9, owner C — Ali.
@@ -13,11 +14,16 @@ import { AgentsTable, type AgentRow } from './AgentsTable'
 // the chain (Batch 6/7's territory); it stops counting against the agent even
 // though `Pickup.agentId` still points at them for the record.
 //
+// 🔴 That list is LIVE_JOB_STATUSES from @/lib/job-load, not a local copy.
+// This screen originally declared its own four-status ACTIVE_STATUSES while
+// job-load.ts declared three, so /agents and /dispatch/[id] reported different
+// live loads for the same agent — the exact drift a shared helper exists to
+// prevent. Unified 2026-08-31 on this screen's (correct) four-status reading;
+// see the note in job-load.ts.
+//
 // No shell here — (admin)/layout.tsx renders ConsoleShell for the whole group.
 // 🔴 Never import AppShell, PhoneFrame or hideNav (AD11, trap 15).
 export const dynamic = 'force-dynamic'
-
-const ACTIVE_STATUSES = ['scheduled', 'arrived', 'offered', 'collected'] as const
 
 export default async function AgentsPage() {
   const agents = await prisma.profile.findMany({
@@ -29,7 +35,7 @@ export default async function AgentsPage() {
       agentVehicle: true,
       safetyTrainedAt: true,
       agentRating: true,
-      _count: { select: { assignedPickups: { where: { status: { in: [...ACTIVE_STATUSES] } } } } },
+      _count: { select: { assignedPickups: { where: { status: { in: [...LIVE_JOB_STATUSES] } } } } },
     },
     orderBy: { fullName: 'asc' },
   })

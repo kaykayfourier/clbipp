@@ -899,6 +899,85 @@ Batch 17.
 
 ---
 
+## 2026-08-31 — A (Aamir) fixed six defects across B's and C's shipped batches
+
+Same day as the Batch 11 entry above, after a review of everything B and C
+pushed in `bac7bde` (batches 2, 5, 8, 9, 10, 12, 13, 15, 16). All six were in
+work already recorded as **done**; none were caught by build, lint or tests,
+and four of them made a screen or a document quietly wrong rather than broken.
+
+**In B's lane:**
+
+- 🔴 **The CPCB export was 404 from every angle** (`64d2ef4`). The route was
+  committed at `(admin)/exports/compliance.ts/route.ts` — a directory literally
+  named `compliance.ts`, inside the page route group — serving it at
+  `/exports/compliance.ts`, while `/compliance` linked to
+  `/api/admin/exports/compliance`, a third path that never existed. Moved to
+  `apps/admin/src/app/api/exports/compliance/route.ts`, mirroring the customer
+  app; the download button had never worked.
+- 🔴 **The Batch 8 lift was not byte-identical, which was its one hard
+  requirement.** `CATEGORY_LABELS.ev` went from `'EV pack'` to `'EV'` when
+  `compliance-export.ts` moved into `packages/core`, changing the `category`
+  cell of every EV row in a filed CPCB return. ⚠ **No seeded certificate is an
+  EV pickup** (PKP-2026-000109 is `portable`), so the live export never
+  exercised the label and nothing could have caught it — which is why the fix
+  ships with `packages/core/src/compliance-export.test.ts` (14 tests) pinning
+  all four labels, the eight-column header, the vendor-scope switch and the
+  year filter.
+- Dead code: `apps/customer/src/lib/compliance-export.ts` was left behind by the
+  lift, imported by nothing. Deleted. Unused `co2eAvoidedKg` import dropped.
+
+**In C's lane:**
+
+- 🔴 **`/pickups` ignored `searchParams.q`** — Batch 0's contract 1, restated in
+  Batch 5's own done-when. The topbar search box in `ConsoleShell` is a real GET
+  form posting there, so every search navigated and showed an unfiltered list.
+  `DataTable` gained an `initialQuery` prop; the page reads `q` and seeds it, so
+  URL search and typed search are the same filter and cannot disagree.
+- 🔴 **Two definitions of "live load".** `/agents` declared its own
+  `ACTIVE_STATUSES` (four statuses, including `collected`) while `lib/job-load.ts`
+  said three — so the same agent showed different numbers on `/agents` and
+  `/dispatch/[id]`. Unified on the four-status reading, which is the correct
+  one: a collected pickup sits in the agent's van until the hub drop-off, and
+  the hand-over is the `CustodyBatch`, not the status. ⚠ **This changed what
+  `/dispatch/[id]` displays** — A's own screen, flagged rather than done
+  silently.
+- **Every dashboard KPI tile linked nowhere.** Batch 15's own rule is that a KPI
+  with no drill-through is decoration; all five were inert `<div>`s, so an admin
+  could read "3 in exception" with no way to reach the three. `KpiTile` gained
+  an optional `href`.
+
+**And the assertions that would have caught four of the six:**
+
+Eleven of C's and B's screens still carried only their Batch 0 stub `<h1>` as a
+smoke assertion — `'/pickups': ['Pickups']`, `'/market': ['Market feed']`, and
+so on. That is the same hole `/config` sat in for two batches, and it is why a
+green 23/23 meant nothing about their content. All eleven now assert strings
+only a real read can produce: joined vendor and agent names, the seeded
+`eprRegId`, the CPCB registration number, the `Flat rate` chip a `trace_id`-keyed
+table would drop, the seeded fx rate. Two new probes: `/pickups?q=…`, and
+`ADMIN_ISOLATION` asserting **no EPR-credit figure** on `/compliance` (open
+question 17 is still open).
+
+**Files A touched outside A's lane:** `packages/core/src/compliance-export.ts`
+and its new test · `apps/admin/src/app/api/exports/compliance/route.ts` (moved) ·
+`apps/admin/src/app/(admin)/compliance/page.tsx` ·
+`apps/admin/src/app/(admin)/pickups/{page.tsx,PickupsTable.tsx}` ·
+`apps/admin/src/app/(admin)/agents/page.tsx` ·
+`apps/admin/src/app/(admin)/page.tsx` ·
+`apps/admin/src/components/console/{data-table,kpi-tile}.tsx` ·
+`apps/customer/src/lib/compliance-export.ts` (deleted).
+In A's own lane: `apps/admin/src/lib/job-load.ts`, `scripts/smoke.mjs`.
+
+🔴 **The thing that generalises, and it is the same lesson as the Batch 11
+entry:** every one of these six passed review, build, lint and tests. What they
+had in common is that **nothing asserted the outcome** — the export had no test,
+the search box had no probe, the two live-load counts were never compared, and
+the KPI tiles were never clicked. A screen that renders is not a screen that
+works.
+
+---
+
 ## Superseded policy (2026-06-27 → 2026-08-20) — kept for the record
 
 Entries logged above under dates before 2026-08-20 were made under this rule,

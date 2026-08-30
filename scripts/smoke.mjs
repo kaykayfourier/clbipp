@@ -806,6 +806,10 @@ const ADMIN_ROUTES = [
   '/dispatch',
   `/dispatch/${ADMIN_REQUESTED}`,
   '/pickups',
+  // Batch 0 contract 1 — the topbar search target. Probed as its own route so
+  // a regression in `searchParams.q` fails here rather than being noticed in a
+  // demo. See the note on this key in ADMIN_APP_CONTENT.
+  '/pickups?q=PKP-2026-000102',
   `/pickups/${ADMIN_PICKUP}`,
   '/lifecycle',
   // C · Chain of custody
@@ -849,7 +853,21 @@ const ADMIN_ROUTES = [
 const ADMIN_SHELL = ['Console', 'Operations', 'Chain of custody', 'Engine', 'Network', 'Reports', 'Dispatch', 'Account menu for']
 
 const ADMIN_APP_CONTENT = {
-  '/': ['Overview', ...ADMIN_SHELL],
+  // The five KPI tiles' labels, plus two of the hrefs they carry. Each tile is
+  // a LINK to the screen it aggregates as of 2026-08-31 — Batch 15's own rule
+  // is that a KPI with no drill-through is decoration, and until that date all
+  // five were inert <div>s, so an admin could read "3 in exception" with no way
+  // to reach the three. Asserting the href (not just the label) is what stops
+  // that silently reverting.
+  '/': [
+    'Overview',
+    'Pickups today',
+    'Active pickups',
+    'In exception',
+    'href="/exceptions"',
+    'href="/pickups"',
+    ...ADMIN_SHELL,
+  ],
   // Built in Batch 3. The extra strings are chosen to survive a DEMO, not just
   // a build: 'Waiting' is a KPI label that renders even when the board is empty
   // (assign every request and an assertion on a row would start failing), and
@@ -863,7 +881,18 @@ const ADMIN_APP_CONTENT = {
     'Declared items',
     'Recent status events',
   ],
-  '/pickups': ['Pickups'],
+  // 🔴 Trap 28. 'Pickups' alone is the Batch 0 STUB's <h1> and it survived into
+  // the real screen, so asserting it proved only that a route existed — the
+  // same hole /config sat in for two batches. The vendor company and the agent
+  // name are reachable only through joins, so they prove rows were loaded; the
+  // stage chip proves FilterChips rendered off real counts.
+  '/pickups': ['Pickups', 'Sharma Logistics Pvt Ltd', 'Ravi Kumar', 'Requested'],
+  // 🔴 Batch 0 contract 1, finally assertable. The topbar search box is a real
+  // GET form posting here, and until 2026-08-31 this page ignored `q` entirely
+  // and rendered an unfiltered list. DataTable seeds its query from the URL, so
+  // the SSR'd HTML is already filtered — which is what makes the absence of the
+  // OTHER pickup id below a real assertion rather than a timing accident.
+  '/pickups?q=PKP-2026-000102': ['Pickups', 'PKP-2026-000102'],
   // ⚠ 'Pickup detail' was asserted here from Batch 0 until Admin Batch 7 and had
   // been RED ever since Batch 5 replaced the stub: C's real screen uses the
   // pickup id itself as its <h1>, which is a better heading, and the stub's
@@ -899,7 +928,10 @@ const ADMIN_APP_CONTENT = {
     'Unit: one pickup, one step',
     'Apply override',
   ],
-  '/inventory': ['Inventory'],
+  // Derived stock (Batch 10) — no counter column exists, so these strings only
+  // appear if computeFacilityStock actually walked CustodyBatch → items and
+  // subtracted the shipped manifests.
+  '/inventory': ['Inventory', 'Stock by facility and chemistry', 'CLBIPP Hub — Okhla'],
   // The four ManifestStatus stat tiles always render, even at zero — unlike the
   // per-status tables below them, which are omitted when empty.
   '/manifests': ['Dispatch manifests', 'Draft', 'Dispatched', 'Received', 'Reconciled'],
@@ -951,9 +983,36 @@ const ADMIN_APP_CONTENT = {
     'NMC622',
     'Publish history',
   ],
-  '/market': ['Market feed'],
-  '/quotes': ['Quote queue'],
-  [`/trace/${ADMIN_TRACE}`]: ['Traceability'],
+  // '83.2' is the seeded fxRateUsdInr and 'seed' is the seeded `source`, so
+  // together they prove the MarketPrices row was read rather than a placeholder
+  // rendered. 🔴 The rate is the one the engine echoes into every quote's audit
+  // trail (W6) — if this assertion ever fails, a price moved.
+  '/market': ['Market feed', 'fx rate', '83.2'],
+  // 🔴 W2/AD1's whole point, made assertable. 'Flat rate' is the chip a
+  // non-li-ion item renders instead of a pathway, and a table keyed on trace_id
+  // — the wireframe's design — would not contain it at all, because a flat-rate
+  // item has no traceId. This is the assertion that catches that regression.
+  '/quotes': ['Quote queue', 'Flat rate', 'Flat-rate', 'TRC-2026-'],
+  // …1130 is PKP-2026-000113's li-ion item (its OTHER item is flat-rate and has
+  // no trace at all — fixture 4). The pickup id proves the item → pickup join
+  // ran.
+  //
+  // 🔴 THE EMPTY STATE IS THE ASSERTION, deliberately — NOT 'Verdict' or
+  // 'Price band'. Those engine panels render only when the item carries
+  // `quoteData`, and no seeded item carries any: Batch 1 as-built note 6 says
+  // running the engine in the seed needs BMS fields no screen collects (the
+  // Batch 5a workaround), so every seeded trace has pathway + prices and no
+  // engine breakdown. Asserting the panels here FAILS — which is exactly how
+  // this line was first written, on 2026-08-31, and how the gap resurfaced.
+  //
+  // ⚠ WHOEVER SEEDS `quoteData` MUST EDIT THIS LINE. Pinning the empty state
+  // rather than asserting nothing is what keeps the gap visible in the suite
+  // instead of being rediscovered on the screen.
+  [`/trace/${ADMIN_TRACE}`]: [
+    'Traceability',
+    'PKP-2026-000113',
+    'No engine record for this trace id yet',
+  ],
   // Batch 14. 🔴 Trap 28 — assert on strings only a real read could produce.
   // `soh_below_gate` is seed fixture 6's machine-readable cause, the pickup id
   // comes from a two-level join (exception → item → pickup), and "no trace" is
@@ -965,12 +1024,32 @@ const ADMIN_APP_CONTENT = {
     'no trace',
     'Resolve',
   ],
-  '/suppliers': ['Suppliers'],
-  '/agents': ['Agent roster'],
+  // 🔴 'CPCB/EPR/PROD/2024/0091' is the seeded `Profile.eprRegId`, and asserting
+  // it is how W11's half-wrong premise stays fixed: §3 called for a NEW
+  // `eprRegNo` column, Batch 1 correctly refused to add one because eprRegId
+  // already exists and is wired end to end, and a future edit that "restores"
+  // the missing column would render an empty cell here and fail this run.
+  // 'standard' is the seeded marginTier — the live pricing lever (Batch 11).
+  '/suppliers': ['Suppliers', 'Sharma Logistics Pvt Ltd', 'CPCB/EPR/PROD/2024/0091', 'standard'],
+  // 'Ravi Kumar' is the one seeded agent. Only one exists, so the roster is a
+  // one-row table until a second is seeded (Batch 3 as-built, note 4).
+  '/agents': ['Agent roster', 'Ravi Kumar'],
   // '&' renders as &amp; — assert the two halves, never the raw ampersand.
-  '/facilities': ['Facilities', 'recyclers'],
-  '/compliance': ['Compliance'],
-  '/analytics': ['Analytics'],
+  //
+  // The CPCB number proves the Recycler table was read, and it is the field
+  // AD7's validation keys on: a manifest may name only an isActive recycler
+  // whose acceptedChemistries cover every item on it.
+  '/facilities': [
+    'Facilities',
+    'recyclers',
+    'CLBIPP Hub — Okhla',
+    'Meridian Metals Recovery Pvt Ltd',
+    'CPCB/EPR/BW/2024/000418',
+  ],
+  // The two panels that must be present. The EPR-credit figure that must NOT be
+  // is asserted separately, in ADMIN_ISOLATION.
+  '/compliance': ['Compliance', 'Recovery by metal', 'Recent certificates'],
+  '/analytics': ['Analytics', 'Pathway mix — YTD', 'Top vendors — by priced value'],
   // Batch 14. The three dotted action strings are read back out of
   // `admin_audits` and rendered verbatim, so they prove the query ran — a stub
   // could render the heading, but not `exception.resolve` next to an actor.
@@ -1002,6 +1081,22 @@ const ADMIN_CONTENT = {
 // renders 'ADMIN · OPS' in its sidebar footer. Asserting its absence is what
 // stops that string being copied back in and implying a role tier that does not
 // exist.
+// 🔴 OPEN QUESTION 17, asserted by absence.
+//
+// The wireframe's compliance screen shows "EPR credits earned — 31.8". We can
+// derive a number from certified mass, but the conversion is a regulatory rule
+// the company has not given us — so /compliance reports certified MASS and
+// displays no credit figure at all. That decision is invisible in the code (it
+// looks like a missing feature), which is exactly the kind of deliberate
+// omission that gets "helpfully" filled in later by someone reading the
+// wireframe. These strings failing this run is the intended outcome of that.
+//
+// Same mechanism as the customer app's no-recovery-rate rule: the strongest
+// assertion about a number you must not show is that it is not in the HTML.
+const ADMIN_ISOLATION = {
+  '/compliance': ['EPR credits', 'credits earned', 'EPR credit'],
+}
+
 const ADMIN_LOGIN_ISOLATION = {
   '/login': ['Create account', 'Send code', 'Email me a login code', 'Continue with Google', 'ops'],
 }
@@ -1036,10 +1131,12 @@ const APPS = {
     defaultUser: ['admin@test', 'demo1234'],
     routes: ADMIN_ROUTES,
     appContent: ADMIN_APP_CONTENT,
-    // No isolation table yet — nothing in the console is withheld from an
-    // admin (AD12), so there is nothing to assert absent on a logged-in route.
-    // The absent-doors assertions live on /login, in ADMIN_LOGIN_ISOLATION.
-    appIsolation: () => [],
+    // Nothing in the console is withheld from an ADMIN (AD12), so this is not
+    // the customer app's visibility rule. The one thing asserted absent is a
+    // number nobody may show because we do not know how to compute it —
+    // see ADMIN_ISOLATION. The absent-doors assertions live on /login, in
+    // ADMIN_LOGIN_ISOLATION.
+    appIsolation: (route) => ADMIN_ISOLATION[route] ?? [],
     publicRoutes: ADMIN_PUBLIC_ROUTES,
     content: ADMIN_CONTENT,
     publicIsolation: ADMIN_LOGIN_ISOLATION,

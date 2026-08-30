@@ -9,7 +9,7 @@
 
 import Papa from 'papaparse'
 import { prisma } from '@clbipp/database'
-import { aggregateMaterials, formatMaterials, co2eAvoidedKg } from './impact'
+import { aggregateMaterials, formatMaterials } from './impact'
 import { certificateNumber } from './documents'
 
 // ─── Vendor-facing CSV (one row per certificate) ─────────────────────────────
@@ -34,11 +34,22 @@ export interface ComplianceCsv {
   rows: number
 }
 
+// 🔴 These four strings are the CSV's `category` column, and the lift out of
+// apps/customer/src/lib/compliance-export.ts had to preserve them EXACTLY.
+// `ev` was 'EV pack' in the original (apps/customer/src/app/(app)/book/copy.ts,
+// which the pre-lift builder imported) and was rewritten to 'EV' here — so
+// every EV row in every filed return silently changed wording. Restored
+// 2026-08-31; `compliance-export.test.ts` pins all four so the next edit to
+// this map fails a test instead of a CPCB return.
+//
+// ⚠ Do NOT re-import book/copy.ts to dedupe this. That file lives in the
+// customer app, packages/* cannot import from apps/*, and this map is now the
+// shared definition both apps read through buildComplianceCsv.
 const CATEGORY_LABELS: Record<string, string> = {
   portable:   'Portable',
   automotive: 'Automotive',
   industrial: 'Industrial',
-  ev:         'EV',
+  ev:         'EV pack',
 }
 
 export async function buildComplianceCsv(input: {

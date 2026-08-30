@@ -20,7 +20,26 @@ import { PickupsTable, type PickupRow } from './PickupsTable'
 // 🔴 Never import AppShell, PhoneFrame or hideNav (AD11, trap 15).
 export const dynamic = 'force-dynamic'
 
-export default async function PickupsPage() {
+// 🔴 CONTRACT WITH BATCH 0 (as-built, contract 1). The topbar search box in
+// ConsoleShell is a real GET form posting to `/pickups?q=…` — §2 adds no
+// /search screen, and B04 is already specified to search "by pickup id /
+// vendor / agent", so the box points here. Until this read existed the box
+// navigated and showed an UNFILTERED list, which reads as a broken feature
+// rather than an absent one. Added 2026-08-31.
+//
+// The filtering itself is DataTable's (Batch 2) — same substring match over
+// the same `getSearchText`, whether the term arrives from the URL or is typed
+// into the box. This only seeds it, so the two paths can never disagree.
+export default async function PickupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>
+}) {
+  const { q } = await searchParams
+  // `?q=a&q=b` is legal in a URL and would arrive as an array. Take the first
+  // rather than rendering "a,b" as the search term.
+  const initialQuery = (Array.isArray(q) ? q[0] : q)?.trim() || undefined
+
   const pickups = await prisma.pickup.findMany({
     orderBy: { createdAt: 'desc' },
     select: {
@@ -63,7 +82,7 @@ export default async function PickupsPage() {
   return (
     <>
       <PageHead title="Pickups" description="Every pickup, every stage. The spine of this console (AD1)." />
-      <PickupsTable rows={rows} />
+      <PickupsTable rows={rows} initialQuery={initialQuery} />
     </>
   )
 }
