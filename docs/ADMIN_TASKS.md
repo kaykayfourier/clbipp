@@ -105,6 +105,23 @@ Every one of these has already cost this team an hour, in an earlier sprint.
 27. **`formatPaise` rounds to whole rupees for display.** *(Batch 4.)* A
     1374450-paise payable renders **₹13,745**, not ₹13,744.50. A content
     assertion written from the paise value will not match the page.
+28. 🔴 **A content assertion is only as good as the work the page had to do to
+    produce the string.** *(Batch 6.)* `scripts/smoke.mjs` asserted
+    `'Manifest detail'` on `/manifests/<id>` for three batches while pointing at
+    an id that **matched no row** — the Batch 0 stub rendered that heading
+    without querying anything, so the assertion passed and hid a malformed uuid
+    in the seed. Trap 9 said "assert content, not a status code"; this is the
+    next layer down. **When you replace a stub, assert on something only a real
+    read could produce** — a document number, a name out of a joined row.
+29. **`DispatchManifest.id` and `CustodyBatch.id` are plain `String`, not
+    `@db.Uuid`.** *(Batch 6.)* Postgres will happily store a malformed uuid in
+    them, and did. If you hand-build one of these ids, `padStart` it — do not
+    count zeros by eye.
+30. **A fresh seed gives Batches 6 and 7 nothing to act on, and that is
+    correct.** *(Batch 6.)* `CB-2026-000301` holds no pickup at `collected`, and
+    the one `collected` pickup deliberately has no custody batch so that
+    "pending drop-off" (D5) is a real state. 🎯 **The demo starts in the AGENT
+    app** with a hub drop-off. Do not read the empty board as a broken screen.
 
 ---
 
@@ -1661,3 +1678,182 @@ and no reseed was needed.
   and today it would render a ₹0 payout with a Confirm button.
 - **No `AdminAudit` row.** Correct: this is an *agent's* action, and the audit
   table is for admin assertions. The `status_events` row already attributes it.
+
+---
+
+## Batch 6 — as built · 2026-08-31 · **A (Aamir)**
+
+🔴 **The second lifecycle hole is half closed.** Before this batch nothing in
+any of the three apps wrote a stage past `collected`. `/lifecycle` now writes
+`collected → tested` per custody batch, and `/manifests` builds and dispatches a
+real `DispatchManifest`. **Batch 7 closes the rest** (`processed`, `recovered`,
+`certified`).
+
+### What shipped
+
+| File | What it is |
+|---|---|
+| `apps/admin/src/lib/lifecycle-units.ts` | **new.** AD5's unit-of-advance logic in one place: `MANIFEST_PROGRESSION`, `isManifestAtOrPast`, `loadItemManifestIndex()`, 🔴 **`pickupCoverage()` — the AD6 query**, and `loadManifestBuildStock()`. 🔴 **Batch 7 imports this rather than re-deriving it.** |
+| `(admin)/lifecycle/page.tsx` | B06. Four sections, one per advance, each labelled with the unit it actually belongs to. Renders AD6 coverage per pickup. |
+| `(admin)/lifecycle/actions.ts` | **new.** `advanceCustodyBatch` + its form action. |
+| `(admin)/manifests/page.tsx` | C02. Grouped by `ManifestStatus` in progression order. |
+| `(admin)/manifests/new/page.tsx` | C03, server half — reads stock + recyclers, formats dates server-side. |
+| `(admin)/manifests/new/ManifestBuilder.tsx` | **new.** C03's picker: a client component for live filtering, wrapping a **plain** server-action form. |
+| `(admin)/manifests/[id]/page.tsx` | C04. Detail + the dispatch button. Batch 7 adds confirm/reconcile here. |
+| `(admin)/manifests/actions.ts` | **new.** `createManifest`, `dispatchManifest`, both form actions. |
+| `packages/core/src/documents.ts` | `manifestNumber()` + 3 tests. |
+| `packages/core/src/audit.ts` | `"custody.advance"` added to the closed vocabulary. |
+| `packages/database/prisma/verify-seed.ts` | mirrored list synced. |
+| `packages/database/prisma/reset-demo.ts` | 🔴 malformed manifest uuid fixed. |
+| `scripts/smoke.mjs` | four routes given real content assertions. |
+
+### Deviations from this sheet, and why
+
+1. **`/manifests/new` is a client component, not a no-JS server form.** Chosen
+   by Aamir over the Batch 3-style GET-per-facility form. It filters stock by
+   facility, shows running totals, and greys out recyclers that cannot take the
+   selection — all without a page load. 🔴 **None of that is a control.** AD7 is
+   enforced in `createManifest()`, and the verification below proves it by
+   POSTing a greyed-out recycler straight past the picker.
+   ⚠ It is a **plain `<form action={serverAction}>`, never `useActionState`** —
+   trap 26. That is what keeps it scriptable.
+
+2. **No `AdminAudit` row when a DRAFT is created.** A draft asserts nothing:
+   nothing has moved, no party has been told anything, and it can be abandoned
+   freely. The trail starts at `manifest.dispatch`, where the claim becomes
+   real. §3's vocabulary has no `manifest.create` verb and this is why.
+   🟠 If the company wants draft authorship recorded, that is a new verb in
+   `audit.ts` plus one `create` — not a redesign.
+
+3. **`"custody.advance"` added to `ADMIN_AUDIT_ACTIONS`.** Step 2 requires an
+   audit row and §3's list had no verb for it, while `"custody_batch"` was
+   already in `ADMIN_AUDIT_SUBJECTS`. See `docs/LANE_OWNERSHIP.md`.
+
+4. **`loadManifestBuildStock()` is NARROWER than `computeFacilityStock()`, on
+   purpose.** `/inventory` asks "what is physically on hand?" and a `draft`
+   manifest removes nothing. `/manifests/new` asks "what may I ship?", and an
+   item on someone's draft is spoken for — offering it twice would let two
+   drafts claim one battery. Both files state their own rule. **Do not unify
+   them.**
+
+5. **AD7 is re-checked at DISPATCH, not only at creation.** A recycler can be
+   deactivated, or have its `acceptedChemistries` edited on E03, between a draft
+   being built and sent. Dispatch is the last moment anyone can stop the lorry.
+
+### How this batch was verified
+
+`npm run smoke` cannot POST, so both actions were driven **through the real HTTP
+path** — proxy, session cookie, server action, database — by a throwaway script
+that logs in as `admin@test`, reads the `$ACTION_ID_…` hidden field out of the
+rendered page, and posts `multipart/form-data` (trap 24). Same technique as
+Batch 3.
+
+🔴 **A fresh seed gives this batch NOTHING to do, and that is correct.**
+`CB-2026-000301` holds no pickup at `collected` (`DROPPED_OFF` puts everything
+past `collected` in it), and the one `collected` pickup — `PKP-2026-000105` —
+deliberately has **no** custody batch, because that is what makes "pending
+drop-off" (D5) a real state. And every `tested` item is already on a seeded
+manifest, so `/manifests/new` renders its empty state. **The demo path is: the
+agent app does a hub drop-off first.** So verification began by creating a
+`CustodyBatch` holding `PKP-2026-000105`, exactly what agent Batch 7a writes.
+
+| Step | Outcome |
+|---|---|
+| `/lifecycle` before | batch row, `PKP-2026-000105` listed, Advance button present |
+| advance | `303 → ?advanced=1`; status `collected → tested` |
+| **double submit, same `$ACTION_ID`, no re-render** | `303 → ?error=Nothing in this batch is waiting at collected…` — **one** event, not two |
+| unknown batch id | rejected |
+| `/manifests/new` after | builder appears with both `lead_acid` items |
+| 🔴 **AD7 bypass — POST Meridian (nmc/nca), which the picker greys out** | **rejected by the action**: *"…does not accept Lead-acid. A manifest may only name a recycler that accepts every chemistry on it."* |
+| unknown recycler / no items | both rejected |
+| valid create (Sunrise Lead) | `303 → /manifests/<id>?created=1`, `MFT-2026-df3c4c`, 360 kg, `draft` |
+| duplicate create, same items | *"2 of those items are already on a manifest."* |
+| dispatch | `303 → ?dispatched=1`; `dispatched`, `dispatchedAt` SET, `confirmedAt` null |
+| dispatch again | *"…is already dispatched — only a draft can be dispatched."* |
+| `/manifests/new` after dispatch | items withdrawn from the offer |
+
+**Rows written, checked directly:**
+- `PKP-2026-000105` events: `requested/customer → scheduled/agent → arrived/agent → offered/agent → collected/agent → **tested/admin**`.
+- 🔴 **Zero rows with `actorRole` `'recycler'` or `'hub'`.** (AD5.)
+- Exactly two `AdminAudit` rows: `custody.advance / custody_batch` and `manifest.dispatch / dispatch_manifest`, both `reason: null` (neither is reason-required), both with a real `actorId`.
+- 🔴 **`PKP-2026-000105` was still `tested` after dispatch** — dispatch advances no pickup. That is the single most important assertion in this batch.
+
+⚠ **The shared database was then restored** — the custody batch, the test
+manifest, the `tested` status event and both audit rows removed, and
+`PKP-2026-000105` set back to `collected`. `npm run verify-seed`: **21/21**.
+No reseed was needed and nobody else's work was disturbed.
+
+### 🔴 A defect this batch found, which is NOT its own
+
+**`reset-demo.ts` was minting malformed manifest uuids.** `seedManifests()` built
+ids as `` `00000000-0000-4000-8000-00000000${serial}` `` — an **eleven**
+character final group. `DispatchManifest.id` is a plain `String` (no
+`@db.Uuid`), so Postgres stored it without complaint.
+
+**Why nothing caught it for three batches:** `scripts/smoke.mjs` has always
+pointed `/manifests/[id]` at the *correct* twelve-character id, and the Batch 0
+stub rendered `"Manifest detail"` **without querying anything**. The assertion
+passed against an id that matched no row. 🔴 **This is trap 9 one level deeper:
+a content assertion is only as good as the work the page had to do to produce
+the string.** Batch 6 replaced the stub with a real read and it 404'd on the
+first request.
+
+**Fixed in the seed** (`padStart(12, "0")`), so a reseed now produces exactly
+the id `smoke.mjs` already expects. ⚠ **The existing shared database still has
+the old ids**, so `/manifests/<id>` is the one red line in
+`npm run smoke -- --app=admin` until either a reseed **or** the one-off repair
+script (updates 7 `dispatch_manifests` rows and the matching
+`admin_audits.subject_id` values; nothing has a foreign key onto that column).
+
+### 🔴 What the next batches must know
+
+1. **`@/lib/lifecycle-units` is Batch 7's foundation — do not re-derive it.**
+   `pickupCoverage(pickupId, items, index, floor)` **is** the AD6 gate.
+   `confirmManifestReceived` passes `floor: 'received'`;
+   `reconcileManifest` passes `floor: 'reconciled'`. It is pure given its
+   inputs, so it is safe to call inside a `$transaction`. A pickup with zero
+   items is never "covered" — that is deliberate.
+
+2. **Seed fixture 4 is still armed and Batch 7 is what it is for.**
+   `PKP-2026-000113`'s li-ion item is on `…401` (`dispatched`) and its lead-acid
+   item on `…402` (`draft`). Confirming `…401` **must not advance it**. Batch 6
+   only *renders* that split; Batch 7 has to *enforce* it.
+
+3. **Both Batch 6 transactions set `timeout: 20_000, maxWait: 10_000`**, per
+   Batch 4's eight-round-trip note. 🔴 **Batch 7's certification will cross that
+   ceiling** — Certificate row + PDF + status event + audit row. Set them from
+   the start.
+
+4. **`/manifests/[id]` is where Batch 7's two buttons go.** The page already
+   computes `pickups` (the distinct pickups the manifest touches) and renders
+   the "what confirming this will do" panel. Replace that panel's Batch 7 note
+   with the real forms; do not add a second route.
+
+5. **A fresh seed cannot demo Batch 6 or 7 on its own** — see the verification
+   note above. 🎯 **The end-to-end demo has to start in the agent app**, with a
+   hub drop-off of `PKP-2026-000105`. Worth writing into the demo script.
+
+6. **`dispatchManifest` writes no `statusEvent`, and that is correct.**
+   `status_events` is keyed to a pickup and this write touches none — exactly
+   the gap `AdminAudit` exists to fill (W7).
+
+### Notes for later, deliberately not done now
+
+- 🟠 **A partially-lost race in `advanceCustodyBatch` is not distinguishable.**
+  If `updateMany` reports fewer rows than the pre-read found, events are still
+  written for every id. It cannot arise today — the unit of advance is the whole
+  batch, so two concurrent callers always advance the same set, never
+  overlapping subsets. Documented in the action rather than defended against.
+- 🟠 **`manifestNumber()` takes 6 hex characters of the uuid**, same as
+  `custodyBatchNumber()`. `createManifest` retries up to three times on a P2002
+  rather than widening the slice — widening would stop matching the seeded
+  numbers.
+- **No manifest editing.** A draft can be created and dispatched; it cannot have
+  an item removed. Rebuild instead. `itemIds` being an immutable snapshot is the
+  reason, and a demo-sized draft is cheap to rebuild.
+- **No pagination or filtering** on `/manifests` or `/lifecycle`. Demo-sized
+  data; C's `DataTable` is a client component and these are server-rendered
+  reads next to server-action forms.
+- 🟠 **Nobody accepts `nimh` or `other`.** Unchanged from Batch 1, but Batch 6
+  made it reachable: such an item would be permanently un-manifestable, and the
+  builder now says so out loud. A conversation for the company, not a bug.

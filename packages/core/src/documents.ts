@@ -67,3 +67,26 @@ export function custodyBatchNumber(input: {
   const serial = input.batchId.replace(/-/g, "").slice(-6)
   return `CB-${year}-${serial}`
 }
+
+/**
+ * `MFT-{YEAR}-{6 hex from the manifest id}` — e.g. `MFT-2026-000401`.
+ *
+ * Deliberately the same shape as `custodyBatchNumber()` above, and it matches
+ * the format `reset-demo.ts` already seeds, so a manifest minted by
+ * `/manifests/new` is indistinguishable from a seeded one on `/manifests`.
+ *
+ * ⚠ `DispatchManifest.manifestNo` is `@unique` and six hex characters is a
+ * 16.7M space, so a collision is possible in principle. The caller generates
+ * the uuid itself (trap 3 — `@default(uuid())` does not apply to a
+ * service-role write), so the fix is to generate a NEW uuid and retry on a
+ * P2002; `createManifest` in the admin app does exactly that. Do not "fix"
+ * this by widening the slice — the seeded numbers would stop matching.
+ */
+export function manifestNumber(input: {
+  manifestId: string
+  createdAt: Date
+}): string {
+  const year = input.createdAt.getFullYear()
+  const serial = input.manifestId.replace(/-/g, "").slice(-6)
+  return `MFT-${year}-${serial}`
+}

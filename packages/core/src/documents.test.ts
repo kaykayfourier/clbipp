@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { certificateNumber, invoiceNumber, formatPaise } from "./documents";
 import { formatOfferPrice } from "./offer";
-import { rupeesToPaise } from "./documents"
+import { rupeesToPaise, manifestNumber } from "./documents"
 
 describe("certificateNumber", () => {
   it("follows the CERT-{YEAR}-{pickupId}-{CATEGORY} format from Plan v2 §5", () => {
@@ -78,5 +78,35 @@ describe("rupeesToPaise", () => {
 
   it("never returns a float", () => {
     expect(Number.isInteger(rupeesToPaise(184500.50))).toBe(true)
+  })
+})
+
+describe("manifestNumber", () => {
+  it("reproduces the format reset-demo.ts already seeds", () => {
+    // The pinned seed id for the dispatched li-ion manifest, and the number the
+    // seed writes for it. A minted manifest must be indistinguishable from it.
+    expect(
+      manifestNumber({
+        manifestId: "00000000-0000-4000-8000-000000000401",
+        createdAt: new Date("2026-08-30T10:00:00+05:30"),
+      }),
+    ).toBe("MFT-2026-000401")
+  })
+
+  it("takes the year from the creation date, not the id", () => {
+    expect(
+      manifestNumber({
+        manifestId: "00000000-0000-4000-8000-000000000401",
+        createdAt: new Date("2027-01-04T10:00:00+05:30"),
+      }),
+    ).toBe("MFT-2027-000401")
+  })
+
+  it("is stable and hyphen-insensitive for a real uuid", () => {
+    const withHyphens = manifestNumber({
+      manifestId: "3f2a1b4c-9d8e-4f70-b1a2-c3d4e5f6a7b8",
+      createdAt: new Date("2026-08-30T10:00:00+05:30"),
+    })
+    expect(withHyphens).toBe("MFT-2026-f6a7b8")
   })
 })

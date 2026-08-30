@@ -606,6 +606,53 @@ say so here first.
 
 ---
 
+## 2026-08-31 — Admin Batch 6 (custody advance · manifest build + dispatch) — A (Aamir), in lane
+
+**In lane.** Batch 6 is A's per §4 — every admin lifecycle write is. Four
+screens (`/lifecycle`, `/manifests`, `/manifests/new`, `/manifests/[id]`), two
+actions (`advanceCustodyBatch`, `createManifest` + `dispatchManifest`) and one
+shared read helper (`src/lib/lifecycle-units.ts`, which Batch 7 imports rather
+than re-deriving the AD6 coverage query).
+
+**Four cross-lane edits taken, all small, all in B's lane:**
+
+1. **`packages/core/src/audit.ts` — added `"custody.advance"`.** The closed
+   vocabulary had no verb for `collected → tested`, so Batch 6 step 2's "one
+   `AdminAudit`" was unbuildable as written. `"custody_batch"` was ALREADY in
+   `ADMIN_AUDIT_SUBJECTS`, so §3 expected rows pointing at one and simply never
+   named the verb — an omission, not a decision. Reusing `lifecycle.override`
+   was rejected: `isReasonRequired()` forces a typed reason on it, and `/audit`
+   could then never separate a routine advance from a manual correction.
+   **Approved by Aamir before the file was touched.**
+
+2. **`packages/database/prisma/verify-seed.ts` — synced the mirrored list.**
+   Check 11 hardcodes the eight action strings (it cannot import
+   `@clbipp/core` — core depends on database and the cycle breaks the generated
+   client). Without this, the first real `custody.advance` row in the database
+   would have failed a check that is supposed to be about the seed.
+
+3. **`packages/core/src/documents.ts` — added `manifestNumber()`.** Explicitly
+   asked for by Batch 6 step 4 ("added next to `custodyBatchNumber()` — there is
+   no manifest helper yet"). Three tests alongside it.
+
+4. 🔴 **`packages/database/prisma/reset-demo.ts` — fixed a malformed uuid.**
+   `seedManifests()` minted ids as `…-8000-00000000${serial}` — an **eleven**
+   character final group. `DispatchManifest.id` is a plain `String` (no
+   `@db.Uuid`), so Postgres never validated it. Now `padStart(12, "0")`.
+   **This is a defect Batch 6 found by accident and it had been live since
+   Batch 1** — see the as-built notes for why nothing caught it.
+
+**`scripts/smoke.mjs` was tightened** (A's file outright): `/lifecycle`,
+`/manifests`, `/manifests/new` and `/manifests/[id]` now carry content
+assertions chosen to survive an empty board as well as a full one.
+
+**One thing NOT taken, deliberately:** `/pickups/[id]` (C's Batch 5) renders the
+pickup id as its `<h1>` instead of the `"Pickup detail"` the Batch 0 stub
+reserved and `smoke.mjs` asserts. That is a live smoke failure, it is C's
+screen, and Aamir is reviewing C's batches separately — flagged, not edited.
+
+---
+
 ## 2026-08-29 — Admin Batch 4 (`raisePayment()` + agent-collect wiring) · **B's lane, done by A (Aamir)**
 
 **Taken, not waited on.** Batch 4 is **B's** per §4 of `PLAN_ADMIN_APP.md`

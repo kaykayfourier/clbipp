@@ -1542,7 +1542,16 @@ async function seedManifests(
 
     await prisma.dispatchManifest.create({
       data: {
-        id: `00000000-0000-4000-8000-00000000${serial}`,
+        // 🔴 padStart(12), not a hand-counted run of zeros. The literal this
+        // replaces was `…-8000-00000000${serial}` — ELEVEN characters in the
+        // final group, i.e. a malformed uuid. `DispatchManifest.id` is a plain
+        // String (no @db.Uuid), so Postgres stored it happily and nothing
+        // noticed for three batches: scripts/smoke.mjs points /manifests/[id]
+        // at the CORRECT twelve-character id, and the Batch 0 stub rendered its
+        // heading without ever querying the row, so the assertion passed
+        // against an id that matched nothing. Admin Batch 6 replaced the stub
+        // with a real read and it 404'd immediately. Trap 9, one level deeper.
+        id: `00000000-0000-4000-8000-${String(serial).padStart(12, "0")}`,
         manifestNo: `MFT-2026-000${serial}`,
         facilityId,
         recyclerId: recyclerIds[recyclerKey],

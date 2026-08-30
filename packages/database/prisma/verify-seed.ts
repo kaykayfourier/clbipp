@@ -111,7 +111,14 @@ async function main() {
   // 11 — audit trail is consistent with the seeded world
   const audits = await prisma.adminAudit.findMany({ select: { action: true } })
   check("AdminAudit rows exist and use the closed vocabulary", audits.length > 0 && audits.every((a) =>
-    ["pickup.assign","config.publish","market.override","exception.resolve","manifest.dispatch","manifest.confirm","lifecycle.override","supplier.margin"].includes(a.action)),
+    // 🔴 Mirror of ADMIN_AUDIT_ACTIONS in packages/core/src/audit.ts, which is
+    // canonical. Restated rather than imported for the same reason the CO₂e
+    // factors are: packages/database must not depend on packages/core (core
+    // depends on database, and the cycle breaks the generated client).
+    // ⚠ Adding a verb there means adding it here, or the first real use of it
+    // fails this check after a demo. `custody.advance` (Admin Batch 6) is the
+    // first one that happened to.
+    ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","lifecycle.override","supplier.margin"].includes(a.action)),
     `${audits.length} rows`)
 
   console.log("")

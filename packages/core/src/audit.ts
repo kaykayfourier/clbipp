@@ -28,6 +28,19 @@ export const ADMIN_AUDIT_ACTIONS = [
   "market.override",
   /** An `ItemException` closed with retest / override / reject. */
   "exception.resolve",
+  /**
+   * A `CustodyBatch` advanced `collected → tested` — every pickup in one hub
+   * drop-off, in one write (AD5's per-stage unit for that edge).
+   *
+   * ⚠ Added in Admin Batch 6, not in PLAN_ADMIN_APP.md §3's original list. The
+   * omission was an oversight rather than a decision: `"custody_batch"` is
+   * already in ADMIN_AUDIT_SUBJECTS below, so §3 clearly expected rows pointing
+   * at one — it just never named the verb. Reusing `lifecycle.override` instead
+   * would have been wrong twice over: `isReasonRequired()` forces a typed
+   * reason on it, and `/audit` could then never separate a routine batch
+   * advance from a manual escape-hatch correction.
+   */
+  "custody.advance",
   /** `DispatchManifest` `draft → dispatched`. */
   "manifest.dispatch",
   /** `dispatched → received`, and `received → reconciled`. */

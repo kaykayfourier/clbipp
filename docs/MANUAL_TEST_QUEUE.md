@@ -399,6 +399,41 @@ What is left needs a browser or a human eye.
     Confirm the day view's tile, `/profile`, and the `agent_fee` `WalletTxn`
     still tell the same story after a real collection.
 
+32. 🔴 **The whole hand-off, starting in the AGENT app.** *(Batch 6.)* This is
+    the one that cannot be shortcut: on a fresh seed the admin console has
+    **nothing to advance**, because the only `collected` pickup
+    (`PKP-2026-000105`) deliberately has no custody batch. So: agent app →
+    complete a hub drop-off for it → admin `/lifecycle` → the batch appears →
+    Advance → the pickups read `tested` → `/manifests/new` now offers those
+    items. Every programmatic check in Batch 6 stubbed that first step by
+    creating the `CustodyBatch` directly; **the agent → admin seam itself has
+    never been driven end to end by a person.**
+
+33. **The manifest builder, with a mouse.** *(Batch 6.)* Everything about
+    `/manifests/new` that is not a server check is untested by a fetch-based
+    script: switching facility clears the selection, Select all / Clear all,
+    the running weight and chemistry totals, and — the one worth watching —
+    **the recycler dropdown greying out options as the selection changes**.
+    The AD7 rejection behind it is proven programmatically; the *greying* is not.
+
+34. **Read the four `/lifecycle` sections as a person.** *(Batch 6.)* The screen
+    deliberately refuses to show a uniform "next stage" button, because the unit
+    of advance differs per stage (AD5). Does that read as considered, or as
+    inconsistent? Especially: does the amber **"pending drop-off"** panel make
+    it clear that an admin can do nothing about those pickups, rather than
+    looking like a broken action?
+
+35. **A pickup split across two recyclers, on screen.** *(Batch 6.)*
+    `/lifecycle` shows `PKP-2026-000113` with one item on `MFT-2026-000401`
+    (dispatched) and one **"Still at the hub"**. That is AD6 made visible and it
+    is the hardest idea in the console. Check a person can tell from the row
+    alone *why* that pickup is not moving.
+
+36. ⚠ **`/manifests/<id>` after a reseed.** *(Batch 6.)* The seed was minting
+    malformed manifest uuids and is fixed, but a database seeded **before**
+    2026-08-31 still has the old ids and that smoke line stays red. After the
+    next `npm run reset-demo`, confirm `npm run smoke -- --app=admin` is 22/22.
+
 ---
 
 ## Standing checks for the end-of-sprint pass

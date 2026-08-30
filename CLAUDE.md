@@ -71,11 +71,26 @@ monorepo** (migrated 2026-08-09):
    `assignPickup`) — `requested → scheduled` + `Pickup.agentId`, the first
    lifecycle write this app owns ·
    🔴 **4** **`raisePayment()`** — a real collection now raises a real payable,
-   so the vendor's payout runs off live data instead of a seeded row.
-   Every other screen is still a heading with no data access, and **the second
-   lifecycle hole — nothing past `collected` — is still open** (Batches 6, 7).
-   ⚠ **Batch 2 (C's console data kit) is the last unbuilt Day-1 P0**, and Batch
-   5 waits on it.
+   so the vendor's payout runs off live data instead of a seeded row ·
+   🔴 **6** (2026-08-31) **`/lifecycle` + the three `/manifests` screens** —
+   `collected → tested` per **custody batch**, and a real `DispatchManifest`
+   built and dispatched to a recycler with **AD7 enforced in the action**.
+
+   **B's and C's batches (2, 5, 8, 9, 10, 11, 12, 13, 15, 16) are all pushed.**
+   The only work left is **A's Batch 7** (manifest confirm → `processed` /
+   `recovered`, then `certified`) and **Batch 14** (exceptions + `/audit`), plus
+   **B's Batch 17** (deploy).
+
+   🔴 **The second lifecycle hole is HALF closed.** Nothing still writes
+   `processed`, `recovered` or `certified` — Batch 7 is the whole of it, and
+   `apps/admin/src/lib/lifecycle-units.ts` is the foundation it must import
+   (`pickupCoverage()` **is** the AD6 gate) rather than re-derive.
+
+   🎯 **A fresh seed cannot demo Batch 6 or 7 on its own, and that is correct.**
+   `CB-2026-000301` holds no pickup at `collected`, and the one `collected`
+   pickup (`PKP-2026-000105`) deliberately has no custody batch so that "pending
+   drop-off" (D5) is a real state. **The end-to-end demo starts in the AGENT
+   app**, with a hub drop-off.
 
    **`apps/admin/src/lib/` now carries the app's server-side helpers**, and they
    are not optional: 🔴 **`requireAdmin()` in `admin-identity.ts` is the write
@@ -85,6 +100,14 @@ monorepo** (migrated 2026-08-09):
    7 and 9 import them rather than re-deriving.
    `(admin)/dispatch/actions.ts` is the **reference admin lifecycle write** —
    copy its shape, the way the agent app's `job/[id]/actions.ts` is copied there.
+   🔴 **`lifecycle-units.ts` (Batch 6) holds AD5's unit-of-advance logic and the
+   AD6 coverage query.** `pickupCoverage(pickupId, items, index, floor)` is what
+   makes "a pickup advances only when EVERY item is covered" true; Batch 7 calls
+   it with `floor: 'received'` and `floor: 'reconciled'`. Never re-derive it in
+   a screen. ⚠ Its `loadManifestBuildStock()` is deliberately NARROWER than
+   `lib/facility-stock.ts`'s `computeFacilityStock()` — "what may I ship?"
+   excludes items on a draft manifest, "what is on hand?" does not. Both are
+   right; do not unify them.
 
 ```
 apps/customer            the customer app (Next.js App Router)
@@ -133,10 +156,12 @@ Headlines you need even if you read nothing else:
 
 - **The first priority is closing the lifecycle, not building oversight.**
   ✅ `requested → scheduled` is done (Batch 3, 2026-08-27) — a real booking now
-  reaches an agent from a screen. ❌ Nothing still writes any stage past
-  `collected`, so a real collection never becomes a certificate; Batches 6 and 7
-  close that. Engine config, exceptions and analytics come after. 🎯 **The full
-  journey runs end to end, screens only, after Day 4.**
+  reaches an agent from a screen. ✅ `collected → tested`, and manifest build +
+  dispatch, are done (Batch 6, 2026-08-31). ❌ Nothing still writes `processed`,
+  `recovered` or `certified`, so a real collection never becomes a certificate;
+  **Batch 7 is the last piece.** Engine config, exceptions and analytics come
+  after. 🎯 **The full journey runs end to end, screens only, once Batch 7 lands
+  — and it starts in the agent app with a hub drop-off.**
 - **The admin app is pickup-centric, not quote-centric** (AD1). `/pickups` +
   `/pickups/[id]` are the spine; `/quotes` is a lens over `BatteryItem`.
   🔴 **Flat-rate (non-li-ion) items must appear in every operational table** —

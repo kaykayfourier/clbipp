@@ -857,11 +857,37 @@ const ADMIN_APP_CONTENT = {
   ],
   '/pickups': ['Pickups'],
   [`/pickups/${ADMIN_PICKUP}`]: ['Pickup detail', ADMIN_PICKUP],
-  '/lifecycle': ['Lifecycle control'],
+  // Built in Batch 6. Every string below is chosen to survive a DEMO as well as
+  // a build, which on this screen is load-bearing: on a FRESH SEED the board has
+  // nothing to advance at all (CB-2026-000301 holds no pickup at `collected`,
+  // deliberately — the one collected pickup stays out of it so that "pending
+  // drop-off" is a real state). So an assertion on a batch row would pass only
+  // between a hub drop-off and an advance. These four are the section headings
+  // and stat labels, which render at every data state including empty.
+  '/lifecycle': [
+    'Lifecycle control',
+    'Unit: one custody batch',
+    'Pending drop-off',
+    'Awaiting certification',
+  ],
   '/inventory': ['Inventory'],
-  '/manifests': ['Dispatch manifests'],
-  '/manifests/new': ['New manifest'],
-  [`/manifests/${ADMIN_MANIFEST}`]: ['Manifest detail'],
+  // The four ManifestStatus stat tiles always render, even at zero — unlike the
+  // per-status tables below them, which are omitted when empty.
+  '/manifests': ['Dispatch manifests', 'Draft', 'Dispatched', 'Received', 'Reconciled'],
+  // ⚠ Deliberately NOT asserting on the picker. On a fresh seed every tested
+  // item is already on a seeded manifest, so this route renders its "No
+  // shippable stock" empty state and the builder is not in the HTML at all.
+  // Both states carry these two.
+  '/manifests/new': ['New manifest', 'Build a shipment'],
+  // …401 is the DISPATCHED li-ion manifest and it is pinned in reset-demo.ts.
+  // 'Items on this manifest' is the table heading, which renders at every
+  // manifest status; the manifest number proves the row was actually read.
+  [`/manifests/${ADMIN_MANIFEST}`]: [
+    'Manifest detail',
+    'MFT-2026-000401',
+    'Items on this manifest',
+    'Meridian Metals Recovery',
+  ],
   '/config': ['Engine config'],
   '/market': ['Market feed'],
   '/quotes': ['Quote queue'],
