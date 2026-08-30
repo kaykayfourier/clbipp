@@ -1,29 +1,51 @@
+import { prisma } from '@clbipp/database'
+
+import { PageHead } from '@/components/console'
+import { SuppliersTable, type SupplierRow } from './SuppliersTable'
+
 // E01 · Suppliers — Batch 9, owner C — Ali.
 //
-// STUB, created in Batch 0. Every route in §2 of docs/PLAN_ADMIN_APP.md was
-// stubbed in one go so that no two lanes ever create the same file — each
-// owner only ever REPLACES their own stub. Replace this whole file when you
-// build the screen; do not add a second route beside it.
-//
-// Keep the <h1> text ("Suppliers") when you do: scripts/smoke.mjs asserts on it,
-// and that assertion is what stops this route silently 500ing or 404ing later.
-// A route that only ever returns a status code is asserting nothing (trap 9).
+// Vendors, EPR registration, KYC and the margin-tier override — the one
+// mutation in this batch, and a live pricing lever (selection.ts already
+// honours Profile.marginTier). See ./actions.ts for the write.
 //
 // No shell here — (admin)/layout.tsx renders ConsoleShell for the whole group.
-// 🔴 Never import AppShell, PhoneFrame or hideNav: those are the mobile kit's
-// (AD11, trap 15).
-export default function SuppliersPage() {
+// 🔴 Never import AppShell, PhoneFrame or hideNav (AD11, trap 15).
+export const dynamic = 'force-dynamic'
+
+export default async function SuppliersPage() {
+  const startOfYear = new Date(new Date().getFullYear(), 0, 1)
+
+  const vendors = await prisma.profile.findMany({
+    where: { role: 'customer' },
+    select: {
+      id: true,
+      fullName: true,
+      companyName: true,
+      vendorType: true,
+      kycStatus: true,
+      eprRegId: true,
+      marginTier: true,
+      _count: { select: { pickups: { where: { createdAt: { gte: startOfYear } } } } },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const rows: SupplierRow[] = vendors.map((v) => ({
+    id: v.id,
+    name: v.companyName || v.fullName,
+    contactName: v.companyName ? v.fullName : null,
+    vendorType: v.vendorType,
+    kycStatus: v.kycStatus,
+    eprRegId: v.eprRegId,
+    pickupsYtd: v._count.pickups,
+    marginTier: v.marginTier,
+  }))
+
   return (
     <>
-      <div>
-        <h1 className="font-display text-[22px] font-medium tracking-[-0.01em] text-text-primary">
-          Suppliers
-        </h1>
-        <p className="mt-1 text-xs text-text-secondary">Vendors, EPR registration, KYC and the margin-tier override.</p>
-      </div>
-      <p className="font-mono text-[10px] tracking-[0.09em] uppercase text-text-secondary">
-        Screen E01 · not built yet · batch 9
-      </p>
+      <PageHead title="Suppliers" description="Vendors, EPR registration, KYC status, and each one's margin-tier override." />
+      <SuppliersTable rows={rows} />
     </>
   )
 }

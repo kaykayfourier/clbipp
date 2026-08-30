@@ -1,29 +1,60 @@
+import { prisma } from '@clbipp/database'
+
+import { PageHead } from '@/components/console'
+import { computeFacilityStock } from '@/lib/facility-stock'
+import { FacilitiesTables, type FacilityRow, type RecyclerRow } from './FacilitiesTables'
+
 // E03 · Facilities & recyclers — Batch 9, owner C — Ali.
 //
-// STUB, created in Batch 0. Every route in §2 of docs/PLAN_ADMIN_APP.md was
-// stubbed in one go so that no two lanes ever create the same file — each
-// owner only ever REPLACES their own stub. Replace this whole file when you
-// build the screen; do not add a second route beside it.
-//
-// Keep the <h1> text ("Facilities & recyclers") when you do: scripts/smoke.mjs asserts on it,
-// and that assertion is what stops this route silently 500ing or 404ing later.
-// A route that only ever returns a status code is asserting nothing (trap 9).
+// Hubs we operate, and the CPCB-registered recyclers we ship to. Read-only.
+// The capacity gauge's numerator comes from computeFacilityStock() (§ Batch
+// 10's own derivation) — see @/lib/facility-stock for why that is a query,
+// not a stored counter.
 //
 // No shell here — (admin)/layout.tsx renders ConsoleShell for the whole group.
-// 🔴 Never import AppShell, PhoneFrame or hideNav: those are the mobile kit's
-// (AD11, trap 15).
-export default function FacilitiesPage() {
+// 🔴 Never import AppShell, PhoneFrame or hideNav (AD11, trap 15).
+export const dynamic = 'force-dynamic'
+
+export default async function FacilitiesPage() {
+  const [facilities, recyclers, stock] = await Promise.all([
+    prisma.facility.findMany({
+      select: { id: true, name: true, location: true, capacityKg: true, isActive: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.recycler.findMany({
+      select: { id: true, name: true, cpcbRegNo: true, acceptedChemistries: true, capacityKg: true, isActive: true },
+      orderBy: { name: 'asc' },
+    }),
+    computeFacilityStock(),
+  ])
+
+  const onHandByFacility = new Map<string, number>()
+  for (const item of stock) {
+    onHandByFacility.set(item.facilityId, (onHandByFacility.get(item.facilityId) ?? 0) + item.weightKg)
+  }
+
+  const facilityRows: FacilityRow[] = facilities.map((f) => ({
+    id: f.id,
+    name: f.name,
+    location: f.location,
+    capacityKg: f.capacityKg !== null ? Number(f.capacityKg) : null,
+    onHandKg: onHandByFacility.get(f.id) ?? 0,
+    isActive: f.isActive,
+  }))
+
+  const recyclerRows: RecyclerRow[] = recyclers.map((r) => ({
+    id: r.id,
+    name: r.name,
+    cpcbRegNo: r.cpcbRegNo,
+    acceptedChemistries: r.acceptedChemistries,
+    capacityKg: r.capacityKg !== null ? Number(r.capacityKg) : null,
+    isActive: r.isActive,
+  }))
+
   return (
     <>
-      <div>
-        <h1 className="font-display text-[22px] font-medium tracking-[-0.01em] text-text-primary">
-          Facilities & recyclers
-        </h1>
-        <p className="mt-1 text-xs text-text-secondary">Hubs we operate, and the CPCB-registered recyclers we ship to.</p>
-      </div>
-      <p className="font-mono text-[10px] tracking-[0.09em] uppercase text-text-secondary">
-        Screen E03 · not built yet · batch 9
-      </p>
+      <PageHead title="Facilities & recyclers" description="Hubs we operate, and the CPCB-registered recyclers we ship to." />
+      <FacilitiesTables facilities={facilityRows} recyclers={recyclerRows} />
     </>
   )
 }
