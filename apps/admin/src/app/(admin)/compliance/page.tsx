@@ -41,9 +41,12 @@ export default async function CompliancePage({
     publicToken:   cert.publicToken,
   }))
 
+  // Mirrors the customer app's route exactly (apps/customer/.../api/exports/
+  // compliance/route.ts) — same handler, same CSV, the only difference being
+  // that this one carries no vendorId scope. Keep the two paths in step.
   const exportHref = year
-    ? `/api/admin/exports/compliance?year=${year}`
-    : `/api/admin/exports/compliance`
+    ? `/api/exports/compliance?year=${year}`
+    : `/api/exports/compliance`
 
   return (
     <div className="space-y-8">
