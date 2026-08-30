@@ -507,6 +507,52 @@ What is left needs a browser or a human eye.
 
 ---
 
+## Admin console — Batch 11 (engine config) · 2026-08-31 · A
+
+🔴 **The highest-value manual checks left in the sprint.** `publishConfig` is a
+POST form action; `scripts/smoke.mjs` fetches HTML and never submits a form, so
+everything below is verified by unit test and by reading the code, and by
+nothing that actually ran. This is also the one screen where a mistake moves
+money.
+
+47. 🔴 **Publish a real config, then check the price moved — and by how much.**
+    On `/config`, change `margin_tiers.standard` from `0.2` to `0.25` and
+    publish. Then price an item in the agent app. `p_recommended` must drop by
+    ~5% of net value, and `/audit` must show a `config.publish` row naming
+    **only** `margin_tiers.standard` in its before/after — not the whole config.
+    ⚠ **Publish it back to `0.2` afterwards**, or every later demo prices low.
+
+48. 🔴 **The validator rejects from the ACTION, not the form.** The form has
+    `min`/`step` attributes, which a browser enforces and an attacker does not.
+    Open devtools, remove `required` and `min` from the three margin-tier
+    inputs, set them to `aggressive: 0.1 / standard: 0.2 / generous: 0.3`
+    (inverted), and submit. It must come back with the ordering error in the
+    red banner and **write nothing**. Check `/config`'s publish history is
+    unchanged. This is the check that proves AD7's posture holds here.
+
+49. **A blank composition cell stays blank.** LFP's Co / Ni / Mn cells are
+    empty on load — that is a fact about the chemistry, not a missing value.
+    Publish without touching them and confirm they are still empty afterwards
+    (not `0`). Then confirm a recycle quote for an LFP pack still shows no
+    cobalt line in its breakdown.
+
+50. **Two publishes on the same day get `-r1` and `-r2`.** Publish twice and
+    check the versions increment within the day and that the second names the
+    first as "supersedes". Then confirm exactly one row shows the **live** pill
+    in publish history.
+
+51. ⚠ **The supplier margin lever, end to end — it was inert until today.**
+    On `/suppliers` set a vendor's tier to `generous` with a reason. Then price
+    one of *that vendor's* items in the agent app and confirm `p_recommended`
+    is higher than for an untiered vendor's identical item. 🔴 Before Batch 11
+    this did nothing at all, silently. Set it back to `standard` afterwards.
+
+52. **Tier 3 reads as "go change the code", not "this screen is unfinished".**
+    The amber panel names two file paths. Check that lands as deliberate — it is
+    the one place the console admits a limit, and it should look like a decision.
+
+---
+
 ## Standing checks for the end-of-sprint pass
 
 - **Every agent screen passes `hideNav`.** `npm run smoke` fails on anything but

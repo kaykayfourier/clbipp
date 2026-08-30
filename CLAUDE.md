@@ -86,9 +86,16 @@ monorepo** (migrated 2026-08-09):
    means "the engine's flag was wrong about this item", not "advance this
    pickup". Asserted directly.
 
-   **B's and C's batches (2, 5, 8, 9, 10, 11, 12, 13, 15, 16) are all pushed.**
-   🎯 **Every screen in the sprint is now built. The only work left is B's
-   Batch 17 (deploy).**
+   **B's and C's batches (2, 5, 8, 9, 10, 12, 13, 15, 16) are all pushed.**
+   🔴 **11** (2026-08-31, A covering B) **`/config` + `publishConfig` + the
+   validator, and the supplier margin lever made to actually work** — Batch 11
+   was *recorded as done and was not*: commit `8581731` landed only
+   `getActiveConfig()` and the AD9 fix, and `/config` sat as the Batch 0 stub
+   rendering "not built yet" while `npm run smoke` scored it green (the stub
+   kept the `<h1>` the assertion named — trap 9 inside out). 🎯 **Every screen
+   in the sprint is now built, and that was verified with
+   `grep -rl "not built yet" apps/admin/src` rather than taken from a commit
+   subject. The only work left is B's Batch 17 (deploy).**
 
    🎯 **BOTH LIFECYCLE HOLES ARE CLOSED (2026-08-31).** Every one of the nine
    stages is written by a screen now, and the journey runs end to end with no
@@ -173,12 +180,17 @@ resolved there. **Read §0 before building from the wireframe.**
 
 Headlines you need even if you read nothing else:
 
-- ✅ **Every screen is built (2026-08-31).** Batch 14 was the last feature
-  batch; only Batch 17 (deploy, B) remains. 🟠 **`npm run lint` is red on two
-  pre-existing one-liners** — `(admin)/market/page.tsx:31` (`react-hooks/purity`,
-  B's) and `(admin)/pickups/[id]/page.tsx:266` (an `<a>` where a `<Link>`
-  belongs, C's). Neither is on the pre-push list, but both should be green
-  before the deploy.
+- ✅ **Every screen is built (2026-08-31), Batch 11 last.** Only Batch 17
+  (deploy, B) remains. ✅ `npm run lint` is **green** — the two pre-existing
+  errors (`market/page.tsx`'s `Date.now()` in render, `pickups/[id]`'s `<a>`
+  where a `<Link>` belongs) were fixed in Batch 11.
+- 🔴 **"A batch is committed" is not "a batch is built", and this cost a day.**
+  Batch 11's commit landed 3 of its 8 steps; `/config` stayed a stub for two
+  batches while smoke reported 23/23, because the Batch 0 stub had been given
+  the exact `<h1>` string the smoke assertion named. **When you stub a route,
+  never give the stub the string smoke asserts on** — let the check stay red
+  until the screen is real. To audit the claim rather than trust it:
+  `grep -rl "not built yet" apps/admin/src`.
 - ✅ **The lifecycle is CLOSED — that priority is discharged.**
   `requested → scheduled` (Batch 3, 2026-08-27) · `collected → tested` and
   manifest build + dispatch (Batch 6, 2026-08-31) · `tested → processed →
@@ -217,9 +229,36 @@ Headlines you need even if you read nothing else:
   (`damage.ts`, `sohGating.ts`), not `Config` parameters — a screen cannot move
   them. The seeded `EngineConfig` is byte-identical to `DEFAULT_CONFIG`, guarded
   by a drift test, 🔴 **so no price moves**.
-- 🔴 **The quote route currently trusts `body.config` from the client** — an
-  agent's browser can post its own margin tiers. Fixed in Batch 11 (AD9) with a
-  server-side `getActiveConfig()`.
+- ✅ **The quote route no longer trusts the client** (AD9, Batch 11). It calls
+  `getActiveConfig()` from **`@clbipp/core/engine-config`** — which lives in
+  `packages/core`, not `apps/admin/src/lib`, precisely because the *agent* app is
+  its most important caller. 🔴 **`supplier_id` is derived server-side from
+  `Pickup.vendorId`, never read from the request body**: it selects the vendor's
+  margin-tier override, so a client-supplied value would be the same defect
+  wearing a different hat. Don't "simplify" it back to `body.supplier_id`.
+  ⚠ `getActiveConfig()` **throws** when no row is active rather than falling back
+  to `DEFAULT_CONFIG` — a silent fallback is invisible exactly when it matters
+  (an agent standing in front of a vendor, reading a placeholder-priced number
+  aloud). A retryable 503 beats a wrong price.
+- 🔴 **`Profile.marginTier` was an INERT lever until Batch 11.** `/suppliers`
+  wrote it and the engine read `Config.supplier_margin_overrides`, but nothing
+  built the map between them — an admin could set a vendor's tier and change
+  their price by exactly zero, with no error.
+  `buildSupplierMarginOverrides()` closes it and `getActiveConfig()` merges it
+  so no caller can forget. It is **price-moving**: a `generous` override took
+  `p_recommended` from ₹51257.60 to ₹57664.80 on the verification item. It is
+  price-NEUTRAL on a fresh seed only because the one seeded override is
+  `standard`, which is already the fallback.
+- **A config is published by `publishConfig` in `(admin)/config/actions.ts`,
+  and it is APPEND-ONLY.** Nothing is updated in place: the publish deactivates
+  the current row and inserts a new one, chained by `parentVersion`. Exactly one
+  row is `isActive`, enforced by that transaction and not by a partial index
+  (Prisma cannot express one). The candidate config is built by **overlaying the
+  form onto the current config**, which is what makes AD8's "tier 3 cannot be
+  submitted" structural rather than a promise — those values are engine literals,
+  not `Config` keys, so there is no field for a crafted POST to land in.
+  🔴 Validate with `validateEngineConfig()` from `@clbipp/core/engine-config`,
+  server-side: **the form is not the boundary** (same posture as AD7).
 - **Admin is a DESKTOP app** — no `AppShell`, no `PhoneFrame`, no `hideNav`, no
   PWA. Its console kit lives in `apps/admin/src/components/console/`, **not
   `packages/ui`** (AD11), because `packages/ui` is a mobile kit two shipped apps

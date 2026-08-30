@@ -857,11 +857,45 @@ only thing keeping `npm run lint` red, and Batch 17 is the deploy batch.
 
 ---
 
-**Left alone deliberately, and B and C should know:** 🟠 **`npm run lint` is RED
-on two pre-existing errors** — `(admin)/market/page.tsx:31`
-(`react-hooks/purity`, B's) and `(admin)/pickups/[id]/page.tsx:266` (an `<a>`
-where a `<Link>` belongs, C's). Both look like one-liners. Not fixed here to
-keep the batch scoped, but **they should be green before Batch 17 deploys.**
+## 2026-08-31 — A (Aamir) took Batch 11, which is B's · and the two lint errors
+
+**Batch 11 was recorded as done and was not.** Commit `8581731` ("batch 11",
+Khalid) touched three files and landed steps 1 and 2 — `getActiveConfig()` and
+the AD9 quote-route fix. **Steps 3–8 were never built**: no `/config` screen
+(it was still the Batch 0 stub, rendering "not built yet"), no `publishConfig`,
+no validator, no version minting, no supplier merge, no test file. `CLAUDE.md`,
+`PROJECT_STATE.md` and `ADMIN_TASKS.md` all claimed the sprint was
+screen-complete for a day.
+
+Built by A on 2026-08-31 under do-it-and-note-it, rather than handed back — it
+was the last thing between the sprint and its deploy batch, and B is holding
+Batch 17.
+
+**Files A touched in B's lane:**
+
+- `packages/core/src/engine-config.ts` — extended (validator, version minting,
+  supplier merge)
+- `packages/core/src/engine-config.test.ts` — new, 31 tests
+- `packages/core/package.json` — declares `@clbipp/decision-engine`
+- `apps/admin/src/app/(admin)/config/{page,actions}.tsx|ts` — new
+- `apps/agent/src/app/api/quote/route.ts` — `supplier_id` hardened
+- `packages/decision-engine/src/decisionEngine/index.ts` — one additive export
+- `scripts/smoke.mjs` — `/config`'s assertion strengthened (A's own file)
+
+**And the two lint errors are fixed** — `(admin)/market/page.tsx:31` (B's) and
+`(admin)/pickups/[id]/page.tsx:266` (C's). `npm run lint` is green.
+
+🔴 **Two things B and C should read, because they generalise:**
+
+1. **A stub must not carry the string its smoke assertion names.** The Batch 0
+   `/config` stub deliberately kept `<h1>Engine config</h1>` so the assertion
+   would survive until the screen was built. The effect was that smoke reported
+   23/23 while the route rendered nothing, for two batches. Let the check stay
+   red — that is what it is for.
+2. **`Profile.marginTier` was a live-looking lever wired to nothing.** C's
+   `/suppliers` wrote it, the engine read a config field, and no code joined
+   them. Worth a habit: when you add a write that is meant to change behaviour
+   elsewhere, assert the behaviour changed — not that the row was written.
 
 ---
 

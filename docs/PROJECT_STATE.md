@@ -7,12 +7,49 @@
 
 **Last updated:** 2026-08-31 — 🎯 **every screen in the Admin console sprint is
 built. Only Batch 17 (deploy, B) remains.** A's lane finished today with
-Batches 6 and 7 (the lifecycle holes) and **Batch 14 (`/exceptions` + `/audit`)**;
-B's and C's batches (2, 5, 8–13, 15, 16) are all pushed. The Field Agent app is
+Batches 6 and 7 (the lifecycle holes), **Batch 14 (`/exceptions` + `/audit`)**
+and **Batch 11 (`/config` + the engine-config publish path)**; B's and C's
+batches (2, 5, 8, 9, 10, 12, 13, 15, 16) are all pushed.
+
+> 🔴 **Batch 11 was recorded as done and was not.** Its commit landed 3 of 8
+> steps, `/config` sat as the Batch 0 stub rendering "not built yet", and
+> `npm run smoke` scored it green the whole time because the stub had been given
+> the exact `<h1>` the assertion named. Rebuilt 2026-08-31. **Audit such claims
+> with `grep -rl "not built yet" apps/admin/src`, not with `git log`.** The Field Agent app is
 done except Batch 9 (deploy). Both existing apps are installable, and the full
 **vendor → admin → agent → vendor-gets-paid → hub → recycler → certificate**
 journey runs from screens alone, with no CLI step and no seeded row standing in
 for a real one.
+
+> ## 2026-08-31 — Admin console Batch 11: engine config, and a lever that did nothing (Aamir, covering B)
+>
+> **The last unbuilt screen.** `/config` (D01) replaces its Batch 0 stub with the
+> real tier-1/2 editor, `publishConfig` writes an append-only `EngineConfig` row
+> plus its audit trail in one transaction, and `validateEngineConfig()` — 31 new
+> tests — is the server-side gate, because **the form is not the boundary**.
+>
+> 🔴 **Two defects came out of it that nobody had noticed.**
+>
+> 1. **The supplier margin lever was inert.** `/suppliers` wrote
+>    `Profile.marginTier`; the engine read `Config.supplier_margin_overrides`;
+>    **nothing built the map between them**, and nothing in the agent app ever
+>    sent `supplier_id` either. An admin could set a vendor's tier, see the audit
+>    row, and move their price by exactly zero. Both halves are closed —
+>    `buildSupplierMarginOverrides()`, and `supplier_id` derived **server-side
+>    from `Pickup.vendorId`** (never the request body, which would be the AD9
+>    defect again).
+> 2. **A stub was passing its own smoke assertion.** The Batch 0 stub kept the
+>    `<h1>Engine config</h1>` that `scripts/smoke.mjs` named, so the route scored
+>    green for two batches while rendering "not built yet". The assertion now
+>    names four strings only the real screen can produce.
+>
+> **Pricing statement, measured not asserted:** the AD9 fix is price-neutral
+> (₹64072.00 net and ₹51257.60 recommended, quoted both ways); the supplier
+> lever moves prices (a `generous` override → ₹57664.80) but not on a fresh
+> seed, where the one seeded override is `standard` — already the fallback.
+>
+> `npm run test` 277 (was 246) · lint green (the two known errors fixed) · all
+> nine smoke runs pass.
 
 > ## 2026-08-31 — Admin console Batch 14: exceptions + the audit reader (Aamir)
 >

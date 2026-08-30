@@ -9,6 +9,14 @@ import { overrideMarketPrices } from './actions'
 
 const METALS = ['Li', 'Co', 'Ni', 'Mn', 'Cu', 'Al'] as const
 
+// Freshness is measured at REQUEST time, which is the correct semantics here:
+// this page is dynamic (requireAdmin() reads cookies), so it is never statically
+// rendered and there is no cached render for the clock read to go stale inside.
+// Lifted out of the component body so `react-hooks/purity` can see that.
+function hoursSince(t: Date): number {
+  return (Date.now() - t.getTime()) / 3_600_000
+}
+
 export default async function MarketPage({
   searchParams,
 }: {
@@ -27,9 +35,7 @@ export default async function MarketPage({
 
   const current = snapshots[0]
 
-  const ageHours = current
-    ? (Date.now() - current.updatedAt.getTime()) / 3_600_000
-    : null
+  const ageHours = current ? hoursSince(current.updatedAt) : null
 
   return (
     <div className="space-y-8">

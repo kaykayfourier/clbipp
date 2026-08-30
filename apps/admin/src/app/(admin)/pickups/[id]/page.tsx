@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { prisma } from '@clbipp/database'
@@ -263,7 +264,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
               </Card>
             ) : (
               <p className="text-xs text-text-secondary">
-                Not yet assigned — <a href="/dispatch" className="underline">dispatch board</a>.
+                Not yet assigned — <Link href="/dispatch" className="underline">dispatch board</Link>.
               </p>
             )}
           </Section>

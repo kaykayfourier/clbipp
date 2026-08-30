@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@clbipp/database": "*",
+    "@clbipp/decision-engine": "*",
     "papaparse": "^5.7.0",
     "zod": "^4.4.3"
   },

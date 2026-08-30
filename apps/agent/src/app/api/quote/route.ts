@@ -44,6 +44,22 @@ export async function POST(req: NextRequest) {
 
     const config = await getActiveConfig()
 
+    // 🔴 supplier_id is derived from the PICKUP, never taken from the body.
+    //
+    // It selects this vendor's margin-tier override (Config.supplier_margin_
+    // overrides → computePricingBand's p_recommended), so a client-supplied
+    // value would be the AD9 defect wearing a different hat: an agent's browser
+    // could name any vendor and pull that vendor's pricing onto this quote.
+    // Reading it off Pickup.vendorId costs one indexed lookup and makes the
+    // field unspoofable. Before Batch 11 nothing sent supplier_id at all, so
+    // the override silently never fired — see buildSupplierMarginOverrides().
+    const pickup = body.pickupId
+      ? await prisma.pickup.findUnique({
+          where: { id: body.pickupId },
+          select: { vendorId: true },
+        })
+      : null
+
     const result = computeQuote(
       {
         trace_id:    traceId,
@@ -51,7 +67,7 @@ export async function POST(req: NextRequest) {
         damage:      body.damage,
         distance_km: body.distance_km,
         inflow_type: body.inflow_type ?? "external",
-        supplier_id: body.supplier_id,
+        supplier_id: pickup?.vendorId,
       },
       config,
       marketData

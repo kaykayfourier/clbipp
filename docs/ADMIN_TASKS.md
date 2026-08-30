@@ -2199,3 +2199,155 @@ row and certificate deleted, every manifest and pickup status put back.
   should not be a one-click affordance sitting next to the normal buttons.
 - **Batch 14 (`/audit`) is what makes the override's reason visible.** Until it
   lands, the reason is written and stored but only readable in the database.
+
+---
+
+## Batch 11 — as built · 2026-08-31 · **A (Aamir), covering B's lane**
+
+**Green.** `npm run build` (three apps, `ƒ Proxy (Middleware)` ×3) ·
+`npm run lint` **0 errors** · `npm run test` **277** (core 210, auth 40,
+engine 27 — up from 246; the 31 new ones are `engine-config.test.ts`) ·
+**all nine smoke runs pass**, admin 23/23.
+
+### 🔴 Why this batch existed at all — read this part
+
+**Batch 11 was recorded as done and was not.** Commit `8581731` ("batch 11")
+touched **three files** and landed steps 1 and 2 only. Steps 3–8 — the
+`/config` screen, `publishConfig`, the validator, version minting, the supplier
+merge and the simulate stub — were never built. `CLAUDE.md`, `PROJECT_STATE.md`
+and this sheet all claimed "every screen in the sprint is built" for a day.
+
+**`/config` was still the Batch 0 stub**, rendering the words *"Screen D01 · not
+built yet · batch 11"* in production.
+
+🔴 **Smoke did not catch it, and the reason generalises.** The stub was written
+in Batch 0 to keep the `<h1>Engine config</h1>` that `scripts/smoke.mjs`
+asserts on — deliberately, so the assertion would survive until the screen was
+built. The effect was that **`/config` scored a green "ok" for two batches while
+rendering nothing**, and `npm run smoke -- --app=admin` reported 23/23 the whole
+time. This is trap 9 turned inside out: not "a route that asserts nothing", but
+*a route whose assertion is satisfied by its own placeholder*.
+
+**Fixed here.** `/config`'s assertion now names four things only the real screen
+can produce — the seeded `v2026-08-26-r1` (proves the row was read),
+`Tier 3 — not configurable` (proves the AD8 panel rendered), `NMC622` (proves
+the chemistry table was built from the config JSON) and `Publish history`.
+🔴 **When you stub a route, do not give the stub the string smoke asserts on.**
+Assert on something the stub cannot produce, and let the route fail until it is
+built — a red check is the point.
+
+### What shipped
+
+| Step | File | Note |
+|---|---|---|
+| 1 | `packages/core/src/engine-config.ts` | `getActiveConfig()` — already landed; extended |
+| 2 | `apps/agent/src/app/api/quote/route.ts` | AD9 — already landed; **`supplier_id` hardened** |
+| 3 | `engine-config.ts` → `buildSupplierMarginOverrides()` | 🔴 the price-moving half |
+| 4 | `apps/admin/src/app/(admin)/config/page.tsx` | 532 lines, replaces the stub |
+| 5 | `apps/admin/src/app/(admin)/config/actions.ts` | `publishConfig`, append-only |
+| 6 | `engine-config.ts` → `validateEngineConfig()` | pure, 31 tests |
+| 7 | `engine-config.ts` → `mintConfigVersion()` | `v<YYYY-MM-DD>-r<n>`, IST |
+| 8 | `config/page.tsx` | simulate is a stub with the *why* |
+
+### 🔴 Step 3 — the supplier lever was INERT, and that is the real defect
+
+`/suppliers` (Batch 9) writes `Profile.marginTier`. `layers/selection.ts:93`
+reads `config.supplier_margin_overrides`. **Nothing built the map between
+them.** An admin could set a vendor's margin tier, see the audit row, and change
+that vendor's price by exactly zero — no error, no warning. A screen that looked
+like it worked and didn't.
+
+`buildSupplierMarginOverrides()` closes it, and `getActiveConfig()` merges the
+map so no caller can forget to.
+
+⚠ **That alone was not enough, and this is the part worth knowing.** Nothing in
+the agent app ever sent `supplier_id` — `ComputingRunner.tsx` posts seven fields
+and that is not one of them — so `computePricingBand` received `undefined` and
+the override could never fire even once the map existed. The quote route now
+derives it **server-side from `Pickup.vendorId`**.
+
+🔴 **Deliberate deviation, and it is a security decision, not a convenience
+one.** Taking `supplier_id` from the request body would be the AD9 defect
+wearing a different hat: an agent's browser could name any vendor and pull that
+vendor's pricing tier onto this quote. Deriving it from the pickup costs one
+indexed lookup and makes the field unspoofable. **Do not "simplify" it back to
+`body.supplier_id`.**
+
+### 🔴 Pricing-surface statement — proved, not asserted
+
+Both halves were measured against the live seeded config, read-only:
+
+- **Step 2 is PRICE-NEUTRAL.** Same item, same market row, quoted through the
+  active `EngineConfig` and through `DEFAULT_CONFIG`: **net ₹64072.00 both
+  ways, `p_recommended` ₹51257.60 both ways**, same pathway. That is the AD8
+  drift guard doing its job — the seeded row is byte-identical to the engine's
+  defaults, which is exactly what `body.config` used to carry.
+- **Step 3 MOVES PRICES, but not on a fresh seed.** A `generous` override takes
+  `p_recommended` from ₹51257.60 to **₹57664.80** on that same item — ₹6,407 more
+  to the vendor. 🎯 **On a fresh seed nothing moves**, because the one seeded
+  override (fixture 7) is `standard`, which is already `computePricingBand`'s
+  fallback. Prices move the moment someone sets a non-standard tier.
+- `p_min` and `p_max` stay anchored to the tier extremes; an override shifts only
+  the recommended point.
+
+### Decisions worth keeping
+
+1. **`getActiveConfig()` THROWS when no row is active** — it does not fall back
+   to `DEFAULT_CONFIG` as step 1 of this sheet says. Kept and documented rather
+   than "corrected": a fallback is invisible exactly when it matters. The agent
+   is in front of a vendor, the quote returns, and nothing in the number says it
+   was priced off placeholders. A 503 they can retry is recoverable; a wrong
+   price they have already read aloud is not.
+2. **A publish overlays the form onto the current config**, rather than building
+   one from scratch. That is what makes "tier 3 cannot be submitted"
+   *structural* rather than a promise — those values are not `Config` keys at
+   all, so there is no field for a crafted POST to land in. It is also why the
+   `unknown` chemistry sentinel survives untouched.
+3. **A blank composition cell means "absent", not zero.** LFP genuinely has no
+   Co, Ni or Mn. Writing 0 instead would put empty rows in every recycle revenue
+   breakdown.
+4. **The composition sum check carries a `1e-9` epsilon.** `0.07 + 0.05 + 0.15
+   + …` does not land on 1.0 in floating point, and without it the validator
+   rejects a legitimate config.
+5. **The version is minted INSIDE the transaction**, so two concurrent publishes
+   cannot read the same highest revision and collide on the `@unique` column.
+   It parses the highest existing revision rather than counting rows — a deleted
+   row would otherwise make the next mint collide with a survivor.
+6. **The audit row carries changed fields only**, diffed as dotted leaf paths.
+   The schema comment demands it; a full config on both sides is ~8KB per
+   publish and unreadable on `/audit`.
+7. **`computeDamageScore` is now exported from the engine barrel** (purely
+   additive) so the tier-3 invariant can be pinned by *exercising* the engine.
+   Restating `0.4 + 0.35 + 0.25 = 1.0` in a test asserts a constant against
+   itself and passes forever; scoring `{3,3,3}` and expecting exactly `3` fails
+   the moment someone edits the weights.
+8. **`packages/core` now depends on `@clbipp/decision-engine`.** It previously
+   type-imported `Config` without declaring it, which works for types and not
+   for the value imports the tests need.
+
+### Done-when
+
+- [x] 🎯 A quote with `config` omitted returns identical numbers — **₹64072.00
+      net, ₹51257.60 recommended, both ways.**
+- [x] `margin_tiers: { aggressive: 0 }` changes nothing — rejected by the
+      validator, and unreachable through the route at all.
+- [x] Publishing deactivates exactly one and leaves exactly one `isActive` —
+      enforced in the transaction; **asserted by query: 1 active row.**
+- [x] A config failing any rule is rejected **by the action**, not the form.
+- [x] The audit row names both versions and the changed fields; no bare `null`
+      in `before` / `after` (trap 21).
+- [x] Tier 3 renders and cannot be submitted — no input, no hidden field, no
+      accepted key.
+- [x] The drift test and all engine tests pass; `npm run test` green at 277.
+- [ ] ⚠ **The publish POST itself has never been exercised.** `smoke` fetches
+      HTML and does not submit forms, so `publishConfig` is verified by unit
+      test and by reading, not by running. Added to
+      `docs/MANUAL_TEST_QUEUE.md` (items 47–50) as the highest-value manual
+      check left in the sprint.
+
+### 🔴 What the next batch must know
+
+**Batch 17 (deploy) is now the only unbuilt batch, and this time that was
+checked** rather than taken from a commit subject: `grep -rl "not built yet"
+apps/admin/src` matches nothing, and every `page.tsx` under `(admin)/` is real
+code. Run that grep before believing any "all screens built" claim.

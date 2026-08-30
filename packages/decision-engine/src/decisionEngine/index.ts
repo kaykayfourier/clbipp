@@ -33,6 +33,12 @@ import type {
 
 export * from "./types";
 export { DEFAULT_CONFIG } from "./defaults";
+// Exported so packages/core can pin the TIER 3 invariant by EXERCISING the
+// engine rather than restating its literals (AD8, Batch 11). The weights in
+// computeDamageScore are not Config parameters — a screen cannot move them —
+// so the only test that can fail when someone edits them is one that scores a
+// battery. Purely additive; no caller behaviour changes.
+export { computeDamageScore, runDamageScoring } from "./layers/damage";
 
 /**
  * Hash function over the input bundle for the audit trail.

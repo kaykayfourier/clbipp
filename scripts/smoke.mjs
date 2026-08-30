@@ -933,7 +933,24 @@ const ADMIN_APP_CONTENT = {
     'Nickel (kg)',
     'what actually came back',
   ],
-  '/config': ['Engine config'],
+  // Batch 11. 🔴 'Engine config' ALONE IS NOT ENOUGH, and that is not a
+  // hypothetical: the Batch 0 stub was written to keep that exact <h1> so the
+  // assertion would survive until the screen was built — which meant smoke
+  // scored this route green for two batches while /config rendered "not built
+  // yet". A content assertion has to name something only the REAL screen can
+  // produce (trap 9, and the sharpest instance of it in the sprint).
+  //
+  // 'v2026-08-26-r1' is the seeded EngineConfig.version, so it proves the row
+  // was actually read; 'Tier 3' proves the AD8 read-only panel rendered; and
+  // 'NMC622' proves the engine-vocabulary chemistry table was built from the
+  // config JSON rather than hard-coded.
+  '/config': [
+    'Engine config',
+    'v2026-08-26-r1',
+    'Tier 3 — not configurable',
+    'NMC622',
+    'Publish history',
+  ],
   '/market': ['Market feed'],
   '/quotes': ['Quote queue'],
   [`/trace/${ADMIN_TRACE}`]: ['Traceability'],
