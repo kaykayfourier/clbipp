@@ -60,12 +60,22 @@ for select
 to authenticated
 using ((select auth.uid()) = vendor_id);
 
+-- 🔴 REMOVED (2026-08-31, production audit). Vendors have NO direct INSERT on
+-- pickups, and never needed one: createBooking() in packages/core writes the
+-- pickup through Prisma, which connects as the table owner and bypasses both
+-- RLS and column grants. The policy was vestigial from a pre-Prisma booking
+-- path, but it was LIVE — combined with the table-wide INSERT grant it let a
+-- logged-in vendor POST a pickup directly to PostgREST with an arbitrary
+-- `status` (including 'certified'), an arbitrary `agent_id` and an arbitrary
+-- quote, skipping validation, document numbering and the status_events trail.
+-- The forged row would then surface in the admin queues as real work.
+--
+-- Bounded, because nothing downstream is insertable: offers, payments,
+-- certificates and status_events have SELECT-only policies, and pickups has no
+-- UPDATE policy either. But on a compliance product a forgeable pickup is not
+-- a defect to leave open. The matching `revoke insert on pickups` is in
+-- grants.sql — a policy and a grant are different layers and BOTH are needed.
 drop policy if exists "Vendors can create their own pickups" on pickups;
-create policy "Vendors can create their own pickups"
-on pickups
-for insert
-to authenticated
-with check ((select auth.uid()) = vendor_id);
 
 -- NOTE: vendors intentionally have NO direct UPDATE policy on pickups. All
 -- lifecycle transitions (accept → collected, cancel → cancelled, and later the

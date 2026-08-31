@@ -287,9 +287,27 @@ export async function reschedulePickup(
   // whatever stage it's already at and just gets a new preferred date.
   const nextStatus = pickup.status === 'cancelled' ? 'requested' : pickup.status
 
+  // Reactivation also drops the old assignment. A pickup sitting at `requested`
+  // with an agent still on it is self-contradictory: it shows up on that agent's
+  // day view while the dispatch board lists it as unassigned, and the stale
+  // `agentFeePaise` was priced against an assessment that is now void. The
+  // dispatch board sets both again when it reassigns.
+  const reactivating = pickup.status === 'cancelled'
+
   const { error: updateError } = await admin
     .from('pickups')
-    .update({ status: nextStatus, preferred_date: preferredDate })
+    .update(
+      reactivating
+        ? {
+            status: nextStatus,
+            preferred_date: preferredDate,
+            agent_id: null,
+            agent_fee_paise: null,
+            scheduled_slot: null,
+            eta_minutes: null,
+          }
+        : { status: nextStatus, preferred_date: preferredDate }
+    )
     .eq('id', pickupId)
 
   if (updateError) {
@@ -302,10 +320,11 @@ export async function reschedulePickup(
   // assessment that is now stale, so any acceptance of it must not survive.
   // Rescheduling an ACTIVE pickup is just a new date and leaves the offer alone.
   //
-  // 🔴 The rest of that loose end is still open — reactivation keeps the row's
-  // `agentId` and `agentFeePaise`, and the audit log can now run backwards (a
-  // `requested` event landing after a `cancelled` one). See LANE_OWNERSHIP.md.
-  if (pickup.status === 'cancelled') {
+  // 🔴 The remaining half of that loose end is still open: the audit log can run
+  // backwards (a `requested` event landing after a `cancelled` one). The stale
+  // `agentId` / `agentFeePaise` half is CLOSED — cleared in the update above.
+  // See LANE_OWNERSHIP.md.
+  if (reactivating) {
     await voidOfferAcceptance(admin, pickupId, 'reschedulePickup')
   }
 

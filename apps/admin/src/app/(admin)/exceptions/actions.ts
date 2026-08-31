@@ -66,6 +66,13 @@ const MAX_NOTES_CHARS = 600
 
 export type ResolveResult = { error: string | null; already: boolean }
 
+// Remote Supabase makes every round trip in a transaction expensive: the
+// measured ceiling on this console's multi-write transactions is ~5.3 s, which
+// is over Prisma's 5 s default. lifecycle/actions.ts and manifests/actions.ts
+// have always set these; this one did not.
+const TX_TIMEOUT_MS = 20_000
+const TX_MAX_WAIT_MS = 10_000
+
 /**
  * Close one exception.
  *
@@ -174,7 +181,9 @@ export async function resolveException(input: {
     // invites, and the done-when check asserts the absence directly.
 
     return true
-  })
+  },
+    { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
+  )
 
   if (!closed) {
     // Lost the race with a concurrent submit. Not an error the admin caused, so

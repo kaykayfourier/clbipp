@@ -80,3 +80,15 @@ grant update (
 -- No DELETE: an account deletion has to cascade auth.users, storage objects and
 -- the compliance trail, so it goes through a service-role action, not a PATCH.
 revoke delete on profiles from authenticated;
+
+-- pickups — vestigial write clawback (production audit, 2026-08-31)
+--
+-- Vendors never write pickups through PostgREST. createBooking() uses Prisma,
+-- which connects as the table owner, so revoking here costs the app nothing and
+-- closes the forged-pickup path described in policies.sql. Grants and policies
+-- are separate layers: dropping the INSERT policy alone still leaves the
+-- privilege sitting there for the next policy that gets added.
+--
+-- SELECT is deliberately kept: the vendor's own tracking screens and the
+-- browser Realtime subscription read pickups under the user's JWT.
+revoke insert, update, delete on pickups from authenticated;

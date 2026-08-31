@@ -219,28 +219,105 @@ Vendor → `/compliance` → the certificate for the pickup you just certified.
 
 ---
 
-## §4 · The full walk — what you rehearse (~30 min)
+## §4 · The full walk — ONE pickup, all nine stages (~30 min)
 
-Same beats, but **one pickup carries all nine stages** and nothing is hopped.
-Book fresh at :3000, then follow §3's beats 2–7 on that one pickup, assessing
-**every** item in the agent app.
+**This is the rehearsal, and it doubles as the admin verification pass.** Walking
+one pickup end to end executes every admin lifecycle write there is — dispatch,
+custody advance, manifest confirm, manifest reconcile, certify. Until this has
+been run against the deployed apps, those five writes have never executed in
+production and the "screens only" claim is untested. Run it once the night
+before; the trail it leaves is real and it is correct to leave it there.
 
-🔴 **The one thing that will catch you out.** A pickup only advances past
-`tested` when **every** one of its items is on a confirmed manifest (AD6). Since
-the agent picks each item's chemistry during intake, and a recycler only accepts
-certain chemistries:
+### The one decision that makes or breaks this walk
 
-> **Confirm every item on the demo pickup to the same chemistry family** — all
-> lead-acid, or all LFP. Mixed chemistries are realistic and correct, but they
-> need **two** manifests to two recyclers, both confirmed, before the pickup
-> moves. That doubles Beat 6 and, if you are not expecting it, looks like the
-> app is stuck.
+🔴 **Confirm EVERY item on the demo pickup to `li_ion_lfp`.**
 
-That is exactly why the relay uses `PKP-2026-000105`: **both** its items are
-lead-acid, so one manifest to Sunrise Lead clears AD6 in a single pass.
+Two independent rules meet on this choice, and getting it wrong strands the
+pickup at `tested` with no obvious cause:
 
-**Also budget for:** the safety checklist (once), ~4 screens per item in the
-agent app, two signature captures, and eight numeric inputs at reconcile.
+- **AD6** — a pickup advances only when *every* one of its items is on a
+  confirmed manifest. Mixed chemistries are realistic and correct, but they need
+  two manifests to two recyclers, both confirmed, before the pickup moves.
+- **AD7** — a manifest may only name a recycler whose `acceptedChemistries`
+  covers every item on it.
+
+`li_ion_lfp` is the choice that satisfies both *and* keeps the demo interesting:
+
+| Chemistry confirmed | Engine runs? | Legal recycler |
+|---|---|---|
+| `li_ion_lfp` | ✅ full pathway + price band | **Verdant Cell Recovery** (LFP only) |
+| `li_ion_nmc` / `li_ion_nca` | ✅ | Meridian Metals Recovery |
+| `lead_acid` | ❌ flat rate — **no engine, no trace id** | Sunrise Lead Recyclers |
+
+Lead-acid items skip the decision engine entirely, so a lead-acid demo silently
+drops the most impressive screen in the product. Use LFP.
+
+Keep the booking to **two items**. One does not show multi-item intake; three
+means walking the rubric three times while people watch.
+
+### Pre-flight (the morning of — not five minutes before)
+
+```bash
+npm run reset-demo      # ⚠ announce first — shared Supabase project
+npm run verify-seed     # 24 fixture checks, must pass
+npm run demo-stage      # the board + what blocks each row
+```
+
+`demo-stage` must print `Agent day view today: 2 assigned · 1 collected ·
+₹2592.00`. If it reads `0 · 0 · ₹0` the seed is stale — reseed. Several fixtures
+are dated at seed time, so a stale seed makes the agent home screen look broken
+when it is merely old.
+
+### The walk
+
+| # | Stage written | Where | What you do |
+|---|---|---|---|
+| 1 | `requested` | Customer | Book a pickup, 2 items. **Write down the `PKP-` id.** |
+| 2 | `scheduled` | Admin | `/dispatch` → the new row is at the **bottom** (oldest-first) → assign `agent@test`, slot **07:15** |
+| 3 | `arrived` | Agent | Day view → the job → **Arrived** |
+| — | *gate* | Agent | **Safety checklist** — mandatory, blocks intake |
+| — | *intake* | Agent | Each item → confirm **`li_ion_lfp`**, weight, condition → damage rubric → **Compute** |
+| 4 | `offered` | Agent | Review the band → **Send offer** |
+| — | `acceptedAt` | Customer | Accept. Lands on **"Offer Accepted"** — status does *not* move |
+| 5 | `collected` | Agent | **Collect** → draw a real signature. A payable is raised automatically |
+| — | *money* | Customer | `/payment/[id]` → amount matches the offer to the paise → settle |
+| — | *custody* | Agent | **Drop-off** → select the pickup → staff name → signature → `CustodyBatch` + PDF |
+| 6 | `tested` | Admin | `/lifecycle` → the new batch → **Advance** |
+| 7 | `processed` | Admin | `/manifests/new` → Okhla hub → both items → **Verdant Cell Recovery** → create → **Dispatch** → **Confirm received** |
+| 8 | `recovered` | Admin | Same manifest → **Reconcile** → enter recovered masses |
+| 9 | `certified` | Admin | `/lifecycle` → **Certify** → mints the `Certificate` |
+| — | *close* | Customer | `/compliance` → **download the certificate PDF** |
+
+### The three lines worth saying out loud
+
+At step 2, on `/audit`: *"Every admin action is logged with an actor. This is a
+compliance product."*
+
+At step 7, when two of the three recyclers grey out: *"A manifest can only name a
+recycler certified for that chemistry. That is enforced in the action, not just
+in the picker — a crafted request cannot get past it either."*
+
+At step 8: *"These are the masses the recycler measured, not our estimate. The
+certificate records which of the two it used, and it will not present an estimate
+as a measurement."*
+
+### Verify the pass actually landed
+
+```bash
+npm run demo-stage      # your pickup should read `certified`, cert `Y`
+```
+
+Then confirm the admin writes are attributed correctly — this is the check that
+closes the audit finding:
+
+```sql
+select status, actor_role, count(*) from status_events
+where actor_role = 'admin' group by 1,2 order by 1;
+```
+
+Expect `scheduled`, `tested`, `processed`, `recovered`, `certified`. **Zero rows
+means no admin screen wrote anything** and the walk did not do what it looked
+like it did.
 
 ---
 

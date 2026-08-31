@@ -1175,12 +1175,44 @@ async function seed() {
         ? ["requested", "cancelled"]
         : [...LIFECYCLE.slice(0, reachedIndex + 1)]
 
-    type SeededEvent = { status: PickupStatus; daysAgo: number; role: "customer" | "vendor" | "agent" }
+    // 🔴 AD5: the role on an event is the role that ACTUALLY writes that stage in
+    // the apps — not "the vendor opened it, so everything after is the agent".
+    // Every stage past the hub is an admin recording something on behalf of a
+    // party that has no app (there is no hub-staff app and no recycler portal),
+    // which is only defensible because the trail says 'admin'.
+    //
+    // This used to be `i === 0 ? "customer" : "agent"`, which made the seeded
+    // chain of custody assert that the field agent personally tested, processed,
+    // recovered and CERTIFIED batteries at a facility. On a compliance product
+    // that is a false custody trail, and it is the first thing a reviewer asks
+    // about. The seed's job is to look like production — so it has to attribute
+    // like production.
+    type SeededEvent = {
+      status: PickupStatus
+      daysAgo: number
+      role: "customer" | "vendor" | "agent" | "admin"
+    }
+
+    // Mirrors D7 (the cross-app seam) and AD5 (the unit of advance) exactly.
+    // Keep this in step with the screens: dispatch/actions.ts, lifecycle/actions.ts
+    // and manifests/actions.ts all write `actorRole: 'admin'`.
+    const STAGE_ACTOR: Record<PickupStatus, "customer" | "agent" | "admin"> = {
+      requested: "customer", // vendor books           — customer app
+      scheduled: "admin",    // dispatch board         — admin /dispatch
+      arrived: "agent",      // agent taps arrived     — agent app
+      offered: "agent",      // agent makes the offer  — agent app
+      collected: "agent",    // agent collects         — agent app
+      tested: "admin",       // per custody batch      — admin /lifecycle
+      processed: "admin",    // manifest confirmed     — admin /manifests
+      recovered: "admin",    // manifest reconciled    — admin /manifests
+      certified: "admin",    // mints the Certificate  — admin /lifecycle
+      cancelled: "customer", // vendor cancels         — customer app
+    }
 
     const stages: SeededEvent[] = walked.map((status, i) => ({
       status,
       daysAgo: spec.daysAgo - i,
-      role: i === 0 ? "customer" : "agent",
+      role: STAGE_ACTOR[status],
     }))
 
     // 🔴 The reactivation tail (fixture 8), written exactly the way
@@ -1219,7 +1251,7 @@ async function seed() {
         data: {
           pickupId: spec.id,
           status,
-          actorId: role === "agent" ? agentId : vendorId,
+          actorId: role === "admin" ? adminId : role === "agent" ? agentId : vendorId,
           actorRole: role,
           notes:
             spec.reactivatedFrom && status === "requested" && i > 0

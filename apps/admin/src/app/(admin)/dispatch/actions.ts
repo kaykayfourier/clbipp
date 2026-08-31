@@ -62,6 +62,14 @@ const MAX_ETA_MINUTES = 480
 
 export type AssignResult = { error: string | null }
 
+// Remote Supabase makes every round trip in a transaction expensive: the
+// measured ceiling on this console's multi-write transactions is ~5.3 s, which
+// is over Prisma's 5 s default. lifecycle/actions.ts and manifests/actions.ts
+// have always set these; dispatch did not, and dispatch is the FIRST write in
+// the whole flow and the one most likely to be shown live.
+const TX_TIMEOUT_MS = 20_000
+const TX_MAX_WAIT_MS = 10_000
+
 /**
  * The transition itself.
  *
@@ -190,7 +198,9 @@ export async function assignPickup(input: {
     })
 
     return true
-  })
+  },
+    { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
+  )
 
   if (!assigned) {
     // Lost the race with a concurrent submit. Not an error the admin caused, so
