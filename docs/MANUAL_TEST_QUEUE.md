@@ -473,10 +473,12 @@ What is left needs a browser or a human eye.
     (so `materialSource: estimated`) does not *look* different in a way that
     would worry a vendor — the distinction is for the audit trail, not for them.
 
-42. ⚠ **PDF rendering is production-only in spirit.** *(Batch 7.)* The
-    certificate PDF is rendered lazily on first download and the three
-    `api/documents/[kind]/[id]` routes **404 under Turbopack dev** (trap 17).
-    Do this part against `npm run build && npm start`.
+42. ✅ **RESOLVED 2026-08-31 — the dev 404 no longer reproduces.** The
+    certificate PDF is still rendered lazily on first download, but all three
+    `api/documents/[kind]/[id]` routes served real PDFs against **both**
+    `npm run dev` and a production build (customer smoke 46/46 both ways).
+    Still worth doing the PDF checks against `npm run build && npm start`
+    because that is what ships — but a 404 here is now a real failure.
 
 43. **The exception resolve form reads as a decision, not an advance.**
     *(Batch 14.)* Three `<select>` options with sentence-long labels
@@ -550,6 +552,32 @@ money.
 52. **Tier 3 reads as "go change the code", not "this screen is unfinished".**
     The amber panel names two file paths. Check that lands as deliberate — it is
     the one place the console admits a limit, and it should look like a decision.
+
+---
+
+## Demo-readiness D1 — the escalation loop · 2026-08-31 · A
+
+The transaction, the classification (13 tests) and both admin screens are
+verified. What no script here drove is the **button → server-action round trip**.
+
+53. 🔴 **Escalate a real HOLD, in the agent app, with a finger.** On a li-ion
+    item, enter the damage rubric so the engine returns HOLD — **SoH 30 · LFP ·
+    0.4 kWh · 2.5 kg · damage 3/3/3 · 60 km** does it (net value −362), as does
+    SoH 35 · LFP · 0.5 kWh · 3 kg · damage 3/2/2 · 120 km (−818). ✅ The result
+    screen shows the red HOLD banner and the **Escalate to admin** button. Press
+    it. ✅ The button flips to "Escalated." ✅ In the admin console `/exceptions`
+    now shows a new OPEN row for that item, cause **`negative_net_value`**, and
+    the same row appears on `/pickups/[id]`. ✅ The pickup's status has **not**
+    moved — an exception is not a lifecycle stage (AD4).
+54. **Double-tap Escalate**, or press it in two tabs. ✅ Exactly one row on
+    `/exceptions`, and exactly one new entry on the pickup's timeline. The action
+    is idempotent on an OPEN exception; check in Prisma Studio if unsure.
+55. **Resolve it on `/exceptions`, then escalate the same item again.** ✅ A
+    second row is created — a resolved exception must not block a new finding.
+    🔴 And confirm resolving still advances **nothing** (Batch 14's whole point).
+56. ⚠ **A fresh seed cannot reach any of this.** No seeded item has `quoteData`
+    (0 of 28), so the button only exists after a real in-app assessment. Start
+    from an agent job at `arrived` and walk the rubric.
 
 ---
 

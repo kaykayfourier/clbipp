@@ -74,8 +74,18 @@ export async function POST(req: NextRequest) {
     )
 
     return NextResponse.json(result)
-// PathwayDecision persistence happens in Batch 5a when the Offer row is created.
-// The full context (packId, inspectionId, factorConfigId) is only available there.
+// ⚠ NOTHING persists a `PathwayDecision` row — not here, not in Batch 5a where
+// this comment used to promise it would, not anywhere in the repo. The table has
+// zero rows and `PathwayDecision.traceId` (added in agent Batch 0a to carry the
+// `BatteryItem.traceId` join) has nothing to join to.
+//
+// It is not a gap anything currently reads around: the engine's full output is
+// stored on `BatteryItem.quoteData`, which is what `/trace/[traceId]` and the
+// agent's own result tabs render. So this is a dormant table, not a broken
+// feature — but the old comment asserted a write that does not exist, which is
+// worse than saying nothing. If a real decision ledger is ever wanted, this is
+// the call site, and packId / inspectionId / factorConfigId are the context it
+// would still need.
 
   } catch (err: unknown) {
     if (err instanceof EngineValidationError)

@@ -117,7 +117,13 @@ export async function confirmDropoff(formData: FormData) {
       })
 
       return batch.id
-    })
+    },
+    // Prisma's default is 5s. Three sequential round trips here, but this is
+    // the hand-off the whole post-hub lifecycle hangs off — a timeout mid-demo
+    // costs a custody batch. Same ceiling every other multi-write path in the
+    // repo sets after the 8-round-trip / 5.3s measurement (payment-actions.ts).
+    { timeout: 20_000, maxWait: 10_000 },
+    )
   } catch (e) {
     if (e instanceof Error && e.message === 'NOTHING_TO_HAND_OFF') {
       return fail('These jobs were already handed off.')

@@ -698,9 +698,11 @@ npm run smoke -- --blocked agent@test demo1234
 npm run smoke -- --blocked admin@test demo1234
 ```
 
-🔴 **Smoke the CUSTOMER app against a production build, not `npm run dev`** —
-the three `api/documents/[kind]/[id]` routes 404 under Turbopack dev. Unchanged
-from the last sprint; the runbook is in the historical section below.
+✅ **RETESTED 2026-08-31: the dev 404 no longer reproduces.** All three
+`api/documents/[kind]/[id]` routes served real PDFs against **both** `npm run dev`
+and a production build on Next 16.2.6 — customer smoke **46/46 both ways**.
+Smoking against a production build is still the better habit (it is what ships),
+but a dev 404 on these routes is now a real failure, not a known trap.
 
 ---
 

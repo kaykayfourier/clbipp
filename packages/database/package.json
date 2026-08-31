@@ -12,7 +12,8 @@
     "reset-demo": "tsx prisma/reset-demo.ts",
     "create-buckets": "tsx prisma/create-buckets.ts",
     "assign-job": "tsx prisma/assign-job.ts",
-    "verify-seed": "tsx prisma/verify-seed.ts"
+    "verify-seed": "tsx prisma/verify-seed.ts",
+    "demo-stage": "tsx prisma/demo-stage.ts"
   },
   "dependencies": {
     "@clbipp/decision-engine": "*",

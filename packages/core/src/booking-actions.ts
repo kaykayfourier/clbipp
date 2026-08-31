@@ -128,7 +128,12 @@ export async function createPickupWithItems(
             notes: "Pickup requested by customer",
           },
         });
-      });
+      },
+      // Prisma's default is 5s. Three sequential round trips, and this is the
+      // first write of the whole journey — a vendor booking that times out is
+      // the worst possible place to lose one. Same ceiling as every other
+      // multi-write path here (see raisePayment's caller in payment-actions.ts).
+      { timeout: 20_000, maxWait: 10_000 });
 
       return { ok: true, pickupId };
     } catch (error) {

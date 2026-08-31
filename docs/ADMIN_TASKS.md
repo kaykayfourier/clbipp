@@ -57,8 +57,12 @@ Every one of these has already cost this team an hour, in an earlier sprint.
     `hideNav` — those are mobile primitives for the other two apps (AD11).
 16. **A push to `main` is a deploy, and there is now a third app.** Pre-push:
     `npm run build` + **three** smoke runs.
-17. **Smoke the customer app against a production build, not `npm run dev`** —
-    the three `api/documents/[kind]/[id]` routes 404 under Turbopack dev.
+17. ✅ **RETESTED 2026-08-31 — this no longer reproduces.** The three
+    `api/documents/[kind]/[id]` routes returned real PDFs against **both**
+    `npm run dev` and a production build on Next 16.2.6 (customer smoke 46/46
+    both ways). Smoking against a production build is still the better habit —
+    it is what actually ships — but a dev 404 here is no longer expected, so
+    treat one as a real failure rather than as this known trap.
 18. **Add `apps/<app>/src/generated/` to `.gitignore` when you add an app.**
     *(Batch 0.)* The Prisma query engine `prebuild` copies **35 MB** of
     platform-specific binary in there, and the first `git add -A` commits it.

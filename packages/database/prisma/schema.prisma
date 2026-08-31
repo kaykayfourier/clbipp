@@ -176,7 +176,24 @@ enum KycStatus {
   rejected
 }
 
-// Ordered lifecycle + the terminal `cancelled` side-state. `arrived` and
+// Ordered lifecycle + the `cancelled` side-state.
+//
+// 🔴 `cancelled` is NOT terminal — it is RE-ENTERABLE (changed 2026-08-23, and
+// this comment said "terminal" until 2026-08-31). HR asked for
+// reschedule-after-cancel, so `reschedulePickup` in the customer app's
+// `handover/actions.ts` writes `cancelled → requested` to reactivate a pickup
+// rather than making the vendor file a new request. Still nine stages, no
+// migration. Don't write code that assumes a cancelled pickup is final.
+//
+// Two consequences that are still live:
+//   · the audit log can go BACKWARDS — a `requested` status_events row can land
+//     after a `cancelled` one. `buildStages` is first-wins so the timeline still
+//     reads forwards, but the ordering fact is unchanged.
+//   · a reactivated pickup keeps its old `agentId` / `agentFeePaise`. The
+//     admin's /dispatch clears them on assignment; nothing else does.
+//     Seed fixture 8 (PKP-2026-000114) exists to keep this visible.
+//
+// `arrived` and
 // `offered` were added 2026-08-09 (Batch 7A): the company flow document puts
 // assessment and quoting ON SITE, and until this change "an offer exists" was an
 // implicit sub-state of `scheduled` rather than a status — which is what made

@@ -536,7 +536,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 246 (core 179, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 304 (core 237, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -571,6 +571,17 @@ npm run reset-demo                                     # Wipe + reseed the demo 
 # checks (fixture 8's stale agent, and "≥3 unassigned requests"). After a demo,
 # reseed before reading a failure as a bug.
 npm run verify-seed                                    # Verify the demo fixtures
+
+# Demo staging & rescue (added 2026-08-31). `--list` shows every pickup's stage
+# and what is BLOCKING it, plus the agent day view's three tiles — run it before
+# a demo rather than during one. `--reset <id>` returns ONE pickup to a clean
+# `requested` without the all-or-nothing wipe `reset-demo` is.
+# 🔴 SETUP AND RESCUE ONLY, never part of a demo: every forward transition is
+# owned by a screen, which is the whole claim the demo makes. There is
+# deliberately no `--to=<stage>` — see the header of demo-stage.ts for why.
+npm run demo-stage                                     # the board, and what blocks each row
+npm run demo-stage -- --reset PKP-2026-000101          # one pickup back to `requested`
+npm run demo-stage -- --reset PKP-2026-000101 --dry-run
 
 # Dispatch: assign a `requested` pickup to an agent, i.e. `requested →
 # scheduled` + set agentId. ⚠ The admin console's /dispatch board does this
@@ -631,6 +642,12 @@ keeps every lane moving in parallel without anyone touching another's files.
   discussing distribution with the company. Companion:
   `docs/ANDROID_TWA_BUILD.md`, the runbook that turns a deployed app into a
   signed Play Store package (~half a day, post-deploy).
+- `docs/DEMO_RUNBOOK.md` — **the click path for showing this to the company.**
+  Two scripts: a ~12-min relay (what you present) and a ~30-min full walk (what
+  you rehearse), plus pre-flight, per-beat expected numbers, a what-goes-wrong
+  table and the do-not-say list. 🔴 **Reseed before any demo** — several fixtures
+  are dated at seed time, so a stale seed makes the agent home screen read
+  `0 · 0 · ₹0`, which is correct and looks broken.
 - `docs/BEFORE_YOU_PUSH.md` — **the second-glance checklist. Read before every
   push.** Pre-push commands, git workflow, shared-database rules, the traps that
   pass review, and the two orderings that actually matter.

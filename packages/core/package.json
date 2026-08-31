@@ -11,7 +11,8 @@
     "./audit": "./src/audit.ts",
     "./certificate": "./src/certificate.ts",
     "./compliance-export": "./src/compliance-export.ts",
-    "./engine-config": "./src/engine-config.ts"
+    "./engine-config": "./src/engine-config.ts",
+    "./exception-classify": "./src/exception-classify.ts"
   },
   "scripts": {
     "test": "vitest run"

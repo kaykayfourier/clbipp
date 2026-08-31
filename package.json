@@ -19,7 +19,8 @@
     "reset-demo": "npm run reset-demo --workspace=@clbipp/database",
     "verify-seed": "npm run verify-seed --workspace=@clbipp/database",
     "smoke": "node scripts/smoke.mjs",
-    "assign-job": "npm run assign-job --workspace=@clbipp/database --"
+    "assign-job": "npm run assign-job --workspace=@clbipp/database --",
+    "demo-stage": "npm run demo-stage --workspace=@clbipp/database --"
   },
   "devDependencies": {
     "turbo": "^2.5.8"

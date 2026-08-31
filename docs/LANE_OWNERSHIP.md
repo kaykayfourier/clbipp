@@ -899,6 +899,103 @@ Batch 17.
 
 ---
 
+## 2026-08-31 — Demo-readiness D1: the exception board gets a producer — A (Aamir)
+
+First batch of the pre-demo scan. A full re-verification of all three apps found
+nine loose ends; this entry covers the three that were code. **Nothing here moves
+a price** — no pricing input, config value or margin is touched, and the engine
+is not modified.
+
+### 🔴 The one that mattered: `/exceptions` had a reader and a resolver, but no producer
+
+`ItemException` was written by **exactly one thing in the repo** —
+`reset-demo.ts` — so the board could only ever show seeded rows. The agent's
+"Escalate to admin" button wrote a `status_events` note and nothing else, and
+its own comment still read *"There's no admin app yet"*. An agent flagging a
+HOLD in the field reached neither `/exceptions`, nor the open-exceptions panel
+on `/pickups/[id]`, nor the dashboard KPI that counts them.
+
+Structurally **the same shape as the `requested → scheduled` hole Admin Batch 3
+closed**, and it slipped through for the same reason: the plan defines the model
+(§3), seeds the fixtures (§3.6) and builds the reader (Batch 14), but **no batch
+was ever assigned the write**. Nobody's lane, so nobody's.
+
+- **Escalate-only, deliberately.** `EscalateButton` renders on `isHold` alone, so
+  the board stays a queue of HOLDs a human asked someone to look at. Auto-filing
+  every engine flag would bury it in advisory REVIEWs. Decided with Aamir before
+  building.
+- **Classification is derived server-side** from `BatteryItem.quoteData`, never
+  passed in from the screen — same posture as AD9's `supplier_id` and AD7's
+  recycler check. A client-supplied `kind` / `cause` would let any agent's
+  browser file an arbitrarily-labelled exception.
+- **The mapping moved to `packages/core/src/exception-classify.ts`** (B's
+  package, taken under do-it-and-note-it) with **13 tests**. It belongs there
+  because `/exceptions` renders those `cause` values, so the vocabulary is
+  decided once rather than inside a screen — and because apps hold no tests.
+  New subpath: `@clbipp/core/exception-classify`.
+- **Switched from the Supabase admin client to `prisma.$transaction`.** Two
+  reasons, and the second is a trap worth knowing: the note and the exception
+  must land together, **and `item_exceptions.id` is plain `TEXT NOT NULL` with
+  no database default**. `@default(uuid())` is a Prisma-client-side default, so
+  a service-role insert through PostgREST would have had to mint the id itself
+  — the same trap as `safety_checklists.id` in agent Batch 2.
+- **Idempotent on an OPEN exception** for that item. A resolved one deliberately
+  does *not* block a re-escalation: that is a new finding, not a duplicate.
+
+### Two transactions on the demo's critical path were on Prisma's 5s default
+
+`dropoff/confirm/actions.ts` (the hub hand-off the whole post-hub lifecycle hangs
+off) and `packages/core/src/booking-actions.ts` (the vendor booking — the first
+write of the journey) both opened `$transaction` with no options, while every
+other multi-write path in the repo sets `timeout: 20_000, maxWait: 10_000` after
+the measured 8-round-trip / 5.3s figure. Three round trips each, so the risk was
+modest — but CLAUDE.md's own rule is to set the ceiling from the start rather
+than discover the default in a demo. Set on both.
+
+### A comment that asserted a write which does not exist
+
+`api/quote/route.ts` said *"PathwayDecision persistence happens in Batch 5a when
+the Offer row is created."* It does not — **`pathway_decisions` has zero rows and
+nothing in the repo calls `pathwayDecision.create`**, including Batch 5a, which
+shipped. `PathwayDecision.traceId` (added in agent Batch 0a to carry the
+`BatteryItem.traceId` join) has nothing to join to.
+
+Not a broken feature — the engine's full output lives on `BatteryItem.quoteData`,
+which is what `/trace/[traceId]` and the agent's result tabs actually render — so
+this is a **dormant table**, and the comment now says so instead of promising a
+write. **For Khalid:** if a real decision ledger is ever wanted, that route is the
+call site; nothing needs undoing.
+
+### Verified, not asserted
+
+- `build` 3/3 with `ƒ Proxy (Middleware)` on each · `lint` **0 errors** ·
+  `test` **304** (was 291: +13 classification tests).
+- **11 checks over the real transaction** against the shared database: one row
+  created, `kind`/`cause` correct, lands open, **id minted by the Prisma default**
+  (the PostgREST trap, proved rather than reasoned), one status event, a second
+  escalate is a no-op on both tables, a resolved exception does not block a
+  re-escalation, and **the pickup does not move** (AD4 — an exception is not a
+  lifecycle stage).
+- **5 checks over real HTTP** as `admin@test`: the new row renders on
+  `/exceptions` *and* on `/pickups/PKP-2026-000103`.
+- **Database fully restored** — `npm run verify-seed` **24/24**.
+
+### 🔴 Two things the next person needs to know
+
+1. **No seeded item has `quoteData`** — 0 of 28. The escalate button only exists
+   after a real in-app assessment, so this path cannot be exercised from seed
+   data alone. It is reachable in a demo: `distanceKm` is an agent-entered form
+   field, and two realistic recipes produce a HOLD with the app's own defaults —
+   **SoH 30 · LFP · 0.4 kWh · 2.5 kg · damage 3/3/3 · 60 km** (net −362), and
+   SoH 35 · LFP · 0.5 kWh · 3 kg · damage 3/2/2 · 120 km (net −818). SoH 45 ·
+   NMC · dmg 2/1/1 · 250 km gives a REVIEW if the intermediate state is wanted.
+2. **The server action's own HTTP path is still only exercised by clicking it.**
+   The transaction, the classification and the screens are all verified; what no
+   script here drove is the button → server-action round trip. Added to
+   `MANUAL_TEST_QUEUE.md`.
+
+---
+
 ## 2026-08-31 — A (Aamir) fixed six defects across B's and C's shipped batches
 
 Same day as the Batch 11 entry above, after a review of everything B and C
