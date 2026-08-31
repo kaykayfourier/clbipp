@@ -58,10 +58,16 @@ export const config = {
     // `icons/` directory that never existed while the real icons sat at the
     // root.
     //
-    // apps/admin/public/ is empty today and the admin app is NOT a PWA (AD11,
-    // R5) — no manifest, no service worker, no icons — so unlike the other two
-    // apps there is nothing extra to exclude yet. favicon.ico is listed so
-    // dropping one in later just works.
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    // The admin app is still NOT a PWA (AD11, R5) — no manifest, no service
+    // worker, no install prompt, and deliberately no 192/512 PNGs, because it
+    // is a desktop console in a browser-sized window and has nothing to install
+    // to a home screen. `icon.svg` is a browser TAB icon only.
+    //
+    // 🔴 It is named here for exactly the reason above: without it the guard
+    // 307s /icon.svg to /login, the browser gets an HTML redirect where it
+    // asked for an image, and the tab silently falls back to a blank page
+    // glyph. That is the customer-app trap reproduced — it looks like the icon
+    // "just didn't work" rather than like an auth guard eating it.
+    '/((?!_next/static|_next/image|favicon.ico|icon.svg).*)',
   ],
 }

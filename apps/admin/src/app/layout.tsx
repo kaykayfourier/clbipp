@@ -32,6 +32,15 @@ export const metadata: Metadata = {
   // The console is internal and shows every price in the business; it has no
   // business appearing in a search index even if it were ever reachable.
   robots: { index: false, follow: false },
+  // Browser tab icon only — NOT a PWA (AD11, R5). Deliberately no `manifest`,
+  // no `appleWebApp`, and no 192/512 PNGs: this is a desktop console in a
+  // normal browser window with nothing to install to a home screen, which is
+  // exactly what separates it from the customer and agent apps.
+  //
+  // A single SVG is enough — every browser this console targets supports SVG
+  // favicons. It must stay excluded in src/proxy.ts's matcher or the guard
+  // redirects it to /login and the tab falls back to a blank glyph.
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }] },
 };
 
 export const viewport: Viewport = {

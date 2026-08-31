@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#111111"/>
+  <text x="256" y="248" font-family="monospace" font-weight="700" font-size="210"
+        fill="#F8F5EE" text-anchor="middle" dominant-baseline="central">AC</text>
+  <rect x="146" y="386" width="220" height="34" fill="#C8F53D"/>
+</svg>
