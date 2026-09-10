@@ -7,7 +7,7 @@ import { Button } from "@clbipp/ui";
 import { Card } from "@clbipp/ui";
 import { StatusBadge } from "@clbipp/ui";
 import { ErrorState } from "@clbipp/ui";
-import { CATEGORY_LABELS, formatPaise } from "../book/copy";
+import { CATEGORY_LABELS } from "../book/copy";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 // Server component — reads ?id= from the URL, fetches the pickup row, renders.
@@ -44,7 +44,6 @@ export default async function SubmittedPage({ searchParams }: PageProps) {
       category: true,
       location: true,
       createdAt: true,
-      indicativeQuotePaise: true,
       _count: { select: { items: true } },
     },
   });
@@ -115,17 +114,14 @@ export default async function SubmittedPage({ searchParams }: PageProps) {
               pickup._count.items === 1 ? "" : "s"
             }`}
           />
-          {pickup.indicativeQuotePaise !== null && (
-            <>
-              <Divider />
-              {/* Indicative, not a commitment — the wording matters, this is the
-                  number the customer will remember. */}
-              <DetailRow
-                label="Indicative quote"
-                value={formatPaise(pickup.indicativeQuotePaise)}
-              />
-            </>
-          )}
+          <Divider />
+          {/* 🔴 NO PRICE HERE (FV1 · FD2, 2026-09-10). This row used to show
+              `indicativeQuotePaise`, and it was the number the customer
+              remembered — which is exactly why the company's presentation
+              feedback removed it. The estimate is still stored on the row and
+              still read by the operations team; it just isn't a promise made
+              before anyone has seen the batteries. */}
+          <DetailRow label="Your price" value="After the agent's inspection" />
           <Divider />
           <DetailRow label="Collection address" value={pickup.location} />
           <Divider />

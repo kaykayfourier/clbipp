@@ -164,14 +164,21 @@ export default async function DispatchDetail({
                 value={pickup.preferredDate ? formatIstDate(pickup.preferredDate) : 'No preference'}
               />
               <Row label="Requested" value={`${formatIstDateTime(pickup.createdAt)} · ${formatAge(pickup.createdAt, now)} ago`} />
+              {/* 🔴 INTERNAL ONLY (FV1 · FD2, 2026-09-10). The vendor no longer
+                  sees this figure anywhere — it was removed from the booking
+                  wizard and the confirmation screen so that their first price
+                  is the agent's post-inspection offer. It survives here because
+                  ops triage against it, and the label has to say so: read it
+                  out to a vendor and the change is undone. */}
               <Row
-                label="Indicative quote"
+                label="Internal estimate"
                 value={
                   pickup.indicativeQuotePaise !== null
                     ? formatPaise(pickup.indicativeQuotePaise)
                     : '—'
                 }
                 mono
+                hint="Not shown to the vendor"
               />
             </dl>
 
@@ -451,7 +458,19 @@ function Label({ children }: { children: React.ReactNode }) {
   )
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({
+  label,
+  value,
+  mono,
+  hint,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+  /** A qualifier on the VALUE, not a description of the field — used where the
+   *  number means something different to an admin than it would to a vendor. */
+  hint?: string
+}) {
   return (
     <div>
       <dt>
@@ -460,6 +479,7 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
       <dd className={`mt-0.5 text-sm text-text-primary ${mono ? 'font-mono text-[13px]' : ''}`}>
         {value}
       </dd>
+      {hint && <p className="mt-0.5 text-[10px] text-text-secondary">{hint}</p>}
     </div>
   )
 }

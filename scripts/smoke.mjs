@@ -113,6 +113,11 @@ const ROUTES = [
   '/handover?id=PKP-2026-000105',
   // The payment screen is safe to fetch for the same reason: settling is a POST
   // form action, never something a render does.
+  //
+  // FV1 (2026-09-10). This screen was never in the list, which is exactly how
+  // it carried a price nobody had checked for. It is a pure read of a pickup
+  // the vendor owns — 101 is `requested`, the state a booking lands in.
+  '/submitted?id=PKP-2026-000101',
 ]
 
 // Batch 8 — the three PDF documents, fetched as bytes rather than HTML.
@@ -191,6 +196,16 @@ const APP_REJECTS = {
   // acceptance guard broke, because the page would render the OTHER heading —
   // the Batch 10 vacuous-assertion lesson, one heading later.
   '/handover?id=PKP-2026-000104': ['Handover Confirmed', 'Offer Accepted'],
+  // 🔴 FV1 · FD2 (2026-09-10) — the vendor must see NO price before inspection.
+  // 'Indicative quote' is the label this screen carried until the company's
+  // presentation feedback removed it. The ₹ sign is the load-bearing string:
+  // relabelling the row while still rendering the number would sail past a
+  // check on the label alone, which is the failure this pairing exists for.
+  //
+  // ⚠ Do not add '₹' to a route that legitimately shows money. /payment,
+  // /receipt, /wallet and the invoice all show ₹ by design (plan v2 D6) — this
+  // assertion belongs only on the screens that precede the agent's offer.
+  '/submitted?id=PKP-2026-000101': ['Indicative quote', '₹'],
 }
 
 // The other half, and the load-bearing one. Re-fetched AFTER the /handover probe
@@ -214,6 +229,11 @@ const APP_CONTENT = {
   // The export button was dead until Batch 9 — asserting the href is what stops
   // it silently reverting to a <Button> with no handler.
   '/compliance': ['Compliance log', 'Export for CPCB return', '/api/exports/compliance'],
+  // FV1 · FD2. The positive half — the screen renders, and it says the price
+  // comes after the inspection. Its ABSENT twin is in APP_REJECTS, and neither
+  // half is sufficient alone: this one would still pass if the row were deleted
+  // outright, and that one would still pass if the screen 307'd away.
+  '/submitted?id=PKP-2026-000101': ['Your price', "After the agent's inspection"],
   '/offer?id=PKP-2026-000104': ['Estimated Offer', 'Why this price?'],
   '/offer-breakdown?id=PKP-2026-000104': ['Estimated Value', 'Why this valuation?'],
   // Batch 7B. `token=` on the img src is the part worth asserting: it only

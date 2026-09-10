@@ -1,0 +1,165 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>CLBIPP — Open Questions</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10.2pt; line-height: 1.45; color: #14171a; margin: 0; }
+  h1 { font-size: 21pt; margin: 0 0 2px; letter-spacing: -0.4px; }
+  .sub { font-size: 10pt; color: #5a6169; margin: 0 0 4px; }
+  .meta { font-size: 8.6pt; color: #7b838c; margin: 0 0 16px; }
+  .lede { background: #f4f6f4; border-left: 3px solid #7a9a3c; padding: 9px 12px; font-size: 9.4pt; color: #333; margin: 0 0 18px; }
+  h2 { font-size: 12.4pt; margin: 20px 0 3px; padding-bottom: 4px; border-bottom: 1.5px solid #14171a; page-break-after: avoid; }
+  h2 .tag { float: right; font-size: 8pt; font-weight: 600; color: #fff; background: #14171a; padding: 2px 7px; border-radius: 3px; letter-spacing: .4px; }
+  h2 .tag.p0 { background: #a8321f; } h2 .tag.p1 { background: #9a6b12; } h2 .tag.p2 { background: #4a5259; } h2 .tag.new { background: #2c5c3a; }
+  .ctx { font-size: 9pt; color: #5a6169; margin: 6px 0 9px; font-style: italic; }
+  .q { margin: 0 0 9px; page-break-inside: avoid; }
+  .q .n { font-weight: 700; }
+  .rec { display: block; font-size: 8.9pt; color: #3d5a2a; background: #f2f6ee; border-radius: 3px; padding: 4px 8px; margin-top: 3px; }
+  .rec b { color: #2c4a1c; }
+  .blocking { display:inline-block; font-size:7.4pt; font-weight:700; color:#a8321f; border:1px solid #a8321f; border-radius:3px; padding:0 4px; margin-left:4px; vertical-align:1px; letter-spacing:.3px;}
+  footer { margin-top: 22px; border-top: 1px solid #d5d9dc; padding-top: 8px; font-size: 8.4pt; color: #7b838c; }
+  .legend { font-size: 8.6pt; color: #5a6169; margin: -8px 0 16px; }
+</style></head><body>
+
+<h1>CLBIPP — Open Questions</h1>
+<p class="sub">Arising from the presentation-feedback document (Changes Based on Presentation Feedback) and the follow-up meeting on the pilot run.</p>
+<p class="meta">Prepared 10 September 2026 &nbsp;·&nbsp; CLBIPP build team (Aamir, Khalid, Ali)</p>
+
+<div class="lede">
+  We have read the feedback document and mapped all eleven changes onto the three apps. Most of it we can build from the document alone.
+  The questions below are the points where the document leaves a genuine choice open, or where a decision changes what we build rather than how we build it.
+  Each carries our recommended default — if a default is right, "yes" is a complete answer and we will proceed on it.
+  Anything marked <span class="blocking">BLOCKING</span> stops that piece of work until we hear back.
+</div>
+<p class="legend">Sections are tagged with the priority the feedback document itself assigns. Section L and M come from the meeting, not the document.</p>
+
+<h2><span class="tag p0">P0</span>A. Mandatory customer battery photos</h2>
+<p class="ctx">Today photos are optional at booking. Making them mandatory is a small change; the scope of "at least one" is the open point.</p>
+<div class="q"><span class="n">A1.</span> A request can contain several battery lines (e.g. 3 e-rickshaw packs on one line, 40 lead-acid units on another). Is one photo required <i>per line</i>, or one photo <i>per request</i> overall?
+<span class="rec"><b>Our recommendation:</b> per line. One photo of a 40-unit lot tells the dispatcher nothing about the other line on the same request.</span></div>
+<div class="q"><span class="n">A2.</span> The app has a "repeat last booking" shortcut. It deliberately does not copy the old photos, because a photo is evidence of one specific consignment. Do you agree the customer must take fresh photos every time, even on a repeat?
+<span class="rec"><b>Our recommendation:</b> yes — fresh photos always.</span></div>
+<div class="q"><span class="n">A3.</span> Should we force a live camera capture, or is choosing an existing photo from the gallery acceptable?
+<span class="rec"><b>Our recommendation:</b> allow the gallery. Warehouse staff often photograph a lot in the morning and file the request at their desk, and a camera-only rule would push them to photograph a screen instead.</span></div>
+<div class="q"><span class="n">A4.</span> Is there anything the photo must <i>show</i> that we should state on screen — the whole lot in one frame, the label, a visible damage close-up?</div>
+
+<h2><span class="tag p0">P0</span>B. Removing the preliminary estimated offer</h2>
+<p class="ctx">Today the customer sees an indicative price on the review screen before submitting, and again on the confirmation screen. That number is also stored on the request and shown to the dispatcher.</p>
+<div class="q"><span class="n">B1.</span> Should we stop <i>showing</i> the estimate to the customer but keep calculating and storing it for the operations team, or stop calculating it entirely?
+<span class="rec"><b>Our recommendation:</b> keep it, ops-only. It is useful for triaging which requests to dispatch first, and it costs nothing to retain. It would be labelled "internal estimate — not shown to the vendor" on the dispatch screen.</span></div>
+<div class="q"><span class="n">B2.</span> What should the customer see in its place at the moment of submitting? Nothing at all, a broad indicative range, or a line saying the price is confirmed after physical inspection?
+<span class="rec"><b>Our recommendation:</b> a plain sentence — no number, no range. A range is an anchor too.</span></div>
+<div class="q"><span class="n">B3.</span> Existing requests already carry an estimate the customer has seen. Hide it on those retrospectively as well?
+<span class="rec"><b>Our recommendation:</b> yes, one consistent rule.</span></div>
+
+<h2><span class="tag p0">P0</span>C. Mandatory agent inspection photos</h2>
+<p class="ctx">The agent app already supports up to 8 photos per battery line and keeps them separate from the customer's photos. They are currently optional.</p>
+<div class="q"><span class="n">C1.</span> The document lists three shots: overall lot, identifying label/model, and visible damage. Are all three individually mandatory, or is the overall shot mandatory with the other two prompted but optional?
+<span class="rec"><b>Our recommendation:</b> overall shot mandatory; label and damage prompted as separate slots but not blocking — a corroded pack often has no readable label, and a healthy pack has no damage to photograph. Forcing all three teaches agents to shoot the floor to get past the screen.</span></div>
+<div class="q"><span class="n">C2.</span> Per battery line, or one set per pickup?
+<span class="rec"><b>Our recommendation:</b> per line — that is where the valuation attaches.</span></div>
+<div class="q"><span class="n">C3.</span> Live camera capture only for agents, or gallery allowed?
+<span class="rec"><b>Our recommendation:</b> camera-only for agents. Unlike the customer, the agent is standing in front of the battery, and this is the evidence a price dispute would turn on.</span></div>
+
+<h2><span class="tag p0">P0</span>D. Separating inspection from collection</h2>
+<p class="ctx">This is the largest of the five P0 changes. Today the app assumes one visit: the agent arrives, assesses, offers, the customer accepts, and the agent collects on the spot. Splitting the two raises questions the document does not settle.</p>
+<div class="q"><span class="n">D1.</span> When the agent chooses "Schedule pickup for later", who picks the date — the agent on site, the customer, or the admin afterwards? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> the agent proposes a date on site with the customer standing there, and the admin can change it later from the dispatch board.</span></div>
+<div class="q"><span class="n">D2.</span> Does a deferred collection stay with the same agent, or go back into the dispatch pool to be reassigned?
+<span class="rec"><b>Our recommendation:</b> stays with the same agent by default, but appears on the dispatch board as a future job so the admin can reassign it.</span></div>
+<div class="q"><span class="n">D3.</span> <b>Does an accepted price expire?</b> If a customer accepts on the 1st and we collect on the 20th, metal prices have moved. Is there a validity window — 7 days, 14 days — and if it lapses, who re-quotes: the same agent on a second visit, or the office? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> a 7-day validity stated on the offer. Past that, the price is re-confirmed by the office before collection rather than requiring a second inspection visit.</span></div>
+<div class="q"><span class="n">D4.</span> If the customer cancels between accepting the offer and the scheduled collection, is there any consequence — a charge, a record against the account, or nothing?
+<span class="rec"><b>Our recommendation:</b> nothing beyond a recorded reason, for the pilot.</span></div>
+<div class="q"><span class="n">D5.</span> Can a pickup be <i>partially</i> collected — three packs today, the rest next week? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> not in the pilot. A partial collection splits one request across two custody chains, two manifests and potentially two certificates, and that is a much larger change than the rest of this document combined. If you need it, we should scope it separately.</span></div>
+<div class="q"><span class="n">D6.</span> Is a second visit to collect paid to the agent as a separate job, or is it part of the original job's fee?</div>
+<div class="q"><span class="n">D7.</span> Should the customer be able to <i>request</i> a different collection date after accepting, or does that go through a phone call to the office?</div>
+
+<h2><span class="tag p0">P0</span>E. Verified battery weight</h2>
+<p class="ctx">The agent app already records a measured weight separately from the customer's declared weight, and prices off the measured one. What is missing is how the weight was obtained.</p>
+<div class="q"><span class="n">E1.</span> Confirm the list of methods: digital platform scale, manufacturer label, estimated / unable to weigh. Is a weighbridge reading a fourth case worth having?</div>
+<div class="q"><span class="n">E2.</span> When the method is "estimated / unable to weigh", should that pickup be flagged for review before an offer can be made, or is an estimated weight an acceptable basis for a price? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> allow it, but flag the pickup for the admin and mark it visibly on the offer. Blocking would strand an agent at a site with a 400 kg pallet and a 50 kg scale.</span></div>
+<div class="q"><span class="n">E3.</span> Should the photo of the battery on the scale be mandatory whenever the digital-scale method is used, or only above a weight or value threshold?
+<span class="rec"><b>Our recommendation:</b> mandatory whenever the digital-scale method is chosen. It is one extra tap and it is the only thing that makes the recorded number verifiable.</span></div>
+<div class="q"><span class="n">E4.</span> Will the pilot agents actually be issued scales, and of what capacity? This determines how common "unable to weigh" will be, and whether we should design around it or treat it as an exception.</div>
+<div class="q"><span class="n">E5.</span> If the measured weight differs sharply from the customer's declared weight, should that raise a flag automatically? What tolerance would you consider material — 10%, 20%?
+<span class="rec"><b>Our recommendation:</b> flag at 20% or 5 kg, whichever is larger, visible to the admin but not blocking the agent.</span></div>
+
+<h2><span class="tag p1">P1</span>F. Dispatch filtering and sorting</h2>
+<div class="q"><span class="n">F1.</span> What is a "location or service area" for filtering purposes — pincode, city, or a named zone list? We already hold a zone against each agent; is there a canonical list of zones, or should we derive filters from the address pincode? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> filter by city and pincode from the address, plus by the agent's zone. If you have a real zone map, send it and we will use that instead.</span></div>
+<div class="q"><span class="n">F2.</span> The dispatch board currently shows only unassigned new requests. Should it become a board over the whole live pipeline — assigned, in progress, awaiting a scheduled collection — with the new requests as the default view?
+<span class="rec"><b>Our recommendation:</b> yes, one board with filters, defaulting to what needs action.</span></div>
+<div class="q"><span class="n">F3.</span> The document mentions "operational priority". Is that a value someone sets by hand, or should we derive it — waiting time, declared value, hazardous condition flags?
+<span class="rec"><b>Our recommendation:</b> derive it for the pilot (age of request + any damage/leak flag) rather than adding a field somebody has to remember to set.</span></div>
+
+<h2><span class="tag p1">P1</span>G. Agent live-job count</h2>
+<p class="ctx">This one is already built — the assignment screen shows each agent's live job count today. Two points to confirm rather than build.</p>
+<div class="q"><span class="n">G1.</span> We count a job as live from the moment it is assigned until the agent hands the batteries in at a facility — which means a collected load still sitting in the agent's van counts against them. Is that the definition you want?
+<span class="rec"><b>Our recommendation:</b> yes. An agent holding five undropped pickups is not free to take a sixth.</span></div>
+<div class="q"><span class="n">G2.</span> Is there a ceiling worth enforcing — a maximum number of jobs per agent per day, or a vehicle capacity in kg — where the app should warn or refuse?</div>
+
+<h2><span class="tag p1">P1</span>H. Second Life vs Recycling pathway</h2>
+<p class="ctx">Our decision engine already classifies every battery into one of four outcomes — reuse, refurbish, recycle, dispose. What does not exist is the operational consequence: everything collected currently flows down the recycling route, to a CPCB-registered recycler, under a dispatch manifest.</p>
+<div class="q"><span class="n">H1.</span> Who makes the call — the engine, the agent on site, or an admin at the facility once the battery has been tested? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> the engine suggests, an admin confirms at the testing stage, with a reason recorded on any change. On site the agent has neither the equipment nor the time.</span></div>
+<div class="q"><span class="n">H2.</span> <b>Where does a second-life battery physically go?</b> We hold a list of recyclers with CPCB registration numbers. Is there an equivalent list of refurbishment or second-life partners, with whatever registration they carry? <span class="blocking">BLOCKING</span></div>
+<div class="q"><span class="n">H3.</span> Does a battery that goes to second life still produce an EPR certificate for the customer, or a different document, or none? Our certificate currently reports recovered material mass, which does not apply to a battery that was never broken down. <span class="blocking">BLOCKING</span></div>
+<div class="q"><span class="n">H4.</span> Should the four internal outcomes be presented to operators and customers simply as "Second Life" and "Recycling", as the document frames them?
+<span class="rec"><b>Our recommendation:</b> yes on every screen; keep the four internally, because the price differs between reuse and refurbish.</span></div>
+<div class="q"><span class="n">H5.</span> Can the pathway change after it is set — testing reveals the pack is not reusable after all? Who may change it, and does that need a written reason?
+<span class="rec"><b>Our recommendation:</b> yes, admin only, reason mandatory and recorded in the audit trail.</span></div>
+
+<h2><span class="tag p1">P1/P2</span>I. Battery and pickup tagging</h2>
+<div class="q"><span class="n">I1.</span> What will physically exist in the pilot — a label printer in the van, pre-printed QR rolls, or handwritten tags? This decides everything else in this section. <span class="blocking">BLOCKING</span></div>
+<div class="q"><span class="n">I2.</span> A tag per individual battery, or per lot? For 40 identical lead-acid units on one line, is that 40 tags or one?
+<span class="rec"><b>Our recommendation:</b> per lot for the pilot, per battery only for high-value lithium packs.</span></div>
+<div class="q"><span class="n">I3.</span> Should we generate the codes (and you print sheets from the admin console), or will you buy pre-printed QR rolls that the agent scans and binds to a pickup in the app?
+<span class="rec"><b>Our recommendation:</b> pre-printed rolls, scanned and bound. It removes the printer from the van, which is the part most likely to fail on a wet Tuesday.</span></div>
+<div class="q"><span class="n">I4.</span> Does a tag need to survive as far as the recycler's process, or only until the battery is booked in at our facility?</div>
+
+<h2><span class="tag p2">P2</span>J. QR-tracked transport containers</h2>
+<div class="q"><span class="n">J1.</span> Do the reusable containers exist yet, and roughly how many are in circulation?</div>
+<div class="q"><span class="n">J2.</span> One container per collection run, or can a run fill several? Can one container span two runs across two days?</div>
+<div class="q"><span class="n">J3.</span> We already record a "custody batch" when an agent hands a load in at a facility — a signed, timestamped, geotagged hand-over that produces a chain-of-custody PDF. Should a QR container simply <i>be</i> that record, or are they two separate things that need to coexist? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> make the container the physical identity of the hand-over we already record, rather than adding a parallel structure.</span></div>
+<div class="q"><span class="n">J4.</span> Is a container ever left with the facility part-full and returned later, or does it always empty on arrival?</div>
+
+<h2><span class="tag p2">P2</span>K. Same-day nearby pickup grouping</h2>
+<div class="q"><span class="n">K1.</span> We do not reliably hold map coordinates for customer addresses — many were entered as free text. For the pilot, is grouping by pincode acceptable instead of by true road distance? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> yes, pincode grouping for the pilot. True routing needs geocoding every address and a routing service, which is its own piece of work.</span></div>
+<div class="q"><span class="n">K2.</span> Do you want a "collection run" recorded as a real thing — vehicle, driver, start and end time — or is grouping just a convenience for the dispatcher?</div>
+<div class="q"><span class="n">K3.</span> Any hard limits per run — maximum pickups, maximum kilograms per vehicle?</div>
+
+<h2><span class="tag new">FROM THE MEETING</span>L. The pilot, and the decision engine</h2>
+<p class="ctx">Our understanding from the meeting is that the pilot runs with a small group of agents, that the automated pricing engine may not be in use for this phase, and that you want to keep a human step where the agent or customer speaks to the office. These questions test that understanding — please correct anything we have wrong.</p>
+<div class="q"><span class="n">L1.</span> For the pilot, should automated pricing be <b>off</b> — the agent records the inspection and the price comes from the office — or <b>on</b>, with the agent able to override it? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> off by default, switchable per pilot without a code change. The engine's price is only as good as the market data behind it, and a pilot is the wrong moment to discover that.</span></div>
+<div class="q"><span class="n">L2.</span> If the agent can enter or adjust a price by hand, does that need office approval above a threshold, and what threshold?</div>
+<div class="q"><span class="n">L3.</span> When the price comes "from the office", does that happen <i>in the app</i> — the agent requests a price, an admin sends one back, the agent reads it to the customer — or entirely by phone, with the app only recording the agreed number afterwards? <span class="blocking">BLOCKING</span>
+<span class="rec"><b>Our recommendation:</b> in the app, because it leaves a record of who quoted what and when. The phone call can still happen alongside it.</span></div>
+<div class="q"><span class="n">L4.</span> Should the customer still see and accept the offer on their phone, or is acceptance verbal and recorded by the agent?
+<span class="rec"><b>Our recommendation:</b> keep it on the customer's phone. It is the only evidence of acceptance we have, and it is already built.</span></div>
+<div class="q"><span class="n">L5.</span> Even with the engine switched off, would you like it to keep running silently in the background and log what it <i>would</i> have priced, so that at the end of the pilot you can compare its numbers against the prices your team actually agreed?
+<span class="rec"><b>Our recommendation:</b> yes. It costs nothing, changes no price, and it is by far the cheapest way to find out whether the engine is ready for the next phase.</span></div>
+
+<h2><span class="tag new">FROM THE MEETING</span>M. Keeping a human in the loop</h2>
+<div class="q"><span class="n">M1.</span> What phone number should the apps show, and during what hours? Is it one number for customers and agents, or two?</div>
+<div class="q"><span class="n">M2.</span> Do you want a "request a callback" button that raises a task in the admin console, or is a plain tap-to-call number enough?
+<span class="rec"><b>Our recommendation:</b> tap-to-call for the pilot, plus a callback request on the two screens where people get stuck — after submitting a request, and after receiving an offer.</span></div>
+<div class="q"><span class="n">M3.</span> Should agents have an in-app escalation to the office — unsafe battery, customer disputes the price, address wrong — or is that a phone call?</div>
+<div class="q"><span class="n">M4.</span> Should a customer be able to file a pickup request by phone, with your team entering it into the system on their behalf? That is a different feature from everything above and we have not planned for it.</div>
+
+<h2><span class="tag new">PLANNING</span>N. Scope and timing</h2>
+<div class="q"><span class="n">N1.</span> When does the pilot start, and must all five P0 items be live before it does? <span class="blocking">BLOCKING</span></div>
+<div class="q"><span class="n">N2.</span> How many agents, how many customers, and roughly how many pickups a day should we expect?</div>
+<div class="q"><span class="n">N3.</span> Do any of these screens need to work without a signal? Warehouses and basements are exactly where batteries are stored, and today every screen needs connectivity. If offline inspection matters, it should be scoped now rather than discovered in week two.</div>
+<div class="q"><span class="n">N4.</span> Is the priority order in section 7 of your document final, or would you reorder anything now that the pilot is the near-term goal?</div>
+
+<footer>
+  CLBIPP — Closed-Loop Battery Intelligence &amp; Pricing Platform. Questions arising from "Changes Based on Presentation Feedback".
+  Items marked BLOCKING hold up that piece of work; everything else we will build to the stated recommendation unless told otherwise.
+</footer>
+</body></html>

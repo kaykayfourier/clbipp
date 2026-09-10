@@ -154,8 +154,9 @@ export function StepItems({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm leading-relaxed text-text-secondary">
-        Add a line for each batch of {CATEGORY_LABELS[category].toLowerCase()} batteries. Weight
-        is optional — leave it blank and the agent weighs them on collection.
+        Add a line for each batch of {CATEGORY_LABELS[category].toLowerCase()} batteries. Every
+        line needs a photo. Weight is optional — leave it blank and the agent weighs them on
+        collection.
       </p>
 
       {items.map((item, index) => (
@@ -284,7 +285,7 @@ function LineCard({
       {/* Photos */}
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-text-primary">
-          Photos <span className="font-normal text-text-secondary">(optional)</span>
+          Photos<span className="text-red-500"> *</span>
         </span>
 
         {item.photos.length > 0 && (
@@ -335,9 +336,15 @@ function LineCard({
           {item.photos.length > 0 ? 'Add more photos' : '+ Add photos'}
         </Button>
 
+        {item.photos.length === 0 && (
+          <p role="alert" className="text-xs text-red-600">
+            At least one photo is needed before you can continue.
+          </p>
+        )}
+
         <p className="text-xs text-text-secondary">
-          Up to 6 photos, {MAX_FILE_MB} MB each. They go on your pickup record and help the agent
-          come prepared.
+          One photo minimum, up to 6, {MAX_FILE_MB} MB each. Show the whole lot in one frame if you
+          can — it is what our team uses to plan the collection before an agent sets off.
         </p>
 
         {photoErrors.map((message) => (

@@ -130,6 +130,10 @@ export function parseQuantity(raw: string): number | null {
  * Per-line validation for step 2. Returns the first problem, or null.
  * A blank weight is fine; a weight that isn't a positive number is not — that
  * distinction is the whole reason this can't be a plain `Number()` check.
+ *
+ * ⚠ This MIRRORS `bookingLineItemSchema` in @clbipp/core — it exists to give an
+ * inline message next to the line, not to be the rule. The schema is the rule
+ * (FD1: the form is not the boundary). If the two ever disagree, fix this one.
  */
 export function itemError(item: DraftItem): string | null {
   if (parseQuantity(item.quantity) === null) {
@@ -137,6 +141,12 @@ export function itemError(item: DraftItem): string | null {
   }
   if (item.weightKg.trim() !== '' && parseWeight(item.weightKg) === null) {
     return 'Enter a weight greater than zero, or leave it blank.'
+  }
+  // FV1 (2026-09-10): mandatory. Checked LAST so a customer who has typed
+  // nothing yet is told about the quantity first rather than being sent to
+  // find their camera before they have said what they are sending.
+  if (item.photos.length === 0) {
+    return 'Add at least one photo of these batteries.'
   }
   return null
 }

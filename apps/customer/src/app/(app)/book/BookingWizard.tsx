@@ -3,10 +3,10 @@
 import { useMemo, useState, useTransition } from 'react'
 
 import type { BatteryCategory } from '@clbipp/database'
-import type { BookingLineItem, QuoteResult } from '@clbipp/core'
+import type { BookingLineItem } from '@clbipp/core'
 import { AppShell, Banner, Button, PagePadding } from '@clbipp/ui'
 
-import { quoteBooking, submitBooking } from './actions'
+import { submitBooking } from './actions'
 import { STEP_TITLES } from './copy'
 import { StepCategory } from './StepCategory'
 import { StepItems } from './StepItems'
@@ -28,10 +28,18 @@ import {
 // half-finished booking should not exist as a row, because every downstream
 // screen (dashboard, tracking, compliance) reads pickups unconditionally.
 //
-// The steps are category → lines → address/date → quote, in that order for a
-// reason: the quote engine is category-first (the customer is never asked for
-// chemistry), so the category has to be known before a line can be priced, and
-// the quote has to be last because it depends on every line.
+// The steps are category → lines → address/date → review.
+//
+// 🔴 STEP 4 SHOWS NO PRICE (FV1 · FD2, 2026-09-10). It used to call
+// `quoteBooking` on arrival and render an indicative figure. The company's
+// presentation feedback removed it: a customer who has been shown ₹X before
+// anyone has seen the batteries anchors on ₹X, and the real number — set after
+// the agent has weighed, tested and inspected them — then reads as a cut.
+//
+// The estimate is still COMPUTED, server-side in `submitBooking`, and still
+// stored on `Pickup.indicativeQuotePaise` for the operations team to triage
+// against. It simply never reaches this screen. Don't wire a price back in
+// here without checking that decision has changed.
 
 const TOTAL_STEPS = 4
 
@@ -67,8 +75,6 @@ export function BookingWizard({
   const [preferredDate, setPreferredDate] = useState('')
   const [notes, setNotes] = useState('')
 
-  const [quote, setQuote] = useState<QuoteResult | null>(null)
-  const [quoteError, setQuoteError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -116,24 +122,7 @@ export function BookingWizard({
 
   function goNext() {
     if (stepError) return
-    const next = step + 1
-    setStep(next)
-    // Step 4 is the quote screen — fetch it on arrival rather than on every
-    // keystroke in step 2, so a basket is priced once when it's final.
-    if (next === TOTAL_STEPS) void loadQuote()
-  }
-
-  async function loadQuote() {
-    if (!payload) return
-    setQuote(null)
-    setQuoteError(null)
-
-    const result = await quoteBooking(payload)
-    if (result.ok) {
-      setQuote(result.quote)
-    } else {
-      setQuoteError(result.error)
-    }
+    setStep(step + 1)
   }
 
   function handleSubmit() {
@@ -201,9 +190,6 @@ export function BookingWizard({
             addressId={addressId}
             preferredDate={preferredDate}
             notes={notes}
-            quote={quote}
-            quoteError={quoteError}
-            onRetryQuote={() => void loadQuote()}
           />
         )}
 

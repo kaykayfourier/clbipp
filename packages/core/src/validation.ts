@@ -139,7 +139,22 @@ export const bookingLineItemSchema = z.object({
     // The quote engine falls back to a typical unit weight and flags the line.
     weightKg: z.number().positive("Weight must be greater than zero").max(100000).nullable(),
     condition: batteryConditionSchema,
-    photoUrls: z.array(storagePathSchema).max(6, "Up to 6 photos per line").default([]),
+    // 🔴 AT LEAST ONE PHOTO PER LINE (FV1 · FD1, 2026-09-10). The company's
+    // presentation feedback makes customer photos mandatory so that operations
+    // can see quantity, size and visible damage BEFORE dispatching an agent.
+    //
+    // Enforced here rather than in the wizard because the form is not the
+    // boundary — same posture as AD7 and the engine-config validator. The
+    // wizard's `itemError()` mirrors this rule for the inline message; if the
+    // two ever disagree, THIS one is right.
+    //
+    // Per LINE, not per request: a request can carry a line of 3 lithium packs
+    // and a line of 40 lead-acid units, and one photo of the second says
+    // nothing about the first.
+    photoUrls: z
+        .array(storagePathSchema)
+        .min(1, "Add at least one photo of these batteries")
+        .max(6, "Up to 6 photos per line"),
 });
 
 export const bookingSubmissionSchema = z.object({

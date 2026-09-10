@@ -14,6 +14,10 @@ import {
 // happy path the wizard already enforces in its own UI.
 
 const ADDRESS_ID = "3f1c9d2e-5a4b-4c8d-9e0f-1a2b3c4d5e6f";
+// A booking line must carry at least one photo since FV1, so every fixture
+// below needs one — otherwise the tests that check quantity and weight would
+// start failing for the wrong reason.
+const PHOTO = "abc-123/bookings/1754-x9/img_0001.jpg";
 
 function submission(overrides: Record<string, unknown> = {}) {
   return {
@@ -25,7 +29,7 @@ function submission(overrides: Record<string, unknown> = {}) {
         quantity: 14,
         weightKg: 196,
         condition: "healthy",
-        photoUrls: [],
+        photoUrls: [PHOTO],
       },
     ],
     preferredDate: "2026-08-20",
@@ -41,7 +45,7 @@ describe("bookingLineItemSchema", () => {
       quantity: 10,
       weightKg: 6,
       condition: "dead",
-      photoUrls: [],
+      photoUrls: [PHOTO],
     });
 
     expect(parsed.weightKg).toBe(6);
@@ -53,10 +57,10 @@ describe("bookingLineItemSchema", () => {
       quantity: 10,
       weightKg: null,
       condition: "healthy",
+      photoUrls: [PHOTO],
     });
 
     expect(parsed.weightKg).toBeNull();
-    expect(parsed.photoUrls).toEqual([]);
   });
 
   it("rejects a zero or fractional quantity", () => {
@@ -66,6 +70,7 @@ describe("bookingLineItemSchema", () => {
         quantity: 0,
         weightKg: null,
         condition: "healthy",
+        photoUrls: [PHOTO],
       }).success,
     ).toBe(false);
 
@@ -75,6 +80,7 @@ describe("bookingLineItemSchema", () => {
         quantity: 2.5,
         weightKg: null,
         condition: "healthy",
+        photoUrls: [PHOTO],
       }).success,
     ).toBe(false);
   });
@@ -86,8 +92,49 @@ describe("bookingLineItemSchema", () => {
         quantity: 1,
         weightKg: 0,
         condition: "healthy",
+        photoUrls: [PHOTO],
       }).success,
     ).toBe(false);
+  });
+
+  // ── FV1: photos are mandatory ─────────────────────────────────────────────
+  // The company's presentation feedback (2026-09-10) makes at least one
+  // customer photo per line a hard requirement, so that ops can see the load
+  // before dispatching an agent. Enforced in the SCHEMA, not the wizard.
+
+  it("rejects a line with no photos", () => {
+    expect(
+      bookingLineItemSchema.safeParse({
+        category: "portable",
+        quantity: 1,
+        weightKg: null,
+        condition: "healthy",
+        photoUrls: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a line that omits photoUrls entirely — there is no default any more", () => {
+    expect(
+      bookingLineItemSchema.safeParse({
+        category: "portable",
+        quantity: 1,
+        weightKg: null,
+        condition: "healthy",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts a line carrying one photo", () => {
+    const parsed = bookingLineItemSchema.parse({
+      category: "portable",
+      quantity: 1,
+      weightKg: null,
+      condition: "healthy",
+      photoUrls: [PHOTO],
+    });
+
+    expect(parsed.photoUrls).toEqual([PHOTO]);
   });
 
   it("accepts a storage object path but rejects traversal", () => {
@@ -133,8 +180,21 @@ describe("bookingSubmissionSchema", () => {
             quantity: 1,
             weightKg: 250,
             condition: "healthy",
-            photoUrls: [],
+            photoUrls: [PHOTO],
           },
+        ],
+      }),
+    );
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a basket where only one line forgot its photo", () => {
+    const result = bookingSubmissionSchema.safeParse(
+      submission({
+        items: [
+          { category: "automotive", quantity: 2, weightKg: 30, condition: "healthy", photoUrls: [PHOTO] },
+          { category: "automotive", quantity: 1, weightKg: 14, condition: "dead", photoUrls: [] },
         ],
       }),
     );

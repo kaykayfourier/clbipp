@@ -1,21 +1,21 @@
 'use client'
 
 import type { BatteryCategory } from '@clbipp/database'
-import type { QuoteResult } from '@clbipp/core'
-import { Banner, Button, Card } from '@clbipp/ui'
+import { Card } from '@clbipp/ui'
 
-import { CATEGORY_LABELS, CONDITION_LABELS, formatPaise } from './copy'
+import { CATEGORY_LABELS } from './copy'
 import { parseQuantity, parseWeight, type AddressOption, type DraftItem } from './types'
 
-// ─── Step 4 — review + indicative quote ──────────────────────────────────────
-// The quote comes from `getQuote` through the `quoteBooking` server action —
-// the pricing rates live in the database, so the browser can't price a basket.
-// The number shown here is INDICATIVE and is recomputed server-side on submit;
-// what the client displays never becomes what the row stores.
+// ─── Step 4 — review ─────────────────────────────────────────────────────────
+// 🔴 NO PRICE ON THIS SCREEN (FV1 · FD2, 2026-09-10). Until the company's
+// presentation feedback this step rendered an indicative quote — a total, a
+// per-line price and a qualitative note each. All of it is gone, deliberately:
+// the customer's first number is now the offer the agent makes after physically
+// inspecting the batteries.
 //
-// What is shown: a price and a qualitative reason per line. What is not: a
-// recovery rate (never shown to a vendor, anywhere) or a rupee material
-// breakdown. `QuoteLine.note` is qualitative by design for exactly this.
+// The vendor-visibility rules this screen used to observe still apply
+// everywhere else, and are unchanged: no recovery rate %, ever, and no rupee
+// material breakdown on any offer or tracking screen.
 
 export function StepReview({
   category,
@@ -24,9 +24,6 @@ export function StepReview({
   addressId,
   preferredDate,
   notes,
-  quote,
-  quoteError,
-  onRetryQuote,
 }: {
   category: BatteryCategory
   items: DraftItem[]
@@ -34,9 +31,6 @@ export function StepReview({
   addressId: string
   preferredDate: string
   notes: string
-  quote: QuoteResult | null
-  quoteError: string | null
-  onRetryQuote: () => void
 }) {
   const address = addresses.find((a) => a.id === addressId)
   const totalUnits = items.reduce((sum, item) => sum + (parseQuantity(item.quantity) ?? 0), 0)
@@ -46,64 +40,21 @@ export function StepReview({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── The quote ─────────────────────────────────────────────────────── */}
-      <Card variant="elevated" className="flex flex-col gap-3">
+      {/* ── What happens to the price ──────────────────────────────────────
+          Replaces the indicative quote. No number and no range: a range is an
+          anchor too, and the whole point of FD2 is that the customer's first
+          figure comes after someone has seen the batteries. */}
+      <Card variant="elevated" className="flex flex-col gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-widest text-text-secondary">
-          Indicative quote
+          Your price
         </span>
-
-        {quote === null && quoteError === null && (
-          <p className="text-sm text-text-secondary">Pricing your pickup…</p>
-        )}
-
-        {quoteError !== null && (
-          <div className="flex flex-col gap-2">
-            <Banner variant="warning">
-              {quoteError} You can still submit — the agent will quote on site.
-            </Banner>
-            <Button variant="secondary" size="sm" onClick={onRetryQuote}>
-              Try again
-            </Button>
-          </div>
-        )}
-
-        {quote !== null && (
-          <>
-            <p className="font-serif text-4xl font-semibold text-text-primary">
-              {formatPaise(quote.totalPaise)}
-            </p>
-
-            <div className="flex flex-col gap-2">
-              {quote.lines.map((line) => {
-                const item = items[line.index]
-                if (!item) return null
-                const kg = parseWeight(item.weightKg)
-                return (
-                  <div key={line.index} className="flex flex-col gap-0.5 border-t border-border pt-2">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-sm text-text-primary">
-                        {parseQuantity(item.quantity) ?? 0} × {CATEGORY_LABELS[category]}
-                        <span className="text-text-secondary">
-                          {' · '}
-                          {CONDITION_LABELS[item.condition]}
-                          {kg !== null ? ` · ${kg} kg` : ''}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-sm font-medium text-text-primary">
-                        {formatPaise(line.linePaise)}
-                      </span>
-                    </div>
-                    {line.note && (
-                      <p className="text-xs leading-relaxed text-text-secondary">{line.note}</p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            <p className="text-xs leading-relaxed text-text-secondary">{quote.disclaimer}</p>
-          </>
-        )}
+        <p className="text-sm leading-relaxed text-text-primary">
+          We&apos;ll give you a price after our agent has inspected the batteries in person.
+        </p>
+        <p className="text-xs leading-relaxed text-text-secondary">
+          They&apos;ll weigh each line on a digital scale and check its condition, then make you an
+          offer on the spot. Nothing is collected until you accept it.
+        </p>
       </Card>
 
       {/* ── What we're collecting ─────────────────────────────────────────── */}
