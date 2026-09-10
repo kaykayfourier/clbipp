@@ -230,6 +230,25 @@ enum RecoveryPathway {
   dispose
 }
 
+// How the agent arrived at `BatteryItem.confirmedWeightKg` (FV2 · FD3,
+// 2026-09-10). The company's presentation feedback asks for a portable digital
+// scale and for the app to distinguish a MEASURED weight from an estimated one.
+//
+// 🔴 The number alone was never enough. `confirmedWeightKg` has always been the
+// figure the engine prices against, and until this column existed a reading off
+// a calibrated scale and a guess made across a warehouse floor were the same
+// value in the same field, indistinguishable afterwards — including in a price
+// dispute, which is exactly when someone asks.
+//
+// `estimated` is a legitimate answer, not a failure state: an agent facing a
+// 400 kg pallet with a 50 kg scale has no honest alternative. It is recorded,
+// flagged to the admin, and never silently blocked (open question E2).
+enum WeightMethod {
+  digital_scale
+  manufacturer_label
+  estimated
+}
+
 enum UserRole {
   customer
   agent
@@ -464,6 +483,33 @@ model Pickup {
   // DERIVED from this column, not a tenth lifecycle stage (D5).
   custodyBatchId String? @map("custody_batch_id")
 
+  // ── Inspection and collection are two events, not one (FV3 · FD0) ──────────
+  // The company's presentation feedback separates them: an agent may inspect
+  // today and collect next Tuesday, because of vehicle capacity, safety, or
+  // sheer quantity.
+  //
+  // 🔴 THIS ADDS NO LIFECYCLE STAGE, and that was a deliberate decision (FD0,
+  // 2026-09-10). The nine stages are asserted in four independent places and
+  // rendered by one shared `buildStages`; "inspected, accepted, awaiting a
+  // scheduled collection" is DERIVED, exactly as "pending drop-off" is derived
+  // from `custodyBatchId` above.
+  //
+  // ⚠ THE CONSEQUENCE, stated where someone will hit it: `offered` now carries
+  // THREE sub-states, not two.
+  //     acceptedAt null                             → awaiting the vendor
+  //     acceptedAt set, collectionScheduledAt null  → accepted, collect now
+  //     acceptedAt set, collectionScheduledAt set   → accepted, collect later
+  // Any screen switching on `status === 'offered'` must read BOTH timestamps.
+  // Reading only the status shows a vendor an Accept button for an offer they
+  // accepted a week ago; reading only `acceptedAt` sends an agent to a job that
+  // is not theirs today.
+  //
+  // ⚠ Added in the FV2 migration though FV3 writes them — one migration against
+  // the shared project, not two.
+  inspectedAt           DateTime? @map("inspected_at")
+  collectionScheduledAt DateTime? @map("collection_scheduled_at")
+  collectedAt           DateTime? @map("collected_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -508,6 +554,30 @@ model BatteryItem {
   agentPhotoUrls     String[]          @map("agent_photo_urls")
   recordedBy         String?           @map("recorded_by") @db.Uuid
   recordedAt         DateTime?         @map("recorded_at")
+
+  // ── How that weight was obtained (FV2 · FD3) ──
+  // Both belong to the AGENT's half and neither touches `weightKg`, the
+  // customer's declaration. The two are allowed to disagree — that disagreement
+  // is a finding surfaced to the admin (`weightDivergence` in
+  // @clbipp/core/intake), never something reconciled away.
+  //
+  // `weightPhotoUrl` is a storage OBJECT PATH, not a URL — every bucket is
+  // private and reads go through createSignedUrl, same as every other file
+  // column in this schema. It is the battery on the scale with the reading
+  // legible: the one thing that makes a recorded number checkable by someone
+  // who was not standing there.
+  weightMethod   WeightMethod? @map("weight_method")
+  weightPhotoUrl String?       @map("weight_photo_url")
+
+  // ── Who chose this item's pathway, and why (FV5) ──
+  // `pathway` is written by the engine today. The feedback's Second Life vs
+  // Recycling split makes it a decision a person can take, and a decision with
+  // no author is not auditable. Null means the engine chose it unattended.
+  //
+  // ⚠ Added in the FV2 migration though FV5 is what uses them, so the shared
+  // Supabase project is migrated ONCE rather than three times in a fortnight.
+  pathwaySetBy  String? @map("pathway_set_by") @db.Uuid
+  pathwayReason String? @map("pathway_reason")
 
   // ── Damage rubric, scored by the agent on site (D1 — the engine runs PER
   // ITEM, so the rubric lives here and not on the Pickup header). The three

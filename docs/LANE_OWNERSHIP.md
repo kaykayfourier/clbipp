@@ -1086,3 +1086,28 @@ and stand as written.
 > other owner's OK, (3) log it here and update the ownership map.
 >
 > Replaced on 2026-08-20 because step 2 was producing waiting, not quality.
+
+## 2026-09-10 — FV1 + FV2 (post-presentation feedback)
+
+**Done by Aamir** (with Claude), covering **B's lane** for the schema and
+`packages/core` work and **C's lane** for the customer booking screens. Logged
+here per the do-it-and-note-it rule rather than waiting on either owner — the
+feedback's five P0 items are what the pilot depends on.
+
+| Area | Nominal owner | Actually did it |
+|---|---|---|
+| `packages/core` — `validation.ts`, `intake.ts` + tests | B | Aamir |
+| `packages/database` — schema, `feedback_v2` migration, seed, `verify-seed` | B | Aamir |
+| `apps/customer` — booking wizard, `/submitted` | C | Aamir |
+| `apps/agent` — `ItemConfirmForm`, `confirmItem` | (agent app, built) | Aamir |
+| `apps/admin` — `/dispatch/[id]` label, `/pickups/[id]` weight display | A / C | Aamir |
+| `scripts/smoke.mjs` | A | Aamir |
+
+🔴 **B should know about two things before touching the database:**
+1. The `feedback_v2` migration is applied. It carries columns for FV3 and FV5
+   that **nothing writes yet** — that is deliberate, one migration not three.
+2. `prisma migrate deploy` has never worked on this project (no
+   `_prisma_migrations` table → `P3005`). The corrected procedure is in
+   CLAUDE.md. On 2026-09-10 a `migrate diff` run with the production URL as the
+   **shadow** database wiped the shared project; it was fully recovered the same
+   session. Full write-up in `docs/PLAN_FEEDBACK_V2.md` §5.

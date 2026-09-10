@@ -150,6 +150,34 @@ async function main() {
     ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin"].includes(a.action)),
     `${audits.length} rows`)
 
+  // 12 — FV2/FV1 evidence rules, made a fixture rather than a hope.
+  //
+  // 🔴 These two are the seed's half of rules the SCREENS enforce. A screen can
+  // demand a photo and a weight method all it likes; if the demo data disagrees
+  // the first thing anyone sees is a contradiction. `smoke` proves a route
+  // renders and `test` proves pure logic — neither notices this.
+  const confirmed = await prisma.batteryItem.findMany({
+    where: { recordedAt: { not: null } },
+    select: { id: true, weightMethod: true, confirmedWeightKg: true },
+  })
+  check(
+    "FV2: every agent-confirmed item records HOW it was weighed",
+    confirmed.length > 0 && confirmed.every((i) => i.weightMethod !== null),
+    `${confirmed.filter((i) => i.weightMethod === null).length} of ${confirmed.length} missing a method`,
+  )
+  check(
+    "FV2: more than one weight method in the seed (a one-value column reads as broken)",
+    new Set(confirmed.map((i) => i.weightMethod)).size > 1,
+    [...new Set(confirmed.map((i) => i.weightMethod))].join(", "),
+  )
+
+  const noPhoto = await prisma.batteryItem.count({ where: { photoUrls: { isEmpty: true } } })
+  check(
+    "FV1: every seeded battery line carries a customer photo",
+    noPhoto === 0,
+    `${noPhoto} lines with no photo`,
+  )
+
   console.log("")
   console.log(fails.length ? `🔴 ${fails.length} FAILED: ${fails.join("; ")}` : "✅ all fixture checks passed")
   await prisma.$disconnect()

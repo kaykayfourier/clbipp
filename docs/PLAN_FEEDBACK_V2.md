@@ -18,11 +18,11 @@ already warns about — quote the decision with its set (**FD**, not AD or D).
 
 | # | Feedback change | Pri | State today | Verdict |
 |---|---|---|---|---|
-| 1 | Mandatory customer battery photos | P0 | Optional (`StepItems`, max 6/line) | Small — form + schema gate |
-| 2 | Remove preliminary estimated offer | P0 | Shown on `/book` step 4 and `/submitted` | Small — remove two renders, keep the column |
-| 3 | Mandatory agent inspection photos | P0 | Optional (`agentPhotoUrls`, max 8/line) | Small — action + form gate |
+| 1 | Mandatory customer battery photos | P0 | ✅ **BUILT (FV1)** — ≥1 per line, schema-enforced | done |
+| 2 | Remove preliminary estimated offer | P0 | ✅ **BUILT (FV1)** — gone from both customer surfaces | done |
+| 3 | Mandatory agent inspection photos | P0 | ✅ **BUILT (FV2)** — ≥1 per line, action-enforced | done |
 | 4 | Separate inspection from collection | P0 | **Not modelled.** One visit, `offered → collected` | **Largest change in the set** |
-| 5 | Verified battery weight | P0 | `confirmedWeightKg` exists and prices; **no method, no evidence** | Migration + form |
+| 5 | Verified battery weight | P0 | ✅ **BUILT (FV2)** — `weightMethod` + divergence flag | done |
 | 6 | Agent live-job count at assignment | P1 | ✅ **Already built** — `lib/job-load.ts`, shown on `/dispatch/[id]` | Confirm + surface on the board |
 | 7 | Dispatch filtering and sorting | P1 | Board is hardcoded `status: 'requested'` | Medium — `DataTable` + `FilterChips` already exist |
 | 8 | Second Life / Recycling pathway | P1 | Engine sets 4 pathways; **nothing routes on them** | Partial — routing is BLOCKED on H2/H3 |
@@ -95,7 +95,7 @@ standing rule.
 Ordered so that the one migration lands early and once. Each batch ends green on
 `npm run build` plus the relevant `npm run smoke`, per `docs/BEFORE_YOU_PUSH.md`.
 
-### FV1 — Customer evidence + estimate removal · P0-1, P0-2 · no migration
+### FV1 — Customer evidence + estimate removal · P0-1, P0-2 · ✅ BUILT 2026-09-10
 
 Files:
 - `packages/core/src/validation.ts` — `photoUrls` gains `.min(1)`; message
@@ -118,7 +118,7 @@ Files:
 Verify: `npm run test` · `npm run build` · `npm run smoke` ·
 `npm run smoke -- --app=admin`.
 
-### FV2 — Agent evidence + verified weight · P0-3, P0-5 · **one migration**
+### FV2 — Agent evidence + verified weight · P0-3, P0-5 · ✅ BUILT 2026-09-10
 
 🔴 One migration for the whole set, hand-annotated, deployed with
 `prisma migrate deploy` against the shared project — never `migrate dev`.
@@ -255,3 +255,71 @@ actual executors in `docs/LANE_OWNERSHIP.md` rather than waiting on a lane.
   before it runs. `reset-demo` restores rows but not grants.
 - **R4 — Price movement.** FV1–FV4 are price-neutral by construction; FV5 and
   FV6 are not, and must say so in their commit messages.
+
+
+---
+
+## §5 As built — FV1 and FV2 (2026-09-10, both by Aamir + Claude)
+
+### FV1 — shipped
+- `bookingLineItemSchema` requires ≥1 photo per line. `.default([])` was
+  **removed**, so a payload that omits the field fails too, not just one sending
+  an empty array.
+- `itemError()` mirrors it for the inline message and says in a comment which of
+  the two is authoritative. Checked LAST, after quantity and weight.
+- The indicative quote is gone from `/book` step 4 and `/submitted`, and
+  `quoteBooking` was **deleted** rather than left as a dead export.
+- Still computed in `submitBooking`, still stored, relabelled **"Internal
+  estimate · Not shown to the vendor"** on `/dispatch/[id]`.
+- `/submitted` was **never in the smoke route list** — which is how it kept a
+  price nobody re-checked. It is in now, with both halves asserted.
+
+### FV2 — shipped
+- Migration `20260910140859_feedback_v2` applied to the shared project. Seven
+  nullable columns + the `WeightMethod` type. **No stage, no price, no rewrite.**
+- `parseIntakeSubmission` now requires `weightMethod`; `weightDivergence()`
+  owns the declared-vs-measured threshold (20% or 5 kg, whichever is LARGER —
+  `max`, not `min`, so a 400 kg pallet is governed by the percentage and a
+  0.4 kg laptop pack is not flagged for a 0.1 kg gap).
+- `ItemConfirmForm` gained the method radio group and a **live** divergence
+  prompt, worded as "worth a second look" — the two halves are allowed to
+  disagree, and the disagreement is the finding.
+- 🔴 **Agent photos are required on EVERY line now, not just a damaged one**,
+  and `confirmItem` enforces it. The old behaviour ("save now, add it later")
+  is gone. `requiresPhotoEvidence` survives, but only to decide how sharply the
+  prompt is worded.
+- `/pickups/[id]` shows the method and the divergence strip.
+- Seed writes a method on every confirmed item — **two distinct values**, so a
+  screen that only ever renders "Digital scale" is visibly wrong rather than
+  plausibly right. Three new `verify-seed` checks pin all of it.
+
+### Verification (both batches)
+`npm run test` **317** (was 304) · `npm run build` 4/4 with `ƒ Proxy` ×3 ·
+`npm run lint` 0 errors · `npm run verify-seed` **27/27** ·
+smoke **48 + 30 + 24 = 102 routes**.
+
+### 🔴 Incident — the shared database was wiped, and recovered
+
+Generating the migration, `prisma migrate diff` was run with the **production
+`DIRECT_URL` passed as `--shadow-database-url`**. The shadow database is scratch
+space Prisma **drops and recreates**. It wiped the shared project: every row,
+all 19 RLS policies, all 124 grants. Structure survived (it had just been
+replayed), as did `auth.users` and Storage.
+
+Recovered in full: `reset-demo`, then `grants.sql`, `policies.sql`,
+`storage-policies.sql`, `realtime.sql` re-applied, then verified — 14 pickups,
+28 items, 19 policies, 124 grants, 102 smoke routes.
+
+**Rules taken from it:**
+1. 🔴 **Never pass a real database URL as `--shadow-database-url`.** Use a
+   throwaway local Postgres, or `--from-migrations`/`--to-migrations`, which
+   needs no shadow at all.
+2. **`migrate deploy` does not work on this project** and never did — there is
+   no `_prisma_migrations` table, so it fails `P3005`. Every migration here has
+   in fact been applied with `prisma db execute --file`. CLAUDE.md said to use
+   `deploy`; that instruction was wrong and is corrected.
+3. **A dev server can serve a stale build for days.** A `next dev` from 29
+   August was still on :3000 and a smoke run tested *it*, not the working tree.
+   Check `lsof -ti:3000` before trusting a green run.
+4. **A long-running dev server caches the Prisma client.** After a schema
+   change and `prisma generate`, restart it or every query 500s.

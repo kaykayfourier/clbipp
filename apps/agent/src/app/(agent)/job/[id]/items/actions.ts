@@ -33,6 +33,11 @@ import { parseIntakeSubmission, photoPathsBelongTo } from '@clbipp/core/intake'
 // moves to `offered` when Batch 5a presents the offer. The nine stages are
 // locked.
 
+// ⚠ FV2 (2026-09-10) added two requirements to this action: at least one agent
+// photo per line, and a `weightMethod` alongside the weight. Both are enforced
+// below rather than in the form, and both are why an older client that posts
+// without them now fails cleanly instead of writing a half-record.
+
 /** Belt-and-braces cap on how many photos one line can carry. */
 const MAX_PHOTOS_PER_ITEM = 8
 
@@ -91,6 +96,9 @@ export async function confirmItem(formData: FormData) {
     chemistry: formData.get('chemistry') as string | null,
     weightKg: formData.get('weightKg') as string | null,
     condition: formData.get('condition') as string | null,
+    // FV2 · FD3. Validated in @clbipp/core against a closed set, so the form's
+    // radio group and this write cannot drift apart.
+    weightMethod: formData.get('weightMethod') as string | null,
   })
 
   if (parseError !== null) return fail(parseError)
@@ -114,6 +122,20 @@ export async function confirmItem(formData: FormData) {
     return fail(`Up to ${MAX_PHOTOS_PER_ITEM} photos per line.`)
   }
 
+  // 🔴 FV2 (2026-09-10) — AT LEAST ONE AGENT PHOTO, ALWAYS.
+  //
+  // The company's presentation feedback makes inspection photos mandatory:
+  // customer images are what was DECLARED before the visit, agent images are
+  // what was VERIFIED during it, and only the second kind supports a price
+  // under challenge. Previously the form asked for one on a damaged line and
+  // let the agent save anyway.
+  //
+  // Enforced HERE, not only in the form (FD1 — same posture as the safety gate
+  // and AD7). The screen's warning is an explanation; this is the rule.
+  if (photoPaths.length === 0) {
+    return fail('Add at least one photo of this line before saving it.')
+  }
+
   // Re-confirming REPLACES the photo set rather than appending to it, so the
   // stored evidence always matches what the agent can see on the screen they
   // just submitted. Appending would make a corrected condition ("actually it's
@@ -128,6 +150,8 @@ export async function confirmItem(formData: FormData) {
       chemistry: value.chemistry,
       confirmed_weight_kg: value.confirmedWeightKg,
       confirmed_condition: value.confirmedCondition,
+      // FV2 · FD3: how that weight was obtained travels with the number itself.
+      weight_method: value.weightMethod,
       agent_photo_urls: photoPaths,
       recorded_by: user.id,
       recorded_at: new Date().toISOString(),

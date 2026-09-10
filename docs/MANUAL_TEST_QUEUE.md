@@ -594,3 +594,35 @@ verified. What no script here drove is the **button → server-action round trip
 - **`npm run verify-seed` after any reseed** (added Admin Batch 1). 24 assertions
   over the §3 fixtures, read-only, non-zero exit. It catches "the row the next
   batch is built against quietly stopped existing", which no other check can.
+
+## FV1 + FV2 (2026-09-10) — post-presentation feedback
+
+Verified programmatically: schema, both actions, 317 unit tests, 27 fixture
+checks, 102 smoke routes. What a script still cannot check:
+
+**FV1 — customer booking**
+- [ ] Take a photo on a real phone at `/book` step 2 and confirm the upload
+      lands and the thumbnail renders. Smoke never POSTs a file.
+- [ ] Confirm **Continue is blocked** on a line with no photo, and that the
+      message names the right line when there are three.
+- [ ] Walk the whole wizard and confirm **no ₹ figure appears anywhere** before
+      submitting — the point of the change, and the thing a reviewer skims past.
+- [ ] `/book?from=<id>` (repeat booking): the copied draft must still demand
+      fresh photos. Old photos are deliberately not carried over.
+
+**FV2 — agent inspection**
+- [ ] Save a line with no photo and confirm the server refuses it — the form
+      warns, but the action is the boundary and only a real POST proves it.
+- [ ] Pick each of the three weight methods and confirm the stored value is
+      what shows on `/pickups/[id]` in the admin console.
+- [ ] Type a weight ~30% off the customer's declaration and confirm the
+      divergence prompt appears **as you type**, and that it does NOT block
+      saving. A disagreement is a finding, not an error.
+- [ ] Confirm a light line (say 0.4 kg declared, 0.5 kg measured) does **not**
+      raise the prompt — the 5 kg floor exists to stop exactly that noise.
+- [ ] `estimated` must save cleanly. It is a legitimate answer.
+
+**Cross-app**
+- [ ] Book with photos as the vendor → dispatch → inspect as the agent with a
+      method and photos → confirm the admin's `/pickups/[id]` shows both halves
+      side by side and they disagree where they should.

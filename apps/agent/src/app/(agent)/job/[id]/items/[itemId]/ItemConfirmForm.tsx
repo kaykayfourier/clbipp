@@ -8,8 +8,13 @@ import {
   CONDITION_OPTIONS,
   isLithium,
   requiresPhotoEvidence,
+  weightDivergence,
+  WEIGHT_METHOD_HINTS,
+  WEIGHT_METHOD_LABELS,
+  WEIGHT_METHOD_VALUES,
   type ChemistryValue,
   type ConditionValue,
+  type WeightMethodValue,
 } from '@clbipp/core/intake'
 import { Banner, Button, Card, CardContent, SectionLabel } from '@clbipp/ui'
 
@@ -90,9 +95,27 @@ export function ItemConfirmForm({
   const [uploading, setUploading] = useState(false)
   const [photoErrors, setPhotoErrors] = useState<string[]>([])
 
+  // FV2 · FD3. Uncontrolled input read into state purely so the divergence
+  // warning can update as the agent types; `name="weightKg"` still carries the
+  // value to the action, so this is display state, not the source of truth.
+  const [weightKg, setWeightKg] = useState('')
+  const [weightMethod, setWeightMethod] = useState<WeightMethodValue | null>(null)
+
+  const measured = weightKg.trim() === '' ? null : Number(weightKg)
+  const divergence = weightDivergence(
+    declaredWeightKg,
+    measured !== null && Number.isFinite(measured) ? measured : null,
+  )
+
   const totalPhotos = keptPaths.length + added.length
-  const photoRequired = requiresPhotoEvidence(condition)
-  const photoMissing = photoRequired && totalPhotos === 0
+  // 🔴 FV2 (2026-09-10): EVERY line needs a photo now, not just a damaged one.
+  // The company's presentation feedback makes agent inspection photos mandatory
+  // — they are the verified counterpart to the customer's declaration and the
+  // evidence a price dispute turns on. `requiresPhotoEvidence` still decides
+  // how STRONGLY it is worded, because a leaking pack deserves a sharper
+  // prompt than a healthy one.
+  const photoMissing = totalPhotos === 0
+  const photoUrgent = requiresPhotoEvidence(condition)
 
   async function handleFiles(fileList: FileList | null) {
     const picked = Array.from(fileList ?? [])
@@ -234,6 +257,8 @@ export function ItemConfirmForm({
               min="0"
               inputMode="decimal"
               placeholder="0.00"
+              value={weightKg}
+              onChange={(e) => setWeightKg(e.target.value)}
               className="h-12 w-full rounded-[10px] border border-border bg-background px-3 text-base text-text-primary"
             />
             <p className="text-[11px] leading-relaxed text-text-secondary">
@@ -241,8 +266,66 @@ export function ItemConfirmForm({
                 ? 'The customer gave no weight for this line.'
                 : `Customer declared ${declaredWeightKg.toFixed(1)} kg. A difference is fine — record what the scale says.`}
             </p>
+
+            {/* 🔴 FV2 · FD3. Shown LIVE, as the agent types, and worded as a
+                prompt to double-check rather than an error — the two halves of
+                a BatteryItem are allowed to disagree, and a real disagreement
+                is a finding worth keeping, not a mistake to correct away. */}
+            {divergence?.material && (
+              <p className="rounded-[8px] bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+                That is {Math.abs(divergence.deltaKg).toFixed(1)} kg{' '}
+                {divergence.deltaKg > 0 ? 'more' : 'less'} than the customer declared (
+                {(Math.abs(divergence.fraction) * 100).toFixed(0)}%). Worth a second look at the
+                scale — then record what it says either way.
+              </p>
+            )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* ── How it was weighed ────────────────────────────────────────────
+          🔴 FV2 · FD3. `confirmedWeightKg` is what the engine prices against,
+          and until this existed a calibrated reading and a guess were the same
+          value in the same column — indistinguishable afterwards, including in
+          the price dispute that is the one moment anyone asks.
+
+          `estimated` is a legitimate answer, not a failure state: an agent with
+          a 50 kg scale in front of a 400 kg pallet has no honest alternative.
+          It is recorded and flagged, never blocked (open question E2). */}
+      <div className="flex flex-col gap-2">
+        <SectionLabel>How you got that weight</SectionLabel>
+        <Card variant="elevated">
+          <CardContent className="flex flex-col px-0 py-0">
+            {WEIGHT_METHOD_VALUES.map((value) => (
+              <label
+                key={value}
+                htmlFor={`wm-${value}`}
+                className="flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0"
+              >
+                <input
+                  type="radio"
+                  id={`wm-${value}`}
+                  name="weightMethod"
+                  value={value}
+                  checked={weightMethod === value}
+                  onChange={() => setWeightMethod(value)}
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-primary-green"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-text-primary">
+                    {WEIGHT_METHOD_LABELS[value]}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-relaxed text-text-secondary">
+                    {WEIGHT_METHOD_HINTS[value]}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </CardContent>
+        </Card>
+        {weightMethod === null && (
+          <p className="text-[11px] text-error-text">Pick how you got the weight.</p>
+        )}
       </div>
 
       {/* ── Condition ─────────────────────────────────────────────────────
@@ -294,17 +377,20 @@ export function ItemConfirmForm({
           now. A healthy line is not worth blocking a job over. */}
       <div className="flex flex-col gap-2">
         <SectionLabel>
-          Photos {photoRequired ? '— required for this condition' : '— optional'}
+          Photos — required
         </SectionLabel>
 
         {photoErrors.length > 0 && (
           <Banner variant="error">{photoErrors.join(' ')}</Banner>
         )}
 
+        {/* 🔴 FV2: no longer "save now, add it later". At least one photo per
+            line, enforced in `confirmItem` — this banner only explains why. */}
         {photoMissing && (
-          <Banner variant="warning">
-            A {condition} line needs at least one photo before it counts as
-            confirmed. You can save now and add it later — the line stays open.
+          <Banner variant={photoUrgent ? 'error' : 'warning'}>
+            {photoUrgent
+              ? `A ${condition} line cannot be saved without a photo. Show the damage, leakage or terminals — this is the evidence the price rests on.`
+              : 'At least one photo is needed to save this line. An overall shot of the battery or lot is enough; add the label and any damage if you can see them.'}
           </Banner>
         )}
 

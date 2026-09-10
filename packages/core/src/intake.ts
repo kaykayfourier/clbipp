@@ -355,10 +355,39 @@ export function intakeTotals(items: readonly IntakeTotalsItemLike[]): IntakeTota
  */
 export const MAX_LINE_WEIGHT_KG = 10_000
 
+// ─── How the weight was obtained (FV2 · FD3, 2026-09-10) ─────────────────────
+// Mirrors `enum WeightMethod` in schema.prisma. Listed here rather than
+// imported from @clbipp/database so this module stays free of Prisma — it is
+// imported by client components, and a value import from the database package
+// would pull the generated client into the browser bundle.
+//
+// 🔴 If a value is added to the enum, add it here too; `isWeightMethod` is what
+// keeps the form's string a closed set.
+export const WEIGHT_METHOD_VALUES = ['digital_scale', 'manufacturer_label', 'estimated'] as const
+export type WeightMethodValue = (typeof WEIGHT_METHOD_VALUES)[number]
+
+export const WEIGHT_METHOD_LABELS: Record<WeightMethodValue, string> = {
+  digital_scale: 'Digital scale',
+  manufacturer_label: 'Manufacturer label',
+  estimated: 'Estimated — could not weigh',
+}
+
+/** Short line under each option, so the agent picks the honest one. */
+export const WEIGHT_METHOD_HINTS: Record<WeightMethodValue, string> = {
+  digital_scale: 'Weighed on the portable platform scale. Photograph the reading.',
+  manufacturer_label: 'Read off the pack label or datasheet, not weighed.',
+  estimated: 'Too heavy or awkward to weigh. Recorded as an estimate and flagged.',
+}
+
+export function isWeightMethod(value: unknown): value is WeightMethodValue {
+  return typeof value === 'string' && WEIGHT_METHOD_VALUES.includes(value as WeightMethodValue)
+}
+
 export type ParsedIntake = {
   chemistry: ChemistryValue
   confirmedWeightKg: number
   confirmedCondition: ConditionValue
+  weightMethod: WeightMethodValue
 }
 
 /**
@@ -376,6 +405,7 @@ export function parseIntakeSubmission(input: {
   chemistry: string | null
   weightKg: string | null
   condition: string | null
+  weightMethod: string | null
 }): { value: ParsedIntake; error: null } | { value: null; error: string } {
   const chemistry = input.chemistry ?? ''
   if (!CHEMISTRY_VALUES.includes(chemistry as ChemistryValue)) {
@@ -408,14 +438,60 @@ export function parseIntakeSubmission(input: {
   // Two decimals, matching `Decimal(8,2)` on the column. Rounded here rather
   // than left to Postgres so the value the agent is shown back is the value
   // stored.
+  // FV2: a weight with no provenance is what this batch exists to end. Checked
+  // AFTER the weight itself so a bad number is reported as a bad number.
+  if (!isWeightMethod(input.weightMethod)) {
+    return { value: null, error: 'Say how you got this weight.' }
+  }
+
   return {
     value: {
       chemistry: chemistry as ChemistryValue,
       confirmedWeightKg: Math.round(weight * 100) / 100,
       confirmedCondition: condition as ConditionValue,
+      weightMethod: input.weightMethod,
     },
     error: null,
   }
+}
+
+// ─── Declared vs measured (FV2 · FD3) ────────────────────────────────────────
+// The customer's `weightKg` and the agent's `confirmedWeightKg` are allowed to
+// disagree — that is the entire point of BatteryItem having two halves. This
+// says when a disagreement is big enough to be worth an admin's attention.
+//
+// 20% OR 5 kg, whichever is LARGER. The percentage alone would flag a 0.4 kg
+// laptop pack that came in at 0.5 kg — true, and noise. The absolute alone
+// would miss a 400 kg pallet arriving at 460 kg. Threshold pending the
+// company's answer to question E5.
+export const WEIGHT_DIVERGENCE_PCT = 0.2
+export const WEIGHT_DIVERGENCE_MIN_KG = 5
+
+export type WeightDivergence = {
+  deltaKg: number
+  /** Signed fraction: +0.2 means the measured weight came in 20% HIGH. */
+  fraction: number
+  material: boolean
+}
+
+/**
+ * Null when there is nothing to compare — an unweighed booking line is a
+ * supported answer, not a disagreement, and treating a missing declaration as a
+ * 100% divergence would flag every one of them.
+ */
+export function weightDivergence(
+  declaredKg: number | null | undefined,
+  measuredKg: number | null | undefined,
+): WeightDivergence | null {
+  if (declaredKg == null || measuredKg == null) return null
+  if (!Number.isFinite(declaredKg) || !Number.isFinite(measuredKg)) return null
+  if (declaredKg <= 0) return null
+
+  const deltaKg = Math.round((measuredKg - declaredKg) * 100) / 100
+  const fraction = deltaKg / declaredKg
+  const threshold = Math.max(declaredKg * WEIGHT_DIVERGENCE_PCT, WEIGHT_DIVERGENCE_MIN_KG)
+
+  return { deltaKg, fraction, material: Math.abs(deltaKg) >= threshold }
 }
 
 /**

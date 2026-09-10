@@ -1,5 +1,14 @@
 # CLBIPP — Project State
 
+> **2026-09-10 — the sprint is no longer the last word.** The company reviewed
+> the finished three-app platform and sent eleven changes
+> (`docs/CLBIPP_Presentation_Feedback_Changes.docx`), plus a meeting that added
+> a pilot phase and a possible engine-off mode. That work is tracked in
+> `docs/PLAN_FEEDBACK_V2.md` as batches **FV1–FV7**. **FV1 and FV2 are built;
+> FV3–FV7 are not, and most are blocked on the 43 questions sent back to the
+> company.** Read that plan before treating anything below as current.
+
+
 > **Living status file.** Update this at the end of any working chat. It is the
 > first thing to read when starting a new chat. For stable background (stack,
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see

@@ -1074,13 +1074,22 @@ async function seed() {
             quantity: item.quantity,
             weightKg: item.weightKg,
             condition: item.condition,
-            photoUrls: itemPhotos[idx] ? [itemPhotos[idx]] : [],
+            // FV1: booking now requires at least one photo per line, so a
+            // seeded line with none would contradict the screen that enforces
+            // it. Falls back to the first available image rather than nothing.
+            photoUrls: itemPhotos[idx] ? [itemPhotos[idx]] : itemPhotos.filter(Boolean).slice(0, 1) as string[],
             // Agent-confirmed half is only filled once collection has happened.
             ...(reachedIndex >= LIFECYCLE.indexOf("collected")
               ? {
                   chemistry: item.chemistry,
                   confirmedWeightKg: item.weightKg,
                   confirmedCondition: item.condition,
+                  // FV2 · FD3. Every confirmed line carries how it was weighed.
+                  // Mostly the scale; one line in three reads off the label, so
+                  // the admin's declared-vs-measured column has more than one
+                  // value in it and a screen that only ever renders
+                  // "Digital scale" is visibly wrong rather than plausibly right.
+                  weightMethod: idx % 3 === 1 ? ("manufacturer_label" as const) : ("digital_scale" as const),
                   recordedBy: agentId,
                   recordedAt: day(spec.daysAgo - 2),
                   unitPricePaise: Math.round(linePrice(item) / item.quantity),

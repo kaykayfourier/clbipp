@@ -13,6 +13,8 @@ import {
   itemConfirmationState,
   outstandingReason,
   parseIntakeSubmission,
+  WEIGHT_METHOD_VALUES,
+  weightDivergence,
   photoPathsBelongTo,
   requiresPhotoEvidence,
   type IntakeTotalsItemLike,
@@ -198,7 +200,14 @@ describe('intakeTotals', () => {
 })
 
 describe('parseIntakeSubmission', () => {
-  const good = { chemistry: 'li_ion_nmc', weightKg: '12.34', condition: 'healthy' }
+  // FV2 added `weightMethod` as a required field, so the shared fixture needs
+  // one — otherwise every test below would fail for that reason instead of its own.
+  const good = {
+    chemistry: 'li_ion_nmc',
+    weightKg: '12.34',
+    condition: 'healthy',
+    weightMethod: 'digital_scale',
+  }
 
   it('accepts a well-formed submission', () => {
     const result = parseIntakeSubmission(good)
@@ -207,6 +216,7 @@ describe('parseIntakeSubmission', () => {
       chemistry: 'li_ion_nmc',
       confirmedWeightKg: 12.34,
       confirmedCondition: 'healthy',
+      weightMethod: 'digital_scale',
     })
   })
 
@@ -233,6 +243,27 @@ describe('parseIntakeSubmission', () => {
       expect(parseIntakeSubmission({ ...good, weightKg }).error).toBeTruthy()
     },
   )
+
+  // ── FV2 · FD3: a weight with no provenance ────────────────────────────────
+  it('rejects a submission with no weight method', () => {
+    expect(parseIntakeSubmission({ ...good, weightMethod: null }).error).toBeTruthy()
+    expect(parseIntakeSubmission({ ...good, weightMethod: '' }).error).toBeTruthy()
+    expect(parseIntakeSubmission({ ...good, weightMethod: 'eyeballed' }).error).toBeTruthy()
+  })
+
+  it('accepts every method in the enum, estimated included', () => {
+    for (const weightMethod of WEIGHT_METHOD_VALUES) {
+      const result = parseIntakeSubmission({ ...good, weightMethod })
+      expect(result.error).toBeNull()
+      expect(result.value?.weightMethod).toBe(weightMethod)
+    }
+  })
+
+  it('reports a bad weight as a bad weight, not a missing method', () => {
+    // Both are wrong; the weight message is the one an agent can act on first.
+    const result = parseIntakeSubmission({ ...good, weightKg: 'abc', weightMethod: null })
+    expect(result.error).toMatch(/weight/i)
+  })
 
   it('rejects a weight past the typo rail', () => {
     const over = String(MAX_LINE_WEIGHT_KG + 1)
@@ -266,5 +297,54 @@ describe('photoPathsBelongTo', () => {
 
   it('rejects everything when there is no user id', () => {
     expect(photoPathsBelongTo([`${uid}/ok.jpg`], '')).toBe(false)
+  })
+})
+
+// ─── FV2 · FD3: declared vs measured ─────────────────────────────────────────
+// The two halves of a BatteryItem are allowed to disagree. This is the rule for
+// when a disagreement is worth an admin's attention.
+describe('weightDivergence', () => {
+  it('returns null when there is nothing to compare', () => {
+    // An unweighed booking line is a supported answer, not a disagreement.
+    expect(weightDivergence(null, 12)).toBeNull()
+    expect(weightDivergence(undefined, 12)).toBeNull()
+    expect(weightDivergence(12, null)).toBeNull()
+    expect(weightDivergence(0, 12)).toBeNull()
+  })
+
+  it('reports a signed delta and fraction', () => {
+    const high = weightDivergence(100, 120)
+    expect(high?.deltaKg).toBe(20)
+    expect(high?.fraction).toBeCloseTo(0.2)
+
+    const low = weightDivergence(100, 80)
+    expect(low?.deltaKg).toBe(-20)
+    expect(low?.fraction).toBeCloseTo(-0.2)
+  })
+
+  it('does not flag a small absolute gap on a light line', () => {
+    // 0.4 kg declared, 0.5 kg measured is 25% — true, and noise. The 5 kg floor
+    // is what stops every laptop pack in the fleet raising a flag.
+    expect(weightDivergence(0.4, 0.5)?.material).toBe(false)
+  })
+
+  it('lets the percentage govern a heavy line', () => {
+    // 400 kg declared. The threshold is max(80, 5) = 80 kg, so the PERCENTAGE
+    // governs here and the 5 kg floor is irrelevant. 60 kg out on a pallet of
+    // mixed scrap is 15% and is not worth an admin's attention...
+    expect(weightDivergence(400, 460)?.material).toBe(false)
+    // ...but 100 kg out on the same pallet is.
+    expect(weightDivergence(400, 500)?.material).toBe(true)
+  })
+
+  it('flags in both directions — short deliveries matter too', () => {
+    expect(weightDivergence(100, 130)?.material).toBe(true)
+    expect(weightDivergence(100, 70)?.material).toBe(true)
+  })
+
+  it('treats the threshold as inclusive', () => {
+    // Exactly 20% of 100 kg is 20 kg, and 20 >= max(20, 5).
+    expect(weightDivergence(100, 120)?.material).toBe(true)
+    expect(weightDivergence(100, 119)?.material).toBe(false)
   })
 })

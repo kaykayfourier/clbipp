@@ -27,6 +27,10 @@ they are in context even if nothing else is:
 - **Integer paise everywhere**; `formatPaise` from `@clbipp/core/format` in
   client components.
 - 🔴 **A change that moves a price says so in its commit message.**
+- 🔴 **Never pass a real database URL as `--shadow-database-url`.** It is scratch
+  space Prisma drops and recreates. It wiped the shared project on 2026-09-10.
+- 🔴 **Check `lsof -ti:3000` before trusting a green smoke run.** A `next dev`
+  from twelve days earlier was still holding the port and smoke tested *it*.
 - 🔴 **Never write `StatusEvent.actorRole: 'recycler'`** (or `'hub'`). Every
   admin-written stage past the hub is an admin asserting something on a party's
   behalf, and the trail has to say so.
@@ -288,6 +292,59 @@ nobody else creates a file A also creates. Each owner only ever *replaces* their
 own stub. **Both are done as of 2026-08-26**, so no lane is waiting on a file to
 exist.
 
+## Post-presentation feedback (FV1–FV7) — CURRENT WORK
+
+The company reviewed the finished three-app platform and sent
+`docs/CLBIPP_Presentation_Feedback_Changes.docx` — eleven changes, P0–P2. A
+follow-up meeting added two things the document does not say: the first phase is
+a **pilot with a handful of agents**, and they want the **decision engine
+possibly switched off** for it, with a human step (a call to the office)
+retained.
+
+**Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV7, decisions
+**FD0–FD6**, and an as-built section per batch. Open questions went to the
+company as `docs/CLBIPP_Open_Questions_2026-09-10.html` (43 questions, 13 marked
+BLOCKING); **several batches cannot start until they answer.**
+
+⚠ **Decision-set collision.** This repo now carries four: **D1–D7** (customer),
+**D0–D10** (agent), **AD0–AD12** (admin) and **FD0–FD6** (this set). The same
+letter+number means different things in each. **Quote the decision with its set.**
+
+- ✅ **FV1 built (2026-09-10)** — mandatory customer photos, and the
+  preliminary estimate removed from every vendor surface.
+- ✅ **FV2 built (2026-09-10)** — mandatory agent photos, and verified weight
+  with its method. Migration `feedback_v2` applied to the shared project.
+- 🔴 **FV3–FV7 are NOT started.** FV3 (separating inspection from collection) is
+  the largest remaining P0 and is blocked on client answers D1/D3/D5.
+
+**The rules FV1 and FV2 put in place, which new code must not undo:**
+
+- 🔴 **At least one customer photo per battery LINE**, enforced in
+  `bookingLineItemSchema` (`packages/core`), not in the wizard. Per line, not
+  per request — one photo of a 40-unit lot says nothing about the other line.
+- 🔴 **The vendor sees NO price before the agent's inspection.**
+  `Pickup.indicativeQuotePaise` is still computed and stored, and is **ops-only**
+  — it is labelled "Internal estimate · Not shown to the vendor" on
+  `/dispatch/[id]`. Don't wire a price back onto `/book` or `/submitted`.
+- 🔴 **At least one AGENT photo per line, on every line**, enforced in
+  `confirmItem`. This replaced "required only for a damaged condition, and you
+  could save anyway". `requiresPhotoEvidence` still exists but now only decides
+  how sharply the prompt is worded.
+- 🔴 **A weight now travels with its provenance.** `BatteryItem.weightMethod`
+  (`digital_scale` | `manufacturer_label` | `estimated`) is required by
+  `parseIntakeSubmission`. `estimated` is a legitimate answer, not a failure —
+  it is recorded and flagged, never blocked.
+- **Declared vs measured divergence lives in `weightDivergence()`** in
+  `@clbipp/core/intake` — 20% or 5 kg, **whichever is LARGER**. `max`, not
+  `min`: the percentage governs a heavy pallet, the 5 kg floor stops every
+  laptop pack raising a flag. No screen re-derives the threshold.
+- ⚠ **`Pickup.inspectedAt` / `collectionScheduledAt` / `collectedAt` exist but
+  NOTHING WRITES THEM YET.** They shipped in the FV2 migration so the shared
+  database is migrated once; FV3 is what fills them. 🔴 When it does, **`offered`
+  will carry THREE sub-states**, not two — see FD0 in the plan and the comment
+  on those columns in `schema.prisma`.
+- ⚠ Same for `BatteryItem.pathwaySetBy` / `pathwayReason` — FV5's, unwritten.
+
 ## The Field Agent app — built, and still live code
 
 Everything below governs `apps/agent`, which is finished and deployed-pending.
@@ -536,7 +593,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 304 (core 237, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 317 (core 250, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -558,9 +615,24 @@ cd packages/core && npx vitest run src/booking.test.ts
 
 # Database
 # ⚠ `db:migrate` runs `prisma migrate dev`, which can offer to RESET the shared
-# project. Against the shared database use `prisma migrate deploy` instead —
-# generate the SQL with `prisma migrate diff`, hand-annotate it the way every
-# migration in this repo is, and deploy. See Admin Batch 1's as-built notes.
+# project. Never run it against the shared database.
+#
+# 🔴 `prisma migrate deploy` DOES NOT WORK ON THIS PROJECT and never has — the
+# shared database has no `_prisma_migrations` table, so deploy fails P3005.
+# Every migration in this repo was in fact applied with `db execute`. The real
+# procedure (corrected 2026-09-10 after FV2):
+#   1. edit schema.prisma
+#   2. npx prisma migrate diff --from-migrations prisma/migrations \
+#        --to-schema-datamodel prisma/schema.prisma --script
+#      🔴 NEVER pass a real database URL as --shadow-database-url. The shadow
+#      database is scratch space Prisma DROPS AND RECREATES. Doing that wiped
+#      the shared project on 2026-09-10 — every row, all 19 policies, all 124
+#      grants. `--from-migrations` needs no shadow database at all.
+#   3. save it as prisma/migrations/<ts>_<name>/migration.sql, hand-annotated
+#      the way every migration here is
+#   4. npx prisma db execute --file <that file> --schema prisma/schema.prisma
+#   5. npx prisma generate, then RESTART any running dev server — a long-lived
+#      `next dev` caches the old client and every query 500s until it does.
 npm run db:migrate --workspace=@clbipp/database        # Apply schema changes (LOCAL/new DB)
 npm run reset-demo                                     # Wipe + reseed the demo data
 # Assert the seeded FIXTURES still have the shape the next batch is built
@@ -651,6 +723,14 @@ keeps every lane moving in parallel without anyone touching another's files.
 - `docs/BEFORE_YOU_PUSH.md` — **the second-glance checklist. Read before every
   push.** Pre-push commands, git workflow, shared-database rules, the traps that
   pass review, and the two orderings that actually matter.
+- `docs/PLAN_FEEDBACK_V2.md` — **the current work.** The company's
+  post-presentation feedback mapped onto the three apps: batches FV1–FV7,
+  decisions **FD0–FD6**, as-built notes per batch, and the write-up of the
+  2026-09-10 database-wipe incident and the four rules taken from it.
+- `docs/CLBIPP_Presentation_Feedback_Changes.docx` — the company's feedback
+  itself. Eleven changes with their own P0–P2 priorities.
+- `docs/CLBIPP_Open_Questions_2026-09-10.html` — the 43 questions sent back
+  (rendered to PDF for them). **13 are marked BLOCKING and gate FV3–FV7.**
 - `docs/ADMIN_TASKS.md` — **the executable task sheet for this sprint.** Per
   batch: files, numbered steps, done-when checklist — plus a **17-item trap
   list** at the top that is worth reading once on its own. **Read this first.**

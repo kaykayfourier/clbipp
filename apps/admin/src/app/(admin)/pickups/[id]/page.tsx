@@ -4,7 +4,14 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@clbipp/database'
 import { createSignedUrls } from '@clbipp/auth/storage-server'
 import { formatPaise } from '@clbipp/core/format'
-import { categoryLabel, chemistryLabel, conditionLabel } from '@clbipp/core/intake'
+import {
+  categoryLabel,
+  chemistryLabel,
+  conditionLabel,
+  isWeightMethod,
+  weightDivergence,
+  WEIGHT_METHOD_LABELS,
+} from '@clbipp/core/intake'
 import {
   DetailRow,
   Card,
@@ -89,6 +96,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           photoUrls: true,
           chemistry: true,
           confirmedWeightKg: true,
+          weightMethod: true,
           confirmedCondition: true,
           agentPhotoUrls: true,
           recordedAt: true,
@@ -363,6 +371,7 @@ type ItemWithExceptions = {
   photoUrls: string[]
   chemistry: string | null
   confirmedWeightKg: unknown
+  weightMethod: unknown
   confirmedCondition: string | null
   agentPhotoUrls: string[]
   recordedAt: Date | null
@@ -384,6 +393,12 @@ type ItemWithExceptions = {
 function ItemCard({ item }: { item: ItemWithExceptions }) {
   const isConfirmed = item.recordedAt !== null
   const openCount = item.exceptions.filter((x) => x.resolvedAt === null).length
+  // Prisma Decimal → number at the edge; `weightDivergence` returns null when
+  // either side is missing, so an unweighed booking line simply shows nothing.
+  const divergence = weightDivergence(
+    item.weightKg === null ? null : Number(item.weightKg),
+    item.confirmedWeightKg === null ? null : Number(item.confirmedWeightKg),
+  )
 
   return (
     <Card variant="outline" className={openCount > 0 ? 'border-error-border' : undefined}>
@@ -418,6 +433,17 @@ function ItemCard({ item }: { item: ItemWithExceptions }) {
               <>
                 <MiniRow label="Chemistry" value={chemistryLabel(item.chemistry) ?? item.chemistry ?? '—'} />
                 <MiniRow label="Weight" value={item.confirmedWeightKg !== null ? `${Number(item.confirmedWeightKg).toFixed(1)} kg` : '—'} />
+                {/* 🔴 FV2 · FD3. The number alone was never enough: a reading
+                    off a calibrated scale and a guess across a warehouse floor
+                    used to be the same value in the same column. */}
+                <MiniRow
+                  label="Method"
+                  value={
+                    isWeightMethod(item.weightMethod)
+                      ? WEIGHT_METHOD_LABELS[item.weightMethod]
+                      : 'Not recorded'
+                  }
+                />
                 <MiniRow label="Condition" value={item.confirmedCondition ? (conditionLabel(item.confirmedCondition) ?? item.confirmedCondition) : '—'} />
                 <MiniRow label="Photos" value={String(item.agentPhotoUrls.length)} />
               </>
@@ -426,6 +452,20 @@ function ItemCard({ item }: { item: ItemWithExceptions }) {
             )}
           </div>
         </div>
+
+        {/* Declared vs measured, when the gap is material (FV2 · FD3). Stated
+            as a fact, not an error — the two halves are ALLOWED to disagree and
+            the disagreement is the finding. `weightDivergence` owns the
+            threshold; no screen re-derives it. */}
+        {divergence?.material ? (
+          <div className="rounded-lg bg-warning-bg px-2.5 py-2 text-[11px] leading-relaxed text-warning-text">
+            <span className="font-bold">Weight differs from the declaration.</span>{' '}
+            Measured {Math.abs(divergence.deltaKg).toFixed(1)} kg{' '}
+            {divergence.deltaKg > 0 ? 'above' : 'below'} the customer&apos;s figure (
+            {(Math.abs(divergence.fraction) * 100).toFixed(0)}%)
+            {isWeightMethod(item.weightMethod) ? `, by ${WEIGHT_METHOD_LABELS[item.weightMethod].toLowerCase()}` : ''}.
+          </div>
+        ) : null}
 
         {item.damageScore !== null ? (
           <div className="flex flex-wrap items-center gap-3 border-t border-console-line pt-2.5 text-xs">

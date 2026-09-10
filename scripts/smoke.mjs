@@ -650,14 +650,30 @@ const AGENT_APP_CONTENT = {
     'Weighed on site',
     'Condition you found',
     'Save this line',
+    // FV2 · FD3 — the weight-method radio group. Its absence was the whole
+    // defect: a measured weight and a guess in the same column, indistinguishable.
+    'How you got that weight',
+    'Digital scale',
+    'Manufacturer label',
+    // FV2 — photos are now required on EVERY line, not just a damaged one.
+    // This is the healthy-line wording; the damaged-line one is asserted below.
+    'Photos — required',
+    'At least one photo is needed to save this line',
   ],
   // The third line on 103 is declared automotive + DEAD, so the same screen must
-  // additionally show the photo-evidence requirement. This is the only route
-  // that asserts it, and it is the reason a second item id is in the table.
+  // additionally show the SHARPER photo prompt. This is the only route that
+  // asserts it, and it is the reason a second item id is in the table.
+  //
+  // ⚠ FV2 (2026-09-10) changed what is being asserted here. Photos used to be
+  // required only for a damaged condition ('required for this condition'); they
+  // are now required for EVERY line, and `requiresPhotoEvidence` decides only
+  // how sharply the prompt is worded. The string below is the damaged-line
+  // wording — asserting the generic one would pass on both screens and prove
+  // nothing about the distinction.
   [`/job/${AGENT_ARRIVED}/items/${AGENT_ARRIVED_ITEM_LEAD}`]: [
     'Customer declared',
     'Automotive',
-    'required for this condition',
+    'cannot be saved without a photo',
   ],
   [`/job/${AGENT_ARRIVED}/scan`]: ['QR scanning is not in this build'],
   // The offer roll-up, on the one pickup that has an Offer. 'Offer presented'
