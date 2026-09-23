@@ -7,7 +7,11 @@ import { formatPaise } from '@clbipp/core/format'
 import { STAGE_LABELS, isLifecycleStage } from '@clbipp/ui'
 
 import { assignPickupAction } from '../actions'
-import { liveJobCounts } from '@/lib/job-load'
+import { rankedAgentsFor } from '@/lib/agent-selection'
+import { toCoord } from './coords'
+
+import { AgentSelector } from './AgentSelector'
+import type { RankedAgent } from '@clbipp/core/dispatch-ranking'
 import { formatAge, formatIstDate, formatIstDateTime, parseIstLocal, toIstLocalValue } from '@/lib/ist'
 
 // B03 · Dispatch request — Batch 3, owner A — Aamir.
@@ -66,7 +70,7 @@ export default async function DispatchDetail({
         },
       },
       agent: { select: { id: true, fullName: true, agentZone: true, agentVehicle: true } },
-      address: { select: { label: true, line1: true, line2: true, city: true, state: true, pincode: true } },
+      address: { select: { label: true, line1: true, line2: true, city: true, state: true, pincode: true, lat: true, lng: true } },
       items: {
         select: { id: true, category: true, quantity: true, weightKg: true, condition: true },
         orderBy: { createdAt: 'asc' },
@@ -86,14 +90,19 @@ export default async function DispatchDetail({
   // vendor cancelled and rebooked keeps the old agent and the old fee.
   const staleAgent = isOpen && pickup.agentId ? pickup.agent : null
 
-  const agents = isOpen
-    ? await prisma.profile.findMany({
-        where: { role: 'agent' },
-        select: { id: true, fullName: true, agentZone: true, agentVehicle: true },
-        orderBy: { fullName: 'asc' },
+  // FV8 — the ranked selector. Availability, today's workload, total live
+  // workload and distance from the agent's last known operational position, all
+  // gathered in one place (lib/agent-selection.ts) and ordered by the pure
+  // ranker in @clbipp/core. The dispatcher still chooses.
+  const rankedAgents = isOpen
+    ? await rankedAgentsFor({
+        addressLat: toCoord(pickup.address?.lat),
+        addressLng: toCoord(pickup.address?.lng),
+        // Assigning for the vendor's preferred day when they named one; today
+        // otherwise. This is the day "jobs that day" is counted against.
+        targetDay: pickup.preferredDate ?? new Date(),
       })
     : []
-  const loads = isOpen ? await liveJobCounts() : new Map<string, number>()
 
   const now = new Date()
   const units = pickup.items.reduce((sum, i) => sum + i.quantity, 0)
@@ -267,7 +276,7 @@ export default async function DispatchDetail({
           {isOpen ? (
             <AssignPanel
               pickupId={pickup.id}
-              agents={agents.map((a) => ({ ...a, load: loads.get(a.id) ?? 0 }))}
+              agents={rankedAgents}
               defaultSlot={defaultSlotValue(pickup.preferredDate, now)}
               staleAgentId={pickup.agentId}
             />
@@ -321,7 +330,7 @@ function AssignPanel({
   staleAgentId,
 }: {
   pickupId: string
-  agents: { id: string; fullName: string; agentZone: string | null; agentVehicle: string | null; load: number }[]
+  agents: readonly RankedAgent[]
   defaultSlot: string
   staleAgentId: string | null
 }) {
@@ -335,34 +344,7 @@ function AssignPanel({
         <form action={assignPickupAction} className="flex flex-col gap-4">
           <input type="hidden" name="pickupId" value={pickupId} />
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="agentId" className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
-              Agent
-            </label>
-            <select
-              id="agentId"
-              name="agentId"
-              required
-              defaultValue=""
-              className="rounded-lg border border-console-line bg-surface px-3 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-green"
-            >
-              <option value="" disabled>
-                Choose an agent…
-              </option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.fullName}
-                  {a.agentZone ? ` · ${a.agentZone}` : ''} · {a.load} live job
-                  {a.load === 1 ? '' : 's'}
-                  {a.id === staleAgentId ? ' · was on this job' : ''}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] leading-relaxed text-text-secondary">
-              Live load counts jobs at scheduled, arrived or offered — work in that agent&rsquo;s
-              hands right now.
-            </p>
-          </div>
+          <AgentSelector agents={agents} staleAgentId={staleAgentId} />
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="scheduledSlot" className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-secondary">

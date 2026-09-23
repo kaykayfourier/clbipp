@@ -502,3 +502,77 @@ this repo's verification story — `smoke` and `verify-seed` — depends entirel
 it being awake. A week off over a holiday will do this again. Anyone picking the
 project up after a gap should expect it and restore first, rather than debugging
 a DNS error.
+
+
+---
+
+## §7 FV8 — the ranked agent selector (2026-09-23)
+
+Source: `docs/field agent selection.txt`, sent by the company. It expands **§2.2**
+of the feedback document, which until now was satisfied only in its weakest
+form — a live-job count in a dropdown label.
+
+The complaint, verbatim: *"when Admin assigns a pickup to a field agent, the
+dropdown essentially just provides the agent's name."*
+
+**Three signals, in the order the notes' own flowchart puts them:**
+
+1. **Availability** — can they realistically take it that day?
+2. **Workload** — today's jobs *and* total live jobs, shown separately, because
+   *"four jobs spread over several days are very different from four jobs
+   scheduled this afternoon."*
+3. **Proximity** — straight-line km from their last known position.
+
+**Where the logic lives.** `packages/core/src/dispatch-ranking.ts` — pure,
+19 tests, no Prisma. `apps/admin/src/lib/agent-selection.ts` fetches;
+`AgentSelector.tsx` renders. 🔴 **"Live" is NOT redefined**: the count comes from
+`LIVE_JOB_STATUSES` in `lib/job-load.ts`, the one definition already shared with
+`/agents` and the dispatch board — which is precisely what the notes ask for
+("follow CLBIPP's existing lifecycle rather than creating a second definition of
+lifecycle just for dispatch").
+
+🔴 **Distance is the LAST tie-breaker, never the first sort.** The notes name
+both failure modes and both are pinned by a test: an unavailable agent must not
+top the list for being closest, and an agent 1.2 km away with four jobs booked
+must not beat one 3 km away with none.
+
+🔴 **Decision support, never auto-assignment.** Nothing is pre-selected; the top
+row is badged *Nearest available*, not chosen. The notes are explicit: never
+"Assign Ali", always "Ali — Available • 2 live jobs • 2.4 km away".
+
+**Location — Phase 2 of the notes, not Phase 3.** There is no continuous
+tracking and none is promised. The agent app already writes `lat`/`lng` onto
+`status_events` at Arrived and at collection, so the most recent such row *is*
+the last place we genuinely know an agent was, with a real timestamp. **No new
+column, no new tracking.** Age is always shown and anything over
+`LOCATION_STALE_MINUTES` (30) is marked — *"a location from two hours ago
+shouldn't be presented as though it were live."*
+
+⚠ **Availability is derived only from what we can honestly know.** The notes
+describe off-duty agents and working-hours windows; this codebase has **no shift
+model, no working hours and no duty roster**, and inventing one would be a
+screen asserting a fact nobody recorded. So `unavailable` means the one thing we
+do know — no `safetyTrainedAt`, which means `requireSafetyChecklist` will block
+every intake screen and the job would sit undoable. `busy` is derived from jobs
+already booked for the target day. **Shift management is on the notes' own
+later-enhancements list; `availabilityOf()` is where it goes when it lands.**
+
+**Edge cases, all five from the notes:** no location → still assignable, shown
+as "location unknown" · stale location → shown with its age, never as live ·
+no available agents → all agents still listed with reasons · agent becomes
+unavailable → surfaced on the row · 🔴 **two admins assigning at once →
+`agentStateAtConfirm()` re-reads the agent at the moment of the write**, not
+from the list rendered minutes earlier. ⚠ That re-check **refuses only on the
+safety gate** — a full day is reported, not blocked, because the notes are clear
+an admin may legitimately override workload.
+
+**Verified:** build green on all three apps with `ƒ Proxy (Middleware)` ·
+lint 0 errors 0 warnings · **361 tests** (19 new) · `verify-seed` 27/27 ·
+smoke **48 + 30 + 24 = 102 routes**, with new assertions on `/dispatch` and
+`/dispatch/[id]` that prove the ranked rows render off real agent data rather
+than a heading.
+
+**Not built, and deliberately** — the notes' own "later enhancement" list:
+working-hours/shift management, geographic zones, travel time instead of
+straight-line distance, vehicle capacity, route-aware assignment, automated
+recommendation, multi-pickup route optimisation.

@@ -325,6 +325,23 @@ letter+number means different things in each. **Quote the decision with its set.
   **No migration was needed**: every column they use shipped in `feedback_v2`.
 - ⛔ **FV7 (tags, QR containers, same-day grouping) is NOT started, BY DECISION**
   — FD11, not a blocker. No printer and no labels exist for the pilot.
+- ✅ **FV8 built (2026-09-23)** — the **ranked agent selector** on
+  `/dispatch/[id]`, from `docs/field agent selection.txt` (the company's
+  expansion of feedback §2.2). Availability → today's workload → total live
+  workload → distance. 🔴 **Distance is the LAST tie-breaker, never the first
+  sort**, and 🔴 **it never auto-assigns** — both are explicit company
+  requirements, and both are pinned by tests.
+  🔴 **"Live" is not redefined for dispatch**: `LIVE_JOB_STATUSES` in
+  `lib/job-load.ts` stays the one definition. Agent position comes from the
+  `lat`/`lng` the agent app already writes onto `status_events` — **no new
+  column and no tracking promise**; a position older than 30 min is shown with
+  its age and marked, never presented as live. ⚠ `availabilityOf()` derives
+  `unavailable` ONLY from a missing `safetyTrainedAt` (that agent cannot open an
+  intake screen at all) — there is **no shift model in this codebase** and a
+  screen must not invent one.
+  ⚠ `assignPickup` re-reads the agent via `agentStateAtConfirm()` at write time
+  (two admins assigning at once); it refuses on the safety gate only — a full
+  day is a warning, never a block.
 - 🔴 **The company never answered the 43 questions.** They were undecided about
   each phase, so on 2026-09-23 the team answered the five blocking ones in-house
   as **FD7–FD11** and built against them. ⚠ **Those five are OURS and are
@@ -647,7 +664,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 342 (core 275, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 361 (core 294, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.

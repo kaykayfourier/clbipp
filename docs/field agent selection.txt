@@ -1,0 +1,275 @@
+Current problem
+At present, when Admin assigns a pickup to a field agent, the dropdown essentially just provides the agents name
+
+So instead of a basic dropdown, the assignment component should become a ranked agent selector.
+For example:-
+
+Assign Field Agent
+Pickup: PKP-2026-000142
+Location: Saket
+Scheduled: 21 Sep, 2:00–4:00 PM
+
+────────────────────────────────────────────
+
+Recommended / Nearest Available
+
+● Ali
+  2 live jobs  •  Available  •  2.4 km away
+
+○ Aamir
+  1 live job   •  Available  •  4.8 km away
+
+○ Khalid
+  4 live jobs  •  Busy       •  6.1 km away
+
+○ Ramesh
+  0 live jobs  •  Unavailable today
+
+────────────────────────────────────────────
+
+Here the system should consider three major signals:
+
+1. Availability
+
+First determine whether the agent can realistically take the job on the requested day/time.
+
+Possible states:
+
+Available
+Agent is working that day and has no conflicting assignment.
+
+Partially Available / Busy
+Agent is working but already has jobs scheduled around that period.
+
+Unavailable
+Agent is off-duty, unavailable, or otherwise cannot take the assignment.
+Unavailable agents don't necessarily need to disappear. Showing them disabled can be useful:
+
+Ramesh
+Unavailable today
+That tells the admin why Ahmed isn't being recommended.
+
+
+2. Current live workload
+
+Then show how much unfinished work the agent already has.
+
+The key requirement should be:
+
+Live Jobs = jobs assigned to the agent that still require operational action.
+
+Therefore:
+
+Assigned        ✓ Live
+Scheduled       ✓ Live
+In progress     ✓ Live
+Inspection      ✓ Live
+Collection      ✓ Live
+
+Completed       ✕ Not live
+Cancelled       ✕ Not live
+
+The exact statuses should ultimately follow CLBIPP's existing lifecycle rather than creating a second definition of lifecycle just for dispatch.
+
+This gives the admin:
+
+Ali       2 live jobs
+Aamir     5 live jobs
+Khalid    1 live job
+
+But today's work from total active work should also be distinguished
+
+For example:
+
+Ali
+2 jobs today • 4 total live jobs
+
+That's more useful than simply saying 4 live jobs, because four jobs spread over several days are very different from four jobs scheduled this afternoon.
+
+
+3. Location / proximity
+
+IF agent location tracking is available, calculate the approximate distance between:
+
+Agent's latest location → Pickup location
+
+Then present the nearest suitable agents first.
+
+For example:
+
+Agent	Today	Live	Availability	Distance
+Ali	1	2	Available	2.4 km
+Aamir	2	3	Available	3.1 km
+Khalid	4	5	Busy	        1.2 km
+Ramesh	0	0	Unavailable	0.8 km
+
+#Ahmed shouldn't automatically become first because he's closest, because he's unavailable.
+
+Likewise Khalid shouldn't necessarily become first just because he's 1.2 km away—he already has four jobs today.
+Hence a ranking logic which can be viable here is:-
+
+                  ALL FIELD AGENTS
+                         │
+                         ▼
+               Available that day?
+                    /          \
+                  YES           NO
+                   │             │
+                   ▼             ▼
+           Check schedule      Bottom /
+           for conflicts       disabled
+                   │
+                   ▼
+           Current workload
+                   │
+                   ▼
+           Current location
+                   │
+                   ▼
+              Distance to
+                pickup
+                   │
+                   ▼
+             Ranked agents
+
+But don't automatically assign the agent 
+“Assign Ali.”
+
+Instead, it should provide decision support:
+“Ali — Available • 2 live jobs • 2.4 km away”
+
+and let the dispatcher make the final choice.
+this avoids having to immediately build a sophisticated route-optimisation algorithm.
+
+#LOCATION ISSUE
+Nearest location based on what?
+There are three possible levels.
+
+Phase 1 — Last known agent location
+
+Use the latest location already reported by the Agent App.
+
+Last location:
+Nehru Place
+Updated 8 min ago
+
+The timestamp matters because a location from two hours ago shouldn't be presented as though it were live.
+
+Phase 2 — Current job location
+
+If continuous tracking isn't appropriate or available, proximity can instead use the location of the agent's current/most recent operational job.
+
+Phase 3 — Live operational tracking
+
+During working hours/active jobs, use location updates from the Agent App to provide more accurate dispatch information.
+
+For now last known operational location + timestamp should be used rather than promising continuous real-time tracking immediately.
+
+#Another availability problem 
+For example
+
+Working hours:
+09:00 – 18:00
+
+Availability:
+Available
+
+Today's schedule:
+10:00  Pickup A
+13:00  Pickup B
+16:30  Pickup C
+
+If Admin tries assigning another job at 13:30, the system can warn:
+Potential scheduling conflict — agent has another job at 13:00.
+
+It doesn't necessarily need to block assignment. There may be legitimate reasons for an admin to override it.
+
+
+Recommended solution:-
+┌─────────────────────────────────────────────┐
+│ Ali                              AVAILABLE │
+│                                            │
+│ 1 job today • 3 live jobs                  │
+│ 2.4 km away                                │
+│ Location updated 6 min ago                 │
+└─────────────────────────────────────────────┘
+after assignment the workflow should be:
+New pickup
+    ↓
+Admin opens Dispatch
+    ↓
+Clicks "Assign Agent"
+    ↓
+System fetches eligible agents
+    ↓
+For each agent:
+    ├── Check availability
+    ├── Count today's jobs
+    ├── Count live jobs
+    ├── Check schedule
+    └── Determine latest location/distance
+    ↓
+Rank available agents
+    ↓
+Admin selects agent
+    ↓
+Confirmation
+    ↓
+Job assigned
+    ↓
+Agent receives job in Agent App
+
+#EDGE CASES
+
+No location available
+
+Ali
+Available • 1 live job
+Location unavailable
+
+The agent should still be assignable.
+
+2. Stale location
+
+Ali
+Available • 1 live job
+3.1 km away
+Location updated 47 min ago
+
+Don't present stale coordinates as “live”.
+
+3. No available agents
+
+Admin should still see agents and understand why:
+No agents currently available.
+
+Ali      Busy — 4 jobs today
+Aamir    Off duty
+Khalid   Scheduling conflict
+
+4. Agent becomes unavailable after assignment
+
+Existing assignments shouldn't silently disappear. Admin should receive a warning/exception and be able to reassign the job.
+
+5. Two admins assign simultaneously
+
+The backend should re-check workload/assignment state when the admin confirms, rather than trusting information loaded when the dropdown was first opened.
+
+
+
+Later enhancement
+
+Then add:
+
+working hours/shift management;
+scheduling-conflict detection;
+workload thresholds;
+geographic zones;
+estimated travel time instead of straight-line distance;
+vehicle capacity;
+route-aware assignment;
+automated recommended agent;
+multi-pickup route optimisation
+
+
+

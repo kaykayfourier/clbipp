@@ -676,3 +676,24 @@ grants, then run all three smokes before working through this list.**
       engine's.
 - [ ] Set `NEXT_PUBLIC_OFFICE_PHONE` in both apps and confirm the call buttons
       appear and dial; unset it and confirm they vanish entirely.
+
+## FV8 — ranked agent selector (2026-09-23)
+
+- [ ] Open `/dispatch/<a requested pickup>`. Agents appear as ranked rows, not a
+      dropdown, each with availability, "N jobs that day • N live jobs" and a
+      distance.
+- [ ] 🔴 Nothing is pre-selected. The top row says **Nearest available**, not
+      "assign this one" — the company's explicit requirement.
+- [ ] An agent with no `safetyTrainedAt` shows **Unavailable · No safety
+      training on file**, stays visible, and is still selectable if overridden.
+- [ ] Assign an agent two jobs on the same day, then dispatch a third for that
+      day — they should read **Busy**, and rank below a free agent even if
+      closer.
+- [ ] An agent with no `status_events` carrying lat/lng shows "location
+      unknown" and remains assignable.
+- [ ] Location age line appears and, past 30 minutes, says "may have moved
+      since".
+- [ ] 🔴 Two browser tabs on the same pickup: assign in one, then confirm in the
+      other. The second must fail cleanly on the pickup's status, not write.
+- [ ] Distance is plausible against the vendor's real address (it is
+      straight-line, so expect it to read shorter than a drive).

@@ -910,12 +910,29 @@ const ADMIN_APP_CONTENT = {
   // the two detail assertions are panels that render at EVERY status — the
   // picker itself is only there while the pickup is still `requested`, and
   // PKP-2026-000101 stops being `requested` the first time anyone dispatches it.
-  '/dispatch': ['Dispatch board', 'Waiting', 'Oldest request'],
+  // FV4 reworked this screen into a filterable board over the whole live
+  // pipeline. The bucket chip and the workload strip are the two things that
+  // only render off real data — a chip label alone would pass on an empty board.
+  '/dispatch': [
+    'Dispatch board',
+    'Waiting for an agent',
+    'Needs an agent',
+    'Agent workload right now',
+  ],
   [`/dispatch/${ADMIN_REQUESTED}`]: [
     'Dispatch request',
     ADMIN_REQUESTED,
     'Declared items',
     'Recent status events',
+    // 🔴 FV8 — the ranked selector. 'Ravi Kumar' proves agent rows were loaded
+    // and ranked (not just that a heading rendered), and the availability chip
+    // proves `availabilityOf` ran. The explanatory line is asserted because it
+    // is the company's own requirement that this is decision support rather
+    // than an automatic assignment — if it ever disappears, the screen has
+    // quietly changed character.
+    'Ravi Kumar',
+    'live job',
+    'Ranked by availability',
   ],
   // 🔴 Trap 28. 'Pickups' alone is the Batch 0 STUB's <h1> and it survived into
   // the real screen, so asserting it proved only that a route existed — the

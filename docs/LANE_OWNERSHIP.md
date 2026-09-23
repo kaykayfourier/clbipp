@@ -1134,3 +1134,14 @@ Written up in §2.5 of `docs/PLAN_FEEDBACK_V2.md`.
 **Owed to whoever picks this up:** FV3–FV6 are green on build, lint and tests
 but were **never run against a live database** — the shared Supabase project was
 paused throughout (§6 of the plan). The HTTP-path verification is outstanding.
+
+### 2026-09-23 (later) — FV8, ranked agent selector, by Aamir
+
+Nominally split A (dispatch write) / B (`packages/core` logic) / C (console UI);
+done end to end by Aamir under do-it-and-note-it. `dispatch-ranking.ts` is pure
+with 19 tests and no schema change, so B was not blocked by it.
+
+Built from `docs/field agent selection.txt`, the company's expansion of feedback
+§2.2. ⚠ Two things it deliberately does NOT do, both because the data does not
+exist: no shift/working-hours model, and no continuous location tracking. Both
+are on the company's own "later enhancement" list.

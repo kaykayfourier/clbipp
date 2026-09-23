@@ -14,7 +14,8 @@
     "./engine-config": "./src/engine-config.ts",
     "./exception-classify": "./src/exception-classify.ts",
     "./collection": "./src/collection.ts",
-    "./pathway": "./src/pathway.ts"
+    "./pathway": "./src/pathway.ts",
+    "./dispatch-ranking": "./src/dispatch-ranking.ts"
   },
   "scripts": {
     "test": "vitest run"

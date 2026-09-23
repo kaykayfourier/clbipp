@@ -7,6 +7,7 @@ import { prisma } from '@clbipp/database'
 import type { AdminAuditAction, AdminAuditSubject } from '@clbipp/core/audit'
 
 import { requireAdmin } from '@/lib/admin-identity'
+import { agentStateAtConfirm } from '@/lib/agent-selection'
 import { parseIstLocal } from '@/lib/ist'
 
 // ─── Dispatch: `requested → scheduled` + Pickup.agentId ──────────────────────
@@ -115,6 +116,30 @@ export async function assignPickup(input: {
   if (agent.role !== 'agent') {
     const article = agent.role === 'admin' ? 'an' : 'a'
     return { error: `That account is ${article} ${agent.role}, not an agent.` }
+  }
+
+  // 🔴 FV8, EDGE CASE 5 — "Two admins assign simultaneously". The company's
+  // notes: "The backend should re-check workload/assignment state when the
+  // admin confirms, rather than trusting information loaded when the dropdown
+  // was first opened."
+  //
+  // The ranked list on the screen is decision support rendered minutes ago. By
+  // now the agent may have been handed three other jobs, or had their safety
+  // training lapse. Re-read the two things that would make this assignment
+  // wrong rather than merely suboptimal.
+  //
+  // ⚠ NOT a block on workload. The notes are equally clear that a busy agent is
+  // a warning, not a refusal — "There may be legitimate reasons for an admin to
+  // override it" — so a full day is reported back and the admin decides. Only
+  // the safety gate actually refuses, because an untrained agent cannot open
+  // the intake screens at all (requireSafetyChecklist), so the job would sit
+  // undoable.
+  const confirmState = await agentStateAtConfirm(agentId, slot)
+  if (!confirmState.exists) return { error: 'That agent does not exist.' }
+  if (!confirmState.safetyTrained) {
+    return {
+      error: `${agent.fullName} has no safety training on file and cannot start an intake. Pick another agent.`,
+    }
   }
 
   // Read the "before" for the audit row — and, with it, the stale-assignment
