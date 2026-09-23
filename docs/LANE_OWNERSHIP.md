@@ -1111,3 +1111,26 @@ feedback's five P0 items are what the pilot depends on.
    CLAUDE.md. On 2026-09-10 a `migrate diff` run with the production URL as the
    **shadow** database wiped the shared project; it was fully recovered the same
    session. Full write-up in `docs/PLAN_FEEDBACK_V2.md` §5.
+
+## 2026-09-23 — FV3–FV6 built by Aamir (covering all three lanes)
+
+The post-presentation feedback batches. Lanes crossed freely under the
+do-it-and-note-it rule (2026-08-20); recording it here so the record is honest
+rather than tidy.
+
+| Batch | Nominal owner | Actually done by | Why |
+|---|---|---|---|
+| FV3 — inspection ≠ collection | A (lifecycle writes) | Aamir | Correct lane. |
+| FV4 — dispatch filters + workload | A + C (table composition) | Aamir | C's console kit was reused as-is, not modified — `DataTable` and `FilterChips` were composed, not touched. |
+| FV5 — Second Life / Recycling | A (audit + override) + B (mapping) | Aamir | `packages/core/src/pathway.ts` is nominally B's area. It is pure logic with tests and no schema change; B was not waiting on anything. |
+| FV6 — price override + human step | B (engine surface) + A (gate) | Aamir | Touches `presentOffer`, an agent-app action. No engine code changed — the override sits *outside* the engine, which is the point of FD10. |
+
+**Decisions taken in-house rather than by the company: FD7–FD11.** The company
+was undecided about each phase, so the five blocking questions were answered
+with the simplest rational product default and built against. ⚠ Those five are
+**provisional** — the first contradicting instruction from the company wins.
+Written up in §2.5 of `docs/PLAN_FEEDBACK_V2.md`.
+
+**Owed to whoever picks this up:** FV3–FV6 are green on build, lint and tests
+but were **never run against a live database** — the shared Supabase project was
+paused throughout (§6 of the plan). The HTTP-path verification is outstanding.

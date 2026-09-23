@@ -72,6 +72,10 @@ export default async function OfferPage({ searchParams }: PageProps) {
 
   const pathway = pathwayLabel(offer.pathway);
 
+  // Not hardcoded: the company has not given us a number yet (open question
+  // M1), and the wrong one in a tel: link is worse than no link at all.
+  const officePhone = process.env.NEXT_PUBLIC_OFFICE_PHONE ?? null;
+
   return (
     <AppShell
       title={`Offer · ${pickup.id}`}
@@ -126,6 +130,19 @@ export default async function OfferPage({ searchParams }: PageProps) {
               Decline
             </Button>
           </Link>
+
+          {/* FV6 · M2 — the human step, on the screen where a vendor is most
+              likely to want one: a price they weren't expecting, and otherwise
+              only Accept or Decline to choose between. Rendered only when a
+              number is configured; a dead `tel:` link is worse than none, the
+              same rule the agent app's vendor-call button follows. */}
+          {officePhone && (
+            <a href={`tel:${officePhone.replace(/\s+/g, "")}`} className="block">
+              <Button variant="ghost" fullWidth>
+                Talk to us about this offer
+              </Button>
+            </a>
+          )}
         </div>
 
       </PagePadding>

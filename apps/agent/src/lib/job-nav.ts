@@ -1,5 +1,6 @@
 import type { PickupStatus } from '@clbipp/database'
 import { isLithium } from '@clbipp/core/intake'
+import { isFutureCollection } from '@clbipp/core/collection'
 import { isStageBefore } from '@clbipp/ui'
 
 // ─── Where an agent's job row goes, and what it says ─────────────────────────
@@ -21,6 +22,8 @@ export type JobRowLike = {
   id: string
   status: PickupStatus
   custodyBatchId: string | null
+  /** FV3. Set means the vendor accepted and collection is booked for a date. */
+  collectionScheduledAt?: Date | null
   vendor: { fullName: string }
   _count: { items: number }
 }
@@ -94,13 +97,46 @@ export function jobSubtitle(job: JobRowLike): string {
  * the line. "Resume" on `arrived` is what the wireframe drew as a resumable
  * *draft* row; the draft is derived from the lifecycle (D5), not a stored state.
  */
-export function jobNextStep(status: PickupStatus, custodyBatchId: string | null): string {
+export function jobNextStep(
+  status: PickupStatus,
+  custodyBatchId: string | null,
+  collectionScheduledAt: Date | null = null,
+): string {
   if (status === 'scheduled') return 'Head over and tap Arrived'
   if (status === 'arrived') return 'Resume — safety checklist, then intake'
-  if (status === 'offered') return 'Awaiting the vendor’s decision'
+  // 🔴 FV3 · FD0. `offered` is THREE states. This line used to say "awaiting
+  // the vendor's decision" for all of them, which was already wrong for an
+  // accepted offer and is now wrong twice over.
+  if (status === 'offered') {
+    if (collectionScheduledAt) {
+      const when = collectionScheduledAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+      return `Collection booked for ${when}`
+    }
+    return 'Awaiting the vendor’s decision — or collect if accepted'
+  }
   if (status === 'collected' && custodyBatchId === null) return 'Pending drop-off at the hub'
   if (status === 'cancelled') return 'Cancelled'
   return 'In recovery — nothing to do'
+}
+
+/**
+ * Is this job work for TODAY?
+ *
+ * FV3 · FD0. Separate from `isActiveJob` on purpose, and the distinction is the
+ * whole point of the batch: a pickup booked for next Tuesday is still very much
+ * ACTIVE — it is the agent's job, it appears in their list, nobody else is
+ * doing it — but it is not today's work, and putting it in the day view's
+ * "needs you now" tile would make that tile a liar.
+ */
+export function isTodaysWork(
+  status: PickupStatus,
+  custodyBatchId: string | null,
+  collectionScheduledAt: Date | null = null,
+  now: Date = new Date(),
+): boolean {
+  if (!isActiveJob(status, custodyBatchId)) return false
+  if (status === 'offered' && isFutureCollection(collectionScheduledAt, now)) return false
+  return true
 }
 
 /**

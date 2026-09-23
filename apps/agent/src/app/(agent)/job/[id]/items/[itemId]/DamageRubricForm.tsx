@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 
-import { MAX_FILE_BYTES, removeFile, uploadFile } from '@clbipp/auth/storage'
+import { removeFile, uploadFile } from '@clbipp/auth/storage'
 import { Banner, Button, Card, CardContent, SectionLabel } from '@clbipp/ui'
 
 import { submitDamageRubric } from './actions'

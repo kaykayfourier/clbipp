@@ -28,6 +28,9 @@ import {
 } from '@clbipp/ui'
 
 import { PageHead, StatusPill } from '@/components/console'
+import { DESTINATION_LABELS, destinationOf } from '@clbipp/core/pathway'
+
+import { PathwayOverride } from './PathwayOverride'
 
 // B05 · Pickup detail — Batch 5, owner C — Ali.
 //
@@ -97,6 +100,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           chemistry: true,
           confirmedWeightKg: true,
           weightMethod: true,
+          pathwayReason: true,
           confirmedCondition: true,
           agentPhotoUrls: true,
           recordedAt: true,
@@ -189,7 +193,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           <Section title="Items">
             <div className="flex flex-col gap-3">
               {pickup.items.map((item) => (
-                <ItemCard key={item.id} item={item} />
+                <ItemCard key={item.id} item={item} pickupStatus={pickup.status} />
               ))}
             </div>
           </Section>
@@ -372,6 +376,7 @@ type ItemWithExceptions = {
   chemistry: string | null
   confirmedWeightKg: unknown
   weightMethod: unknown
+  pathwayReason: unknown
   confirmedCondition: string | null
   agentPhotoUrls: string[]
   recordedAt: Date | null
@@ -390,11 +395,23 @@ type ItemWithExceptions = {
 // side. They are allowed to disagree — a customer who said "healthy" and an
 // agent who found "swollen" is a genuine finding for admin to see, not
 // something this screen should reconcile or hide by only showing one half.
-function ItemCard({ item }: { item: ItemWithExceptions }) {
+function ItemCard({
+  item,
+  pickupStatus,
+}: {
+  item: ItemWithExceptions
+  pickupStatus: string
+}) {
+  // 🔴 Past `tested` the battery has physically left, and its pathway is part
+  // of the record a compliance certificate is built from. Re-routing it then
+  // would describe a journey that did not happen.
+  const pathwayLocked =
+    pickupStatus === 'processed' || pickupStatus === 'recovered' || pickupStatus === 'certified'
   const isConfirmed = item.recordedAt !== null
   const openCount = item.exceptions.filter((x) => x.resolvedAt === null).length
   // Prisma Decimal → number at the edge; `weightDivergence` returns null when
   // either side is missing, so an unweighed booking line simply shows nothing.
+  const destination = destinationOf(typeof item.pathway === 'string' ? item.pathway : null)
   const divergence = weightDivergence(
     item.weightKg === null ? null : Number(item.weightKg),
     item.confirmedWeightKg === null ? null : Number(item.confirmedWeightKg),
@@ -466,6 +483,32 @@ function ItemCard({ item }: { item: ItemWithExceptions }) {
             {isWeightMethod(item.weightMethod) ? `, by ${WEIGHT_METHOD_LABELS[item.weightMethod].toLowerCase()}` : ''}.
           </div>
         ) : null}
+
+        {/* FV5 · FD4. Where this battery actually goes — the two-way
+            destination, not the engine's four-way verdict, because that is the
+            decision an operator acts on. The engine's own value stays in the
+            database and on /quotes. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-console-line pt-2.5">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-text-secondary">Destination</span>
+            <span className="font-bold text-text-primary">
+              {destination ? DESTINATION_LABELS[destination] : 'Not routed yet'}
+            </span>
+            {typeof item.pathwayReason === 'string' && item.pathwayReason ? (
+              <span
+                title={item.pathwayReason}
+                className="rounded-full bg-warning-bg px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-warning-text"
+              >
+                Overridden
+              </span>
+            ) : null}
+          </div>
+          <PathwayOverride
+            itemId={String(item.id)}
+            current={typeof item.pathway === 'string' ? item.pathway : null}
+            locked={pathwayLocked}
+          />
+        </div>
 
         {item.damageScore !== null ? (
           <div className="flex flex-wrap items-center gap-3 border-t border-console-line pt-2.5 text-xs">

@@ -65,6 +65,7 @@ export default async function HandoverPage({ searchParams }: PageProps) {
       category: true,
       location: true,
       items: { select: { quantity: true, weightKg: true } },
+      collectionScheduledAt: true,
       offer: { select: { acceptedAt: true } },
     },
   });
@@ -139,7 +140,11 @@ export default async function HandoverPage({ searchParams }: PageProps) {
               stages={{
                 requested: { sublabel: "Complete" },
                 scheduled: { sublabel: "Complete" },
-                offered: { sublabel: "Accepted" },
+                offered: {
+                  sublabel: pickup.collectionScheduledAt
+                    ? `Collection booked for ${formatCollectionDate(pickup.collectionScheduledAt)}`
+                    : "Accepted",
+                },
               }}
             />
           ) : (
@@ -154,6 +159,32 @@ export default async function HandoverPage({ searchParams }: PageProps) {
             />
           )}
         </Card>
+
+        {/* 🔴 FV3 · FD0. Inspection and collection can now be days apart, so
+            "accepted" no longer implies "they are taking it away today". If a
+            date is booked the vendor is told it plainly — the alternative is a
+            customer standing by a pallet on the wrong morning. */}
+        {awaitingCollection && (
+          <Card variant="tinted" className="flex flex-col gap-1">
+            <SectionLabel>Collection</SectionLabel>
+            {pickup.collectionScheduledAt ? (
+              <>
+                <p className="text-base font-semibold text-text-primary">
+                  {formatCollectionDate(pickup.collectionScheduledAt)}
+                </p>
+                <p className="text-xs leading-relaxed text-text-secondary">
+                  Our agent has booked this date with you. Keep the batteries somewhere cool and
+                  away from other waste until then. If the date needs to change, call us.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs leading-relaxed text-text-secondary">
+                Our agent is collecting these on this visit. You&rsquo;ll get a receipt as soon
+                as they do.
+              </p>
+            )}
+          </Card>
+        )}
 
         {/* Pickup summary. Category comes off the header row; units and weight
             are summed from the BatteryItem lines, which is where booking has
@@ -226,3 +257,8 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+
+/** "20 Sep 2026". Local formatting — the stored value is a date, not an instant. */
+function formatCollectionDate(date: Date): string {
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}

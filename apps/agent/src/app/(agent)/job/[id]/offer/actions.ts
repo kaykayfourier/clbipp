@@ -19,7 +19,22 @@ import { createAdminClient } from '@clbipp/auth/admin'
 // (or still needs to be) escalated from its own result screen. Every item
 // still has to have been PRICED (unitPricePaise set) before presenting can
 // happen at all: an unpriced item means the agent hasn't finished the job.
-export async function presentOffer(pickupId: string): Promise<{ error: string | null }> {
+export async function presentOffer(
+  pickupId: string,
+  // ─── FV6 · FD5: the human step ────────────────────────────────────────────
+  // The company wants a person in the loop for the pilot, and may not trust the
+  // engine's number yet. So the agent may present a DIFFERENT total, with a
+  // reason.
+  //
+  // 🔴 THIS IS NOT A SECOND PRICING PATH. The engine still runs, every item is
+  // still priced, and every one of those numbers is still written — to
+  // `BatteryItem.unitPricePaise` / `linePricePaise`, to `material_breakdown`
+  // below, and to each item's `quote_data`. The override changes only the TOTAL
+  // that goes to the vendor, and the engine's own figure stays recoverable
+  // beside it. That is what makes the pilot comparison possible at the end:
+  // what we would have paid, against what we did.
+  override?: { totalPaise: number; reason: string } | null,
+): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -65,8 +80,32 @@ export async function presentOffer(pickupId: string): Promise<{ error: string | 
     return { error: 'Every item on this job is on HOLD — nothing to present. Escalate each item first.' }
   }
 
-  const estimatedPrice = included.reduce((sum, i) => sum + (i.line_price_paise ?? 0), 0)
+  const enginePrice = included.reduce((sum, i) => sum + (i.line_price_paise ?? 0), 0)
 
+  // ── The override, validated server-side (the form is not the boundary) ──
+  let estimatedPrice = enginePrice
+  let overrideNote = ''
+  if (override) {
+    if (!Number.isInteger(override.totalPaise) || override.totalPaise <= 0) {
+      return { error: 'An adjusted offer must be a whole amount greater than zero.' }
+    }
+    // A rail, not a policy: catches a misplaced decimal on a screen where the
+    // agent is typing rupees in front of a waiting vendor. Ten times the
+    // engine's figure is not a negotiation, it is a typo.
+    if (enginePrice > 0 && override.totalPaise > enginePrice * 10) {
+      return { error: 'That is more than ten times the calculated price — check the amount.' }
+    }
+    if (override.reason.trim().length < 10) {
+      return { error: 'Say briefly why you adjusted the price.' }
+    }
+    estimatedPrice = override.totalPaise
+    overrideNote = ` Price adjusted by agent from ${enginePrice} paise: ${override.reason.trim()}`
+  }
+
+  // ⚠ Per-item prices here are always the ENGINE's, never the override. An
+  // adjusted total is a commercial decision about the load as a whole; spreading
+  // it back across items would invent per-battery numbers nobody calculated and
+  // would corrupt the very comparison the override exists to enable.
   const materialBreakdown = included.map((i) => ({
     itemId: i.id,
     category: i.category,
@@ -93,7 +132,10 @@ export async function presentOffer(pickupId: string): Promise<{ error: string | 
     .map(([pathway, count]) => `${count} ${pathway}`)
     .join(', ')
   const excludedNote = items.length > included.length ? ` ${items.length - included.length} item(s) excluded (HOLD).` : ''
-  const rationale = `Combined offer across ${included.length} item(s): ${mixSummary}.${excludedNote}`
+  // 🔴 `rationale` carries the override because it IS the answer to "why this
+  // price" — which is the column's whole purpose. The engine's own total is
+  // named in it explicitly, so the adjustment is never silent.
+  const rationale = `Combined offer across ${included.length} item(s): ${mixSummary}.${excludedNote}${overrideNote}`
 
   if (!alreadyOffered) {
     const { error: upsertError } = await admin.from('offers').upsert(
@@ -115,7 +157,16 @@ export async function presentOffer(pickupId: string): Promise<{ error: string | 
 
     const { error: statusError } = await admin
       .from('pickups')
-      .update({ status: 'offered' })
+      .update({
+        status: 'offered',
+        // FV3 · FD0. The inspection is finished at exactly this moment — every
+        // item is confirmed, scored and priced, which is what presenting
+        // requires. Recorded rather than derived from `status_events` because
+        // that log can legitimately run BACKWARDS (a reactivated pickup writes
+        // `requested` after `cancelled`), so "when was this inspected" cannot
+        // be answered by taking the last matching event.
+        inspected_at: new Date().toISOString(),
+      })
       .eq('id', pickupId)
       .eq('status', 'arrived') // guards the same race markArrived guards against
     if (statusError) return { error: statusError.message }
@@ -135,8 +186,24 @@ export async function presentOffer(pickupId: string): Promise<{ error: string | 
   return { error: null }
 }
 
-export async function presentOfferAndRedirect(pickupId: string): Promise<void> {
-  const result = await presentOffer(pickupId)
+export async function presentOfferAndRedirect(pickupId: string, formData?: FormData): Promise<void> {
+  // The adjusted-price fields are optional: the plain "Present offer" button
+  // posts no override and the engine's total stands.
+  const rawTotal = formData?.get('overrideRupees')
+  const rawReason = formData?.get('overrideReason')
+  const rupees = rawTotal === null || rawTotal === undefined ? NaN : Number(String(rawTotal).trim())
+  const override =
+    Number.isFinite(rupees) && rupees > 0
+      ? {
+          // 🔴 Rupees in the form, PAISE in the database. Every money value in
+          // this repo is an integer paise; rounding here is the one conversion
+          // point, and it happens on the server.
+          totalPaise: Math.round(rupees * 100),
+          reason: String(rawReason ?? ''),
+        }
+      : null
+
+  const result = await presentOffer(pickupId, override)
   if (result.error) {
     redirect(`/job/${pickupId}/offer?error=${encodeURIComponent(result.error)}`)
   }

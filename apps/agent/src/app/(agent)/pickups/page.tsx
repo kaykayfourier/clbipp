@@ -46,6 +46,7 @@ export default async function Page() {
       id: true,
       status: true,
       custodyBatchId: true,
+      collectionScheduledAt: true,
       scheduledSlot: true,
       vendor: { select: { fullName: true } },
       _count: { select: { items: true } },
@@ -154,7 +155,7 @@ export default async function Page() {
                 >
                   <ListRow id={job.id} subtitle={jobSubtitle(job)} status={job.status} />
                   <span className="px-1 text-[11px] text-text-secondary">
-                    {jobNextStep(job.status, job.custodyBatchId)}
+                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt)}
                   </span>
                 </Link>
               ))}

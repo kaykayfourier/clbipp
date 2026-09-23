@@ -12,7 +12,9 @@
     "./certificate": "./src/certificate.ts",
     "./compliance-export": "./src/compliance-export.ts",
     "./engine-config": "./src/engine-config.ts",
-    "./exception-classify": "./src/exception-classify.ts"
+    "./exception-classify": "./src/exception-classify.ts",
+    "./collection": "./src/collection.ts",
+    "./pathway": "./src/pathway.ts"
   },
   "scripts": {
     "test": "vitest run"

@@ -62,6 +62,17 @@ export const ADMIN_AUDIT_ACTIONS = [
   "lifecycle.override",
   /** A supplier's `Profile.marginTier` changed. */
   "supplier.margin",
+  /**
+   * A `BatteryItem.pathway` set or changed BY HAND, overriding the engine —
+   * which is what decides whether that battery goes to Second Life or to a
+   * recycler (FV5 · FD4). Requires a typed `reason`.
+   *
+   * ⚠ Added in FV5. Distinct from `exception.resolve`, deliberately: resolving
+   * an exception says "the engine's FLAG was wrong about this item" and
+   * advances nothing. This says "the engine's VERDICT was wrong", and it
+   * changes where the battery physically goes.
+   */
+  "item.pathway",
 ] as const
 
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number]
@@ -98,6 +109,9 @@ export const REASON_REQUIRED_ACTIONS: readonly AdminAuditAction[] = [
   "lifecycle.override",
   "market.override",
   "supplier.margin",
+  // Overriding the engine's destination decides whether a battery is reused or
+  // shredded. If any action owes a written reason, it is this one.
+  "item.pathway",
 ]
 
 export function isReasonRequired(action: AdminAuditAction): boolean {

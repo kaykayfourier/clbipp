@@ -150,10 +150,10 @@ Then:
 Verify: `npm run test` · `npm run build` · `npm run smoke -- --app=agent` ·
 `npm run verify-seed`.
 
-### FV3 — Inspection separated from collection · P0-4 · no further migration
+### FV3 — Inspection separated from collection · P0-4 · ✅ BUILT 2026-09-23
 
-🔴 **BLOCKED on D1, D3, D5.** D5 in particular: if partial collection is in
-scope this batch is not this batch.
+Unblocked by FD7 and FD8 rather than by the company. Partial collection is out
+(FD8), so this batch stayed the size it was scoped at.
 
 - `apps/agent/.../job/[id]/actions.ts` — new `scheduleCollection(pickupId, date)`
   beside `markArrived`, copying its shape exactly (session identity, service
@@ -176,9 +176,11 @@ scope this batch is not this batch.
 Verify: `npm run build` · all three smokes · a manual entry in
 `docs/MANUAL_TEST_QUEUE.md` for the two-visit path.
 
-### FV4 — Dispatch board: filters, sorting, workload · P1-6, P1-7
+### FV4 — Dispatch board: filters, sorting, workload · P1-6, P1-7 · ✅ BUILT 2026-09-23
 
-🔴 **BLOCKED on F1** (what "service area" means). Everything else can start.
+F1 answered in-house: **service area is the address city**, offered as a filter
+alongside agent, bucket and a date range. If the company later supplies a real
+zone map it replaces one `<Select>`'s options and nothing else.
 
 - `apps/admin/.../dispatch/page.tsx` becomes a server read over the live
   pipeline; a new client `DispatchBoard.tsx` composes the **existing**
@@ -197,10 +199,9 @@ Verify: `npm run build` · all three smokes · a manual entry in
 
 Verify: `npm run build` · `npm run smoke -- --app=admin`.
 
-### FV5 — Second Life / Recycling, operationally · P1-8 · **price-capable**
+### FV5 — Second Life / Recycling, operationally · P1-8 · ✅ BUILT 2026-09-23
 
-🔴 **BLOCKED on H1, H2, H3** for anything involving a destination. What can be
-built without them:
+Unblocked by FD9. Built:
 
 - `packages/core/src/pathway.ts` — FD4's mapping, plus labels. One home.
 - Admin can set/override an item's pathway with a mandatory reason →
@@ -211,18 +212,81 @@ built without them:
 - **Not built:** second-life routing, a refurb-partner directory, or any change
   to what the certificate says. All three wait on H2/H3.
 
-### FV6 — Pilot mode: manual pricing and the human step · **price-capable**
+### FV6 — Pilot mode: manual pricing and the human step · ✅ BUILT 2026-09-23 · 🔴 **PRICE-CAPABLE**
 
-🔴 **BLOCKED on L1, L3.** Scoped, not started. Shape if confirmed: FD5's mode
+Unblocked by FD10. An agent can now present a total other than the engine's.
+No price moves on its own — but this batch is the one place a human can move
+one, deliberately, with a reason attached.
+
+Previous scoping note: Shape if confirmed: FD5's mode
 flag; an office-quoted price path on the agent's result screen; the engine still
 running and logging (L5); a tap-to-call number and a callback request on the two
 screens where people get stuck (M2).
 
-### FV7 — Tags, containers, grouping · P2
+### FV7 — Tags, containers, grouping · P2 · ⛔ NOT STARTED, BY DECISION (FD11)
 
-🔴 **BLOCKED on I1, J3, K1.** Not started. J3 in particular decides whether a QR
+Not blocked any more — *declined for the pilot*. J3 still matters whenever it is
+picked up: it decides whether a QR container IS the `CustodyBatch` we already
+write or a parallel structure, and the wrong answer there is expensive to
+unwind.
+
+Original blocking note: J3 in particular decides whether a QR
 container *is* the `CustodyBatch` we already write or a parallel structure — the
 wrong answer there is expensive to unwind.
+
+---
+
+## §2.5 The blocking questions, answered in-house (2026-09-23)
+
+The company came back undecided — they are still working out what each phase
+looks like. Team direction (Aamir, 2026-09-23): **stop waiting, pick the simple
+rational option for every blocked question, build it, and let their feedback on
+a working thing drive the next round.** That is a better use of a pilot than a
+questionnaire.
+
+These are decisions **FD7–FD11**. They are OURS, not the company's — so unlike
+FD0–FD6 they are explicitly *provisional*: the first contradicting instruction
+from the company wins, and none of them should be defended in a meeting.
+
+**FD7 — An offer is valid for 7 days, and acceptance freezes it.**
+`OFFER_VALIDITY_DAYS` in `@clbipp/core/collection`. Derived from
+`Offer.createdAt`; no column, no job, no sweeper. 🔴 **An ACCEPTED offer never
+expires**, whatever the date says — the vendor agreed a price and we owe them
+that price. Expiry pressures the undecided; it does not claw back the decided.
+A lapsed undecided offer is *flagged*, never auto-cancelled: cancelling a
+vendor's pickup because nobody rang them is a worse failure than a stale price.
+
+**FD8 — No partial collection.** One pickup, one collection event. This is the
+single largest complexity saving available: a part-collected pickup splits one
+request across two custody chains, potentially two manifests and two
+certificates, and AD6 (a pickup advances only when every item is covered) would
+have to grow a per-item notion of "collected" that AD5 deliberately refuses. If
+the company needs it, it is its own sprint, not a flag.
+
+**FD9 — Second life is a LABEL plus a ROUTING RULE, and nothing else.**
+`destinationOf()` maps the engine's four pathways onto two destinations;
+`isShippableToRecycler()` keeps a second-life battery off a recycler manifest,
+enforced inside `loadManifestBuildStock` so no route into manifest building can
+bypass it. No refurb-partner directory (we have no list), no change to what a
+certificate says (we have no compliance answer). A second-life item simply
+stays at the facility, visibly, until someone tells us where it goes.
+
+**FD10 — The engine stays ON; the agent may override the total with a reason.**
+The simplest thing that keeps a human in the loop without building an
+asynchronous office-quote flow. 🔴 **There is no second pricing path.** Every
+item is still priced by the engine and every one of those numbers is still
+written; the override changes only the TOTAL presented to the vendor, and the
+engine's figure is named in `Offer.rationale` beside it. That preserves the
+comparison the pilot is actually for: what we would have paid, against what we
+did. Per-item prices are never back-filled from an override — spreading a
+commercial decision about a whole load across individual batteries would invent
+numbers nobody calculated and corrupt that comparison.
+
+**FD11 — No physical tagging in the pilot.** Pickup id and item id already
+identify everything, and the drop-off already creates a `CustodyBatch`. Until
+there is a printer or a roll of pre-printed QR labels in a van, a tagging
+feature is a screen that asks an agent to type a code nobody issued. FV7 stays
+unstarted, and that is the decision, not a delay.
 
 ---
 
@@ -323,3 +387,118 @@ Recovered in full: `reset-demo`, then `grants.sql`, `policies.sql`,
    Check `lsof -ti:3000` before trusting a green run.
 4. **A long-running dev server caches the Prisma client.** After a schema
    change and `prisma generate`, restart it or every query 500s.
+
+### FV3–FV6 — shipped (2026-09-23, Aamir + Claude)
+
+Built together in one pass after FD7–FD11 unblocked them in-house. **No
+migration**: every column these use shipped in `feedback_v2` back on 2026-09-10,
+which is exactly what that batch's "one migration for three batches" note was
+buying.
+
+**New shared logic, in `packages/core` and nowhere else:**
+
+- **`collection.ts`** — `offerState()` is the ONE reading of `offered`'s three
+  sub-states. 🔴 Eight screens could have done this arithmetic themselves; the
+  two-state version of this problem is already documented in CLAUDE.md as
+  something seven files each had to get right, and this is what stops the
+  three-state version repeating it. Also `parseCollectionDate` (validates the
+  agent's chosen date server-side — the form is not the boundary), and
+  `isFutureCollection`, which compares **calendar days, not elapsed hours**: an
+  agent booking "tomorrow" at 9am on a Monday evening means Tuesday, and a
+  24-hour comparison calls that today for another fourteen hours.
+- **`pathway.ts`** — `destinationOf()` (4 engine pathways → 2 destinations) and
+  🔴 `isShippableToRecycler()`, the routing rule. ⚠ `dispose` maps to
+  **Recycling**, not a third bucket. ⚠ An item with **no** pathway (every
+  flat-rate line) **is** shippable — filtering on a truthy pathway there would
+  silently drop half the stock, which is CLAUDE.md's `trace_id` trap wearing a
+  different hat.
+
+**FV3 — inspection ≠ collection.** `scheduleCollection` in the agent app's
+`job/[id]/actions.ts` writes `collection_scheduled_at` and a `status_events`
+row **carrying the current status** — an event recording a fact, not a
+transition. Writing anything else there would invent a tenth stage through the
+back door. `/job/[id]/offer` presents "Collect today" or a date picker;
+`inspectedAt` is stamped at offer presentation (the inspection is complete at
+exactly that moment — every item confirmed, scored and priced) and `collectedAt`
+inside the existing collection transaction. The agent day view gained a third
+list, **"Booked for later"**, because `isTodaysWork` ≠ `isActiveJob`: a pickup
+booked for next Tuesday is still the agent's job and still theirs alone, but
+putting it in the "needs you now" count makes that count a liar. The vendor sees
+the date on `/handover`.
+
+**FV4 — the dispatch board.** Now reads the whole live pipeline
+(`requested → offered`) and hands it to `DispatchBoard`, which composes the
+**existing** `DataTable` + `FilterChips` — the swap the old screen's own comment
+asked for once the console kit landed. Buckets are operational
+(*Needs an agent · Assigned · On site · Booked for later*), not the nine
+lifecycle stages, because a dispatcher thinks in work. Default view is still the
+unassigned queue, so the screen opens on the rows it always did. 🔴 It still does
+**not** filter on `agentId: null` — trap 11, seed fixture 8. Agent workload from
+`liveJobCounts()` is now on the board as well as the assign screen (feedback
+§2.2), same single definition.
+
+**FV5 — Second Life vs Recycling.** The two-way destination on
+`/pickups/[id]`, and `setItemPathway` — an admin override with a **mandatory**
+reason and an `item.pathway` `AdminAudit` row. ⚠ Distinct from
+`exception.resolve` on purpose: that one says *the engine's flag was wrong* and
+advances nothing; this says *the engine's verdict was wrong* and changes where
+the battery physically goes. Locked past `tested` — by then the pathway is part
+of the record a certificate is built from. The routing rule lives in
+`loadManifestBuildStock`, **not** in the picker, so no route into manifest
+building can bypass it (same posture as AD7).
+
+**FV6 — the human step.** `presentOffer` takes an optional
+`{ totalPaise, reason }`. 🔴 **Not a second pricing path**: the engine still
+runs, every item is still priced and stored, and the engine's own total is named
+in `Offer.rationale` beside the adjusted one — which is what preserves the
+comparison the pilot exists to produce. Guard rails: whole paise, a reason of
+10+ characters, and a 10× rail that catches a misplaced decimal typed in front
+of a waiting vendor. ⚠ Per-item prices are **never** back-filled from an
+override. A "call the office" button sits on the agent's offer screen and
+"Talk to us about this offer" on the vendor's, both behind
+`NEXT_PUBLIC_OFFICE_PHONE` and both absent when it is unset — a dead `tel:` link
+is worse than none, and the company has not given us a number (question M1).
+
+**Verified:** `npm run build` green on all three apps with
+`ƒ Proxy (Middleware)` on each · `npm run lint` **0 errors, 0 warnings** (the
+two long-standing unused-import warnings were cleared in passing) ·
+`npm run test` **342 passing**, up from 317 — 25 new across `collection.test.ts`
+(15) and `pathway.test.ts` (10).
+
+🔴 **NOT verified through the real HTTP path.** The shared Supabase project was
+unreachable for the whole of this session — see the incident note below — so
+`npm run smoke` and `npm run verify-seed` could not run. **Run all three smokes
+and `verify-seed` before pushing.**
+
+---
+
+## §6 Incident — the shared Supabase project is PAUSED (2026-09-23)
+
+Discovered when `npm run smoke` failed to resolve the project's API hostname.
+
+- `xlssgnnrtautldouirkt.supabase.co` → **NXDOMAIN**, from the local resolver and
+  from `8.8.8.8` alike. General DNS was fine throughout (`google.com` resolved).
+- `aws-1-ap-southeast-2.pooler.supabase.com` **does** resolve, but Postgres
+  refuses the connection on both 6543 and 5432.
+- Last database activity: **2026-09-10**. Thirteen days.
+
+That pattern — API subdomain withdrawn from DNS, database refusing connections,
+after more than seven idle days — is Supabase's **free-tier inactivity pause**.
+
+🔴 **Nothing in this session caused it.** No migration was applied, no
+destructive command was run, and the FV3–FV6 work touched no database. It is
+also NOT a recurrence of the 2026-09-10 wipe: that was a shadow-database
+mistake, the data was restored the same day, and a paused project **retains its
+data**.
+
+**Recovery is a dashboard action nobody can do from the CLI**: open the project
+at supabase.com and restore it. Then, in order — `npm run reset-demo`,
+re-apply `grants.sql` / `policies.sql` / `storage-policies.sql` / `realtime.sql`
+(⚠ a reseed restores rows, never grants or policies), `npm run verify-seed`, and
+all three smokes.
+
+**The standing lesson**: a free-tier project pauses after a week of quiet, and
+this repo's verification story — `smoke` and `verify-seed` — depends entirely on
+it being awake. A week off over a holiday will do this again. Anyone picking the
+project up after a gap should expect it and restore first, rather than debugging
+a DNS error.

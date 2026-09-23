@@ -31,6 +31,12 @@ they are in context even if nothing else is:
   space Prisma drops and recreates. It wiped the shared project on 2026-09-10.
 - 🔴 **Check `lsof -ti:3000` before trusting a green smoke run.** A `next dev`
   from twelve days earlier was still holding the port and smoke tested *it*.
+- 🔴 **A quiet week PAUSES the free-tier Supabase project.** It went down after
+  13 idle days on 2026-09-23: the API subdomain stops resolving (NXDOMAIN, even
+  from 8.8.8.8) and Postgres refuses connections, which looks exactly like a
+  broken network. **Data is retained** — restore it from the Supabase dashboard,
+  then reseed and re-apply grants. `smoke` and `verify-seed` are both dead until
+  you do.
 - 🔴 **Never write `StatusEvent.actorRole: 'recycler'`** (or `'hub'`). Every
   admin-written stage past the hub is an admin asserting something on a party's
   behalf, and the trail has to say so.
@@ -310,12 +316,25 @@ BLOCKING); **several batches cannot start until they answer.**
 **D0–D10** (agent), **AD0–AD12** (admin) and **FD0–FD6** (this set). The same
 letter+number means different things in each. **Quote the decision with its set.**
 
-- ✅ **FV1 built (2026-09-10)** — mandatory customer photos, and the
-  preliminary estimate removed from every vendor surface.
-- ✅ **FV2 built (2026-09-10)** — mandatory agent photos, and verified weight
-  with its method. Migration `feedback_v2` applied to the shared project.
-- 🔴 **FV3–FV7 are NOT started.** FV3 (separating inspection from collection) is
-  the largest remaining P0 and is blocked on client answers D1/D3/D5.
+- ✅ **FV1 + FV2 built (2026-09-10)** — mandatory photos both sides, the
+  preliminary estimate removed from every vendor surface, verified weight with
+  its method. Migration `feedback_v2` applied.
+- ✅ **FV3, FV4, FV5, FV6 built (2026-09-23)** — inspection separated from
+  collection · the dispatch board's filters, sorting and workload · Second Life
+  vs Recycling · the agent price override and the call-the-office links.
+  **No migration was needed**: every column they use shipped in `feedback_v2`.
+- ⛔ **FV7 (tags, QR containers, same-day grouping) is NOT started, BY DECISION**
+  — FD11, not a blocker. No printer and no labels exist for the pilot.
+- 🔴 **The company never answered the 43 questions.** They were undecided about
+  each phase, so on 2026-09-23 the team answered the five blocking ones in-house
+  as **FD7–FD11** and built against them. ⚠ **Those five are OURS and are
+  explicitly PROVISIONAL** — the first contradicting instruction from the
+  company wins, and none of them should be defended in a meeting. Everything
+  FD0–FD6 is still settled.
+- 🔴 **FV3–FV6 are NOT verified through the real HTTP path.** The shared
+  Supabase project was paused for that whole session (see below), so
+  `npm run smoke` and `npm run verify-seed` never ran against them.
+  **Run all three smokes and `verify-seed` before pushing.**
 
 **The rules FV1 and FV2 put in place, which new code must not undo:**
 
@@ -338,12 +357,47 @@ letter+number means different things in each. **Quote the decision with its set.
   `@clbipp/core/intake` — 20% or 5 kg, **whichever is LARGER**. `max`, not
   `min`: the percentage governs a heavy pallet, the 5 kg floor stops every
   laptop pack raising a flag. No screen re-derives the threshold.
-- ⚠ **`Pickup.inspectedAt` / `collectionScheduledAt` / `collectedAt` exist but
-  NOTHING WRITES THEM YET.** They shipped in the FV2 migration so the shared
-  database is migrated once; FV3 is what fills them. 🔴 When it does, **`offered`
-  will carry THREE sub-states**, not two — see FD0 in the plan and the comment
-  on those columns in `schema.prisma`.
-- ⚠ Same for `BatteryItem.pathwaySetBy` / `pathwayReason` — FV5's, unwritten.
+- 🔴 **`offered` NOW CARRIES THREE SUB-STATES, not two** (FV3 · FD0), and no
+  screen works them out for itself. **`offerState()` in `@clbipp/core/collection`
+  is the one reading** — awaiting the vendor (`acceptedAt` null) · accepted,
+  collect now · accepted, `collectionScheduledAt` set. The two-state version of
+  this already forced seven files to each get it right; don't start an eighth.
+  🔴 **Deferred collection is still NOT a tenth stage.** `scheduleCollection`
+  writes a `status_events` row carrying the **current** status — an event
+  recording a fact, not a transition.
+- ⚠ **`isTodaysWork` ≠ `isActiveJob`** (`apps/agent/src/lib/job-nav.ts`). A
+  pickup booked for next Tuesday is ACTIVE — it is that agent's job and nobody
+  else's — but it is not today's work, and counting it in the day view's
+  "needs you now" tile makes that tile a liar.
+- 🔴 **An ACCEPTED offer never expires** (FD7). `OFFER_VALIDITY_DAYS` is 7 and
+  is derived from `Offer.createdAt`, but expiry pressures the UNDECIDED only —
+  it never claws back a price a vendor already agreed to. A lapsed undecided
+  offer is flagged, never auto-cancelled.
+- 🔴 **A second-life battery may never go on a recycler manifest** (FV5 · FD4).
+  `isShippableToRecycler()` in `@clbipp/core/pathway` is the rule, enforced
+  inside `loadManifestBuildStock` rather than in the picker so no route into
+  manifest building can bypass it — same posture as AD7. ⚠ `dispose` maps to
+  **Recycling**, and an item with **no** pathway (every flat-rate line) **is**
+  shippable: filtering on a truthy pathway there silently drops half the stock,
+  which is the `trace_id` trap wearing a different hat.
+- ⚠ **`item.pathway` is not `exception.resolve`.** Resolving an exception says
+  "the engine's FLAG was wrong" and advances nothing; `setItemPathway` says
+  "the engine's VERDICT was wrong" and changes where the battery physically
+  goes. Both need a typed reason; they are different verbs on purpose.
+- 🔴 **The agent price override is NOT a second pricing path** (FV6 · FD10).
+  The engine still runs and every item is still priced and stored; the override
+  changes only the TOTAL, and the engine's figure is named in `Offer.rationale`
+  beside it — which is what preserves the pilot's whole comparison (what we
+  would have paid vs what we did). ⚠ **Never back-fill per-item prices from an
+  override**: spreading a commercial decision about a load across individual
+  batteries invents numbers nobody calculated.
+- ⚠ **No partial collection** (FD8). One pickup, one collection event. It would
+  split a request across two custody chains and force a per-item notion of
+  "collected" that AD5 and AD6 deliberately refuse.
+- ⚠ `NEXT_PUBLIC_OFFICE_PHONE` drives the "call the office" / "talk to us"
+  buttons in the agent and customer apps. **Unset → they do not render**, which
+  is deliberate: a dead `tel:` link is worse than no link, and the company has
+  not given us a number.
 
 ## The Field Agent app — built, and still live code
 
@@ -593,7 +647,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 317 (core 250, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 342 (core 275, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.

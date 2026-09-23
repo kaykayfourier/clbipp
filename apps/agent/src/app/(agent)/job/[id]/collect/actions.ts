@@ -84,7 +84,11 @@ export async function confirmCollection(formData: FormData) {
       // rather than double-crediting the wallet.
       const updated = await tx.pickup.updateMany({
         where: { id: pickupId, status: 'offered' },
-        data: { status: 'collected', agentFeePaise },
+        // FV3 · FD0. `collectedAt` is the moment the load physically changed
+        // hands, which — now that inspection and collection can be days apart —
+        // is no longer the same thing as "when did this reach `collected`" read
+        // off a log that can run backwards.
+        data: { status: 'collected', agentFeePaise, collectedAt: new Date() },
       })
       if (updated.count === 0) {
         throw new Error('ALREADY_COLLECTED')

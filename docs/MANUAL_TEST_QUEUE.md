@@ -626,3 +626,53 @@ checks, 102 smoke routes. What a script still cannot check:
 - [ ] Book with photos as the vendor → dispatch → inspect as the agent with a
       method and photos → confirm the admin's `/pickups/[id]` shows both halves
       side by side and they disagree where they should.
+
+## FV3–FV6 (2026-09-23)
+
+🔴 **Everything here is outstanding twice over**: these are the usual
+can't-be-scripted checks, AND the batches were never smoke-tested at all,
+because the shared Supabase project was paused. **Restore it, reseed, re-apply
+grants, then run all three smokes before working through this list.**
+
+**FV3 — inspection separated from collection**
+- [ ] Present an offer, accept it as the vendor, then choose **Schedule
+      collection** and pick a date a few days out.
+- [ ] The agent day view moves that job out of "Your jobs" into **Booked for
+      later**, and the greeting line's count drops by one.
+- [ ] The vendor's `/handover` shows the booked date, not "collecting today".
+- [ ] `/dispatch` shows it under **Booked for later** with the collection date.
+- [ ] Change the date; confirm the timeline gains a second note and the first
+      `offered` entry is NOT relabelled (`buildStages` is first-wins).
+- [ ] Try to schedule a pickup the vendor has not accepted — must refuse.
+- [ ] Collect a job that had a date booked — it must still work, and
+      `collectedAt` should be today, not the booked date.
+
+**FV4 — dispatch board**
+- [ ] Each bucket chip shows a sane count and filters correctly.
+- [ ] Agent, city and the From/To date range narrow as expected, and
+      **Clear filters** restores.
+- [ ] 🔴 PKP-2026-000114 (the reactivated pickup, seed fixture 8) is still
+      visible with its "previously assigned" warning — it must not be filtered
+      out by the agent dropdown.
+- [ ] Sorting by every sortable column, both directions.
+- [ ] The agent-workload strip agrees with `/agents` and `/dispatch/[id]`.
+
+**FV5 — Second Life / Recycling**
+- [ ] Override an item to **Reuse** with a reason; the destination flips to
+      Second Life and an "Overridden" chip appears.
+- [ ] 🔴 That item then **disappears from `/manifests/new`'s available stock**.
+      Flip it back to Recycle and it returns. This is the rule that matters.
+- [ ] A reason under 12 characters is refused.
+- [ ] `/audit` shows a **Battery pathway overridden** row with the reason.
+- [ ] An item on a `certified` pickup shows the locked message, no form.
+
+**FV6 — price override and the human step**
+- [ ] Present an offer with the adjustment left blank — vendor sees the
+      engine's total, unchanged.
+- [ ] Present one with an adjusted total and a reason — vendor sees the adjusted
+      figure, and `Offer.rationale` names the engine's original in paise.
+- [ ] 🔴 Confirm per-item `linePricePaise` are **untouched** by an override.
+- [ ] A reason under 10 characters is refused; so is a total over 10× the
+      engine's.
+- [ ] Set `NEXT_PUBLIC_OFFICE_PHONE` in both apps and confirm the call buttons
+      appear and dial; unset it and confirm they vanish entirely.

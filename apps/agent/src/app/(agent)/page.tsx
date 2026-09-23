@@ -16,7 +16,7 @@ import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
 import { AppShell, Card, CardContent, InstallPrompt, ListRow, PagePadding, SectionLabel } from '@clbipp/ui'
 
-import { isActiveJob, jobHref, jobNextStep, jobSubtitle } from '@/lib/job-nav'
+import { isActiveJob, isTodaysWork, jobHref, jobNextStep, jobSubtitle } from '@/lib/job-nav'
 
 // Stats are scoped to the local day, not a rolling 24h. "Earned today" resetting
 // at 3pm because that is when yesterday's shift started would be wrong on a
@@ -117,6 +117,7 @@ export default async function Page() {
         id: true,
         status: true,
         custodyBatchId: true,
+        collectionScheduledAt: true,
         scheduledSlot: true,
         vendor: { select: { fullName: true } },
         _count: { select: { items: true } },
@@ -154,9 +155,27 @@ export default async function Page() {
     0,
   )
 
-  // Two lists, split by whether the job still wants something from the agent.
-  // The split is `isActiveJob`, not a hard-coded status set — see job-nav.ts.
-  const active = jobs.filter((job) => isActiveJob(job.status, job.custodyBatchId))
+  // THREE lists since FV3, split by job-nav's predicates rather than any
+  // hard-coded status set — see job-nav.ts.
+  //
+  // 🔴 `active` is now TODAY's work specifically. A pickup whose collection is
+  // booked for next Tuesday is still the agent's job and still theirs alone,
+  // but it is not on their slate this morning — and the greeting line counts
+  // this list, so including it would tell an agent with nothing to do that they
+  // have three jobs.
+  const active = jobs.filter((job) =>
+    isTodaysWork(job.status, job.custodyBatchId, job.collectionScheduledAt),
+  )
+  const upcoming = jobs
+    .filter(
+      (job) =>
+        isActiveJob(job.status, job.custodyBatchId) &&
+        !isTodaysWork(job.status, job.custodyBatchId, job.collectionScheduledAt),
+    )
+    .sort(
+      (a, b) =>
+        (a.collectionScheduledAt?.getTime() ?? 0) - (b.collectionScheduledAt?.getTime() ?? 0),
+    )
   const recent = jobs.filter((job) => !isActiveJob(job.status, job.custodyBatchId)).slice(0, 3)
 
   // First name only — "Good morning, Ravi Kumar" reads like a letter, not a
@@ -215,13 +234,36 @@ export default async function Page() {
                 >
                   <ListRow id={job.id} subtitle={jobSubtitle(job)} status={job.status} />
                   <span className="px-1 text-[11px] text-text-secondary">
-                    {jobNextStep(job.status, job.custodyBatchId)}
+                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt)}
                   </span>
                 </Link>
               ))}
             </div>
           )}
         </div>
+
+        {/* FV3 · FD0. Booked for a later day — the agent's job, but not today's.
+            Rendered as its own section rather than mixed into "Your jobs", so
+            the day view answers "what do I do now" without qualification. */}
+        {upcoming.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <SectionLabel>Booked for later</SectionLabel>
+            <div className="flex flex-col gap-2">
+              {upcoming.map((job) => (
+                <Link
+                  key={job.id}
+                  href={jobHref(job.status, job.custodyBatchId, job.id)}
+                  className="flex flex-col gap-1"
+                >
+                  <ListRow id={job.id} subtitle={jobSubtitle(job)} status={job.status} />
+                  <span className="px-1 text-[11px] text-text-secondary">
+                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {recent.length > 0 && (
           <div className="flex flex-col gap-3">

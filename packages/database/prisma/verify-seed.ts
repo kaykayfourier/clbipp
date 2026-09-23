@@ -147,7 +147,7 @@ async function main() {
     // ⚠ Adding a verb there means adding it here, or the first real use of it
     // fails this check after a demo. `custody.advance` (Admin Batch 6) is the
     // first one that happened to.
-    ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin"].includes(a.action)),
+    ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin","item.pathway"].includes(a.action)),
     `${audits.length} rows`)
 
   // 12 — FV2/FV1 evidence rules, made a fixture rather than a hope.

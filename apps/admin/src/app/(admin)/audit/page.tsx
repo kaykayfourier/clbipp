@@ -73,6 +73,7 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   'pickup.certify': 'Pickup certified',
   'lifecycle.override': 'Lifecycle overridden',
   'supplier.margin': 'Supplier margin changed',
+  'item.pathway': 'Battery pathway overridden',
 }
 
 const SUBJECT_LABELS: Record<AdminAuditSubject, string> = {

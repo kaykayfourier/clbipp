@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@clbipp/auth/server'
 import { createAdminClient } from '@clbipp/auth/admin'
 import { isStageBefore } from '@clbipp/ui'
+import { COLLECTION_DATE_MESSAGES, parseCollectionDate } from '@clbipp/core/collection'
 
 // ─── Agent lifecycle transitions ─────────────────────────────────────────────
 // 📌 THIS IS THE REFERENCE SERVICE-ROLE ACTION FOR THE AGENT APP (task sheet,
@@ -126,4 +127,101 @@ export async function markArrivedAndContinue(formData: FormData) {
   // (W1). Landing on it directly is the point — it should not be something the
   // agent has to go and find.
   redirect(`/job/${encodeURIComponent(pickupId)}/safety`)
+}
+
+// ─── scheduleCollection (FV3 · FD0) ──────────────────────────────────────────
+// The agent inspected, the vendor accepted, and the load is NOT going in the van
+// today — vehicle capacity, safety, or sheer quantity. Books a date instead.
+//
+// 🔴 WRITES NO STATUS AND ADVANCES NOTHING. The pickup stays at `offered`; only
+// `collection_scheduled_at` changes. That is FD0: deferred collection is a
+// derived state, not a tenth lifecycle stage, exactly as "pending drop-off" is
+// derived from `custody_batch_id` (D5). The nine stages stay locked.
+//
+// A `status_events` row IS written — with the CURRENT status, not a new one —
+// because "we agreed the 20th" is a fact about the custody chain that the
+// vendor's timeline should carry. `buildStages` is first-wins, so a second
+// `offered` event cannot relabel the first.
+//
+// Copies the four-point shape at the top of this file. Same idempotency posture
+// as `markArrived`: re-booking the same date is a silent success, because an
+// agent on one bar of signal will submit twice.
+export async function scheduleCollection(
+  pickupId: string,
+  rawDate: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) return { error: 'Not authenticated.' }
+
+  const { value: date, error: dateError } = parseCollectionDate(rawDate)
+  if (dateError !== null) return { error: COLLECTION_DATE_MESSAGES[dateError] }
+
+  const admin = createAdminClient()
+
+  const { data: pickup, error: readError } = await admin
+    .from('pickups')
+    .select('id, agent_id, status, collection_scheduled_at, offers(accepted_at)')
+    .eq('id', pickupId)
+    .single()
+
+  if (readError || !pickup) return { error: 'Job not found.' }
+
+  // 🔴 The ownership check, standing in for the absent policy. See note 3.
+  if (pickup.agent_id !== user.id) return { error: 'This job is not assigned to you.' }
+
+  if (pickup.status !== 'offered') {
+    return pickup.status === 'collected'
+      ? { error: 'This job has already been collected.' }
+      : { error: 'A collection can only be booked once the vendor has accepted the offer.' }
+  }
+
+  // The same gate `/collect` enforces, for the same reason: `offered` means two
+  // different things and only the accepted half may be scheduled. A vendor who
+  // has not decided yet cannot have a collection booked against them.
+  const acceptedAt = Array.isArray(pickup.offers)
+    ? pickup.offers[0]?.accepted_at
+    : (pickup.offers as { accepted_at: string | null } | null)?.accepted_at
+  if (!acceptedAt) return { error: 'The vendor has not accepted this offer yet.' }
+
+  const { error: writeError } = await admin
+    .from('pickups')
+    .update({ collection_scheduled_at: date.toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', pickupId)
+    .eq('status', 'offered') // guards the same race markArrived guards against
+
+  if (writeError) return { error: writeError.message }
+
+  const shown = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  const { error: eventError } = await admin.from('status_events').insert({
+    pickup_id: pickupId,
+    // 🔴 The CURRENT status, deliberately. This event records a fact about the
+    // pickup, not a transition — writing anything else here would invent a
+    // tenth stage through the back door.
+    status: 'offered',
+    actor_id: user.id,
+    actor_role: 'agent',
+    notes: `Collection scheduled for ${shown}`,
+  })
+  if (eventError) console.error('[scheduleCollection] status_events insert failed:', eventError)
+
+  revalidatePath(`/job/${pickupId}`)
+  revalidatePath('/')
+  return { error: null }
+}
+
+export async function scheduleCollectionAndReturn(formData: FormData) {
+  const pickupId = String(formData.get('pickupId') ?? '')
+  const date = String(formData.get('collectionDate') ?? '')
+  if (!pickupId) redirect('/')
+
+  const result = await scheduleCollection(pickupId, date)
+  if (result.error) {
+    redirect(`/job/${encodeURIComponent(pickupId)}?error=${encodeURIComponent(result.error)}`)
+  }
+  redirect(`/job/${encodeURIComponent(pickupId)}`)
 }

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { Prisma, prisma } from '@clbipp/database'
 import type { BatteryCategory, BatteryType, ManifestStatus, PickupStatus } from '@clbipp/database'
+import { isShippableToRecycler } from '@clbipp/core/pathway'
 import { LIFECYCLE_STAGES, isLifecycleStage } from '@clbipp/ui'
 import type { LifecycleStage } from '@clbipp/ui'
 
@@ -235,6 +236,7 @@ export async function loadManifestBuildStock(): Promise<BuildableItem[]> {
           quantity: true,
           weightKg: true,
           confirmedWeightKg: true,
+          pathway: true,
         },
       },
     },
@@ -246,6 +248,21 @@ export async function loadManifestBuildStock(): Promise<BuildableItem[]> {
     if (!batch) continue
     for (const item of pickup.items) {
       if (claimed.has(item.id)) continue
+      // 🔴 FV5 · FD4 — THE ROUTING RULE, applied at the one place it bites.
+      //
+      // A manifest is a legal chain-of-custody handover to a recycler, and a
+      // recycler breaks a battery down for materials. A second-life pack on one
+      // is a reusable battery about to be shredded by mistake.
+      //
+      // Enforced in the STOCK QUERY rather than in the picker so that no route
+      // into manifest building can bypass it — same posture as AD7, which is
+      // enforced in the action rather than only in the dropdown.
+      //
+      // ⚠ An item with NO pathway (every flat-rate line) is shippable and must
+      // stay so: those have always gone to a recycler, and filtering on a
+      // truthy pathway here would silently drop half the stock — the trap
+      // CLAUDE.md flags about `trace_id`-keyed tables, wearing a different hat.
+      if (!isShippableToRecycler(item.pathway)) continue
       stock.push({
         itemId: item.id,
         pickupId: pickup.id,
