@@ -368,6 +368,21 @@ letter+number means different things in each. **Quote the decision with its set.
   ⚠ `assignPickup` re-reads the agent via `agentStateAtConfirm()` at write time
   (two admins assigning at once); it refuses on the safety gate only — a full
   day is a warning, never a block.
+- 🔴 **EXPECT "why doesn't it show who's off duty today".** The company's notes
+  ask for it and their example UI shows `Ramesh — Unavailable today`; we did
+  **not** build it, because **this database has no duty state, no working hours
+  and no roster** — `Profile` knows an agent's zone, vehicle, rating and safety
+  training and nothing about whether they are working. A screen that says
+  "Available" because nobody recorded otherwise asserts a fact nobody knows.
+  **§8 of `docs/PLAN_FEEDBACK_V2.md` is the written answer and the build path**
+  — a `DutyStatus` enum on `Profile` is a half-day and covers ~80% of it.
+  🔴 Every availability question routes through **`availabilityOf()`** in
+  `@clbipp/core/dispatch-ranking` precisely so that fix is one branch in one
+  function; consumers already render an `unavailable` agent correctly. Don't
+  add a second availability check anywhere.
+  ⚠ Related gaps, all deliberate and all in §8: conflicts are counted **per day,
+  not per time window** (so never "conflicts with the 13:00"), and
+  `Profile.agentZone` is **displayed but does not affect ranking**.
 - 🔴 **The company never answered the 43 questions.** They were undecided about
   each phase, so on 2026-09-23 the team answered the five blocking ones in-house
   as **FD7–FD11** and built against them. ⚠ **Those five are OURS and are

@@ -576,3 +576,96 @@ than a heading.
 working-hours/shift management, geographic zones, travel time instead of
 straight-line distance, vehicle capacity, route-aware assignment, automated
 recommendation, multi-pickup route optimisation.
+
+---
+
+## §8 What FV8 deliberately does NOT do — and what to build when asked
+
+🔴 **Read this before answering "why doesn't dispatch show who's off today".**
+Expect that question. The company's own notes describe off-duty agents and
+working-hours windows, and the example UI in
+`docs/field agent selection.txt` shows `Ramesh — Unavailable today`. We built
+everything around that and then derived availability from something narrower,
+**on purpose and for one reason: the data does not exist.**
+
+This section is the answer to "why not", and the shape of the fix.
+
+### 8.1 The gap, stated plainly
+
+`availabilityOf()` in `packages/core/src/dispatch-ranking.ts` returns
+`unavailable` for exactly one condition — **no `safetyTrainedAt`** — because
+that is the only thing in this database that genuinely stops an agent working a
+job (`requireSafetyChecklist` blocks every intake screen, so the job would sit
+undoable).
+
+It does **not** know about:
+
+| The notes ask for | Why it isn't there |
+|---|---|
+| "Off duty" / "Unavailable today" | No duty state, anywhere. `Profile` has `agentZone`, `agentVehicle`, `agentRating`, `safetyTrainedAt` — and nothing about whether someone is working today. |
+| Working hours (`09:00 – 18:00`) | Not modelled. |
+| "Agent has another job at 13:00" | We count jobs **per day**, not per time window — so we can say "3 jobs that day", never "conflicts with the 13:00". |
+| Leave / sick / rest days | Not modelled. |
+
+🔴 **Inventing any of this in a screen would be worse than the gap.** A console
+that says "Available" because nobody recorded otherwise is asserting a fact
+nobody knows — and a dispatcher who trusts it once and sends an agent out on
+their day off will not trust the screen again.
+
+### 8.2 What to build, smallest first
+
+**Step 1 — a duty flag (half a day).** The 80% answer. One enum on `Profile`:
+
+```prisma
+enum DutyStatus { on_duty  off_duty }
+dutyStatus DutyStatus @default(on_duty) @map("duty_status")
+```
+
+Toggled by an admin from `/agents` (that screen is read-only today and is the
+natural home). `availabilityOf()` gains one branch above the safety check, and
+`UnavailabilityReason` gains `off_duty`. **Every consumer already handles an
+`unavailable` agent** — ranked last, shown disabled, reason displayed — so the
+UI needs no change at all. That is the whole point of routing every availability
+question through one function.
+
+**Step 2 — working hours (a day).** `workingHoursStart` / `workingHoursEnd` on
+`Profile`, compared against the slot the dispatcher picked. Produces
+"outside 09:00–18:00" as a `busy` reason rather than a block, matching the
+notes' insistence that an admin may override.
+
+**Step 3 — time-window conflicts (a day).** The real version of the notes'
+`13:30 vs 13:00` example. `rankedAgentsFor()` already loads that day's pickups;
+it currently counts them. Return their `scheduledSlot` times instead and
+overlap-test against the proposed slot. ⚠ Needs a job-duration assumption —
+`Pickup.etaMinutes` exists and is the honest source.
+
+**Step 4 — a roster.** Only if they ask. A per-agent per-date table
+(`AgentShift`) is the real answer to leave and rest days, and it is a schema of
+its own. Do not start here.
+
+🔴 **Steps 1–3 all land in `availabilityOf()` and `rankedAgentsFor()`.** Nothing
+else moves: not the ranker, not `AgentSelector.tsx`, not the assign action. The
+boundary was drawn for this.
+
+### 8.3 Also on the notes' own "later enhancement" list, also not built
+
+Geographic zones (⚠ `Profile.agentZone` **exists and is displayed but does not
+affect ranking**) · travel time instead of straight-line distance · vehicle
+capacity · route-aware assignment · multi-pickup route optimisation · Phase 3
+live tracking.
+
+🔴 **"Automated recommended agent" is on that list and we will NOT be building
+it without an explicit instruction.** The notes are emphatic in the opposite
+direction — *"don't automatically assign the agent"*, *"let the dispatcher make
+the final choice"* — so auto-assignment would contradict the same document that
+lists it. If it is ever asked for, confirm it means "pre-select the top row",
+not "assign without a human".
+
+### 8.4 One edge case handled weakly
+
+**"Agent becomes unavailable after assignment"** (notes, edge case 4). The notes
+want a warning or exception the admin can act on. Today the state is *visible*
+— a stale or overloaded agent shows on the dispatch board and on the pickup —
+but **nothing raises it proactively**. There is an `ItemException` model for
+engine flags and no equivalent for dispatch. Worth doing alongside Step 1, since
+a duty flag is what makes "became unavailable" detectable in the first place.

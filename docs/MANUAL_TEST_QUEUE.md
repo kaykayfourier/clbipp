@@ -697,3 +697,11 @@ grants, then run all three smokes before working through this list.**
       other. The second must fail cleanly on the pickup's status, not write.
 - [ ] Distance is plausible against the vendor's real address (it is
       straight-line, so expect it to read shorter than a drive).
+
+### FV8 — expect this question from the company
+
+Not a test; a briefing note. When they ask **"why doesn't it show who's off
+duty today"**, the answer is that nothing in the system records duty state —
+not that it was missed. §8 of `docs/PLAN_FEEDBACK_V2.md` has the full answer and
+the build path (a `DutyStatus` enum on `Profile` is roughly half a day and
+covers most of it). Worth reading before the meeting rather than during it.
