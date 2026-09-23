@@ -15,7 +15,7 @@
 > `HANDOFF_PROTOCOL.md`.
 
 **Last updated:** 2026-08-31 — 🎯 **every screen in the Admin console sprint is
-built. Only Batch 17 (deploy, B) remains.** A's lane finished today with
+built, AND DEPLOYED.** ⚠ Batch 17 (deploy) was listed here as outstanding long after `https://clbipp-admin.vercel.app` was live and serving — corrected 2026-09-23. All three apps deploy off `main`. A's lane finished today with
 Batches 6 and 7 (the lifecycle holes), **Batch 14 (`/exceptions` + `/audit`)**
 and **Batch 11 (`/config` + the engine-config publish path)**; B's and C's
 batches (2, 5, 8, 9, 10, 12, 13, 15, 16) are all pushed.
@@ -25,7 +25,7 @@ batches (2, 5, 8, 9, 10, 12, 13, 15, 16) are all pushed.
 > `npm run smoke` scored it green the whole time because the stub had been given
 > the exact `<h1>` the assertion named. Rebuilt 2026-08-31. **Audit such claims
 > with `grep -rl "not built yet" apps/admin/src`, not with `git log`.** The Field Agent app is
-done except Batch 9 (deploy). Both existing apps are installable, and the full
+done INCLUDING Batch 9 (deploy) — `https://clbipp-agent.vercel.app` is live. Both existing apps are installable, and the full
 **vendor → admin → agent → vendor-gets-paid → hub → recycler → certificate**
 journey runs from screens alone, with no CLI step and no seeded row standing in
 for a real one.

@@ -5,6 +5,32 @@ repository. It is shared and committed — keep it limited to facts true for
 anyone working in this repo. Personal working-style preferences belong in
 `CLAUDE.local.md` instead (gitignored, not this file).
 
+## Production — all three apps are LIVE
+
+```
+https://clbipp-customer.vercel.app     vendor app
+https://clbipp-agent.vercel.app        field agent app
+https://clbipp-admin.vercel.app        admin console
+```
+
+**A push to `main` deploys all three.** ⚠ Use these ALIASES, never a
+per-deployment URL — a per-deployment host is not in Supabase's redirect
+allowlist, so auth silently fails on it.
+
+Verify a deploy the way the repo already does, against production:
+
+```bash
+SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke
+SMOKE_BASE_URL=https://clbipp-agent.vercel.app    npm run smoke -- --app=agent
+SMOKE_BASE_URL=https://clbipp-admin.vercel.app    npm run smoke -- --app=admin
+```
+
+⚠ **The admin URL went unrecorded for weeks.** `PROJECT_STATE.md` still listed
+admin Batch 17 (deploy) as outstanding while the console was already live and
+serving — so "the deploy is pending" was read off a stale doc rather than off
+the internet. Found 2026-09-23 by curling it. **If you are about to say
+something is not deployed, check first.**
+
 ## ⚠ Second glance — `docs/BEFORE_YOU_PUSH.md`
 
 **Read `docs/BEFORE_YOU_PUSH.md` before every push.** It is the consolidated
