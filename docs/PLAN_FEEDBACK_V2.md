@@ -1,16 +1,47 @@
-# Plan — Presentation Feedback (FV1–FV7)
+# Plan — Presentation Feedback (FV1–FV8)
 
 Source: `docs/CLBIPP_Presentation_Feedback_Changes.docx` (eleven changes, P0–P2)
 plus the pilot-run conversation of 2026-09-09 (engine may be off for the pilot;
-they want a human step retained).
+they want a human step retained), plus `docs/field agent selection.txt` (the
+company's expansion of §2.2 into a ranked agent selector).
 
-Open questions are in `docs/CLBIPP_Open_Questions_2026-09-10.html` (rendered to
-PDF, sent to the company). **Sections marked BLOCKING there gate the batches
-that say so below** — everything else proceeds on the stated recommendation.
-
-Decisions here are numbered **FD0–FD6** and follow the same rule as AD0–AD12:
+Decisions here are numbered **FD0–FD11** and follow the same rule as AD0–AD12:
 once settled, not re-litigated mid-build. Note the collision hazard the repo
 already warns about — quote the decision with its set (**FD**, not AD or D).
+⚠ **FD0–FD6 are settled. FD7–FD11 are OURS and provisional** — see §2.5.
+
+---
+
+## STATE AS OF 2026-09-27 — read this first
+
+**Every P0 and every P1 in the feedback document is built, pushed and live.**
+Verified against production on 2026-09-23: **102 routes** (48 customer + 30
+agent + 24 admin) plus `verify-seed` 27/27 and the admin role gate both ways.
+
+| | |
+|---|---|
+| §1 Core workflow (all 5) | ✅ FV1, FV2, FV3 |
+| §2.1 Dispatch filters + sorting | ✅ FV4 |
+| §2.2 Live job count → ranked selector | ✅ FV8 |
+| §3 Agent inspection + pickup | ✅ FV2, FV3 |
+| §4 Tags, QR boxes, grouping | ⛔ **Declined for the pilot** (FD11) |
+| §5 Second Life / Recycling | ✅ FV5 |
+
+**The three things a fresh session should know:**
+
+1. 🔴 **§8 is the most likely next conversation.** The company's notes ask for
+   off-duty / working-hours availability and we did not build it — there is no
+   duty data in this database. §8 is the written answer plus the build path; a
+   `DutyStatus` enum on `Profile` is ~half a day and covers most of it.
+2. 🔴 **FD7–FD11 are our provisional calls, not the company's answers** (§2.5).
+   They were never asked to choose. Don't defend them in a meeting.
+3. ⚠ **The manual pass has not happened.** Everything is verified
+   programmatically; nobody has judged whether the ranked order reads sensibly
+   to a human dispatcher, or whether the collection-date flow feels right on a
+   phone. `docs/MANUAL_TEST_QUEUE.md` has the checklists.
+
+**Nothing is blocked.** The 43 open questions were never answered and no longer
+gate anything.
 
 ---
 

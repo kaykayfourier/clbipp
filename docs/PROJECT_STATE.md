@@ -1,12 +1,28 @@
 # CLBIPP — Project State
 
-> **2026-09-10 — the sprint is no longer the last word.** The company reviewed
-> the finished three-app platform and sent eleven changes
+> **2026-09-27 — the feedback round is the current work, and it is DONE.**
+> The company reviewed the finished three-app platform and sent eleven changes
 > (`docs/CLBIPP_Presentation_Feedback_Changes.docx`), plus a meeting that added
-> a pilot phase and a possible engine-off mode. That work is tracked in
-> `docs/PLAN_FEEDBACK_V2.md` as batches **FV1–FV7**. **FV1 and FV2 are built;
-> FV3–FV7 are not, and most are blocked on the 43 questions sent back to the
-> company.** Read that plan before treating anything below as current.
+> a pilot phase and a possible engine-off mode, plus
+> `docs/field agent selection.txt` expanding §2.2 into a ranked agent selector.
+> Tracked in `docs/PLAN_FEEDBACK_V2.md` as **FV1–FV8**.
+>
+> ✅ **Every P0 and every P1 is built, pushed and live.** Verified against
+> production 2026-09-23: **102 routes** + `verify-seed` 27/27 + the admin role
+> gate both ways. Only §4 of the feedback (tags, QR transport boxes, same-day
+> grouping) is untouched — **declined for the pilot** (FD11), not blocked.
+>
+> **Read `docs/PLAN_FEEDBACK_V2.md` — its "STATE AS OF" block is the handover.**
+> Three things matter going in: **§8** is the written answer to the off-duty
+> availability question the company will most likely ask next; **FD7–FD11 are
+> our own provisional calls**, not their answers (they never replied to the 43
+> questions); and **the manual pass has not happened** — everything is verified
+> programmatically, nothing by a human eye.
+>
+> ⚠ **All three apps are live** — `clbipp-customer`, `clbipp-agent`,
+> `clbipp-admin` on `vercel.app`. A push to `main` deploys all three. The admin
+> URL went unrecorded for weeks while this file said its deploy was pending; if
+> you are about to say something is not deployed, **curl it first.**
 
 
 > **Living status file.** Update this at the end of any working chat. It is the
@@ -14,7 +30,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-08-31 — 🎯 **every screen in the Admin console sprint is
+**Last updated:** 2026-09-27 (feedback round FV1–FV8 complete and live; see the block above). Before that, 2026-08-31 — 🎯 **every screen in the Admin console sprint is
 built, AND DEPLOYED.** ⚠ Batch 17 (deploy) was listed here as outstanding long after `https://clbipp-admin.vercel.app` was live and serving — corrected 2026-09-23. All three apps deploy off `main`. A's lane finished today with
 Batches 6 and 7 (the lifecycle holes), **Batch 14 (`/exceptions` + `/audit`)**
 and **Batch 11 (`/config` + the engine-config publish path)**; B's and C's

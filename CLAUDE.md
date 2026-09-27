@@ -86,7 +86,8 @@ monorepo** (migrated 2026-08-09):
    pricing · **5a** quote screens + offer · **5b** cross-app seam (D7) · **6**
    collect · **7a** hub drop-off · **7b** chain-of-custody PDF · **8** track,
    history, profile · **PWA + install prompt** (deferred out of 8, built
-   2026-08-24). **Everything except Batch 9 (deploy) is built.**
+   2026-08-24). **Everything is built AND DEPLOYED** —
+   `https://clbipp-agent.vercel.app`. Batch 9 (deploy) is done.
 
    ✅ **The hole the agent batches never covered — nothing wrote `requested →
    scheduled` or set `Pickup.agentId` — is CLOSED** (Admin Batch 3, 2026-08-27).
@@ -94,7 +95,8 @@ monorepo** (migrated 2026-08-09):
    an `AdminAudit` row after it. `npm run assign-job` stays as the CLI fallback
    (see "Dispatch" below) — it is faster for "assign everything", but it writes
    no `actorId` and does **not** clear a reactivated pickup's stale agent.
-3. **Admin console** — `apps/admin` — **CURRENT SPRINT** (from 2026-08-25).
+3. **Admin console** — `apps/admin` — **built + deployed** (sprint 2026-08-25
+   → 08-31). ⚠ Not the current work any more — the feedback round is.
    Runs on **port 3002** (`npm run dev:admin`). All three can run at once.
    **A's batches 0, 1, 3, 4, 6, 7 and 14 are built** (0 + 1 on 2026-08-26,
    3 on 2026-08-27, 4 on 2026-08-29, 6 + 7 + 14 on 2026-08-31):
@@ -172,9 +174,9 @@ monorepo** (migrated 2026-08-09):
    right; do not unify them.
 
 ```
-apps/customer            the customer app (Next.js App Router)
-apps/agent               the field agent app — built, still live code
-apps/admin               the admin console — CURRENT SPRINT
+apps/customer            the customer app (Next.js App Router) — deployed
+apps/agent               the field agent app — built + deployed, live code
+apps/admin               the admin console — built + deployed
 packages/ui              components, design tokens, cn()   → @clbipp/ui
 packages/auth            supabase server/browser/admin clients, auth.ts,
                          realtime, createAuthMiddleware()  → @clbipp/auth
@@ -201,7 +203,12 @@ which re-exports the client *and* every model type and enum).
 Packages ship raw TypeScript and are compiled by each app via
 `transpilePackages` — there is no per-package build step to maintain.
 
-## Current sprint: Admin console
+## The Admin console sprint — COMPLETE (2026-08-25 → 08-31)
+
+⚠ **Finished and deployed. This is no longer the current sprint** — the
+post-presentation feedback round is (see that section below). Everything here is
+still binding on `apps/admin` as live code; read it before touching an admin
+screen, not to find out what to build next.
 
 Read `docs/ADMIN_TASKS.md` first — it is the executable task sheet (files,
 numbered steps, done-when checks, and a 17-item trap list, per batch).
@@ -216,8 +223,9 @@ resolved there. **Read §0 before building from the wireframe.**
 
 Headlines you need even if you read nothing else:
 
-- ✅ **Every screen is built (2026-08-31), Batch 11 last.** Only Batch 17
-  (deploy, B) remains. ✅ `npm run lint` is **green** — the two pre-existing
+- ✅ **Every screen is built (2026-08-31), Batch 11 last — and the console is
+  DEPLOYED** at `https://clbipp-admin.vercel.app`. Batch 17 is done; it sat
+  recorded as outstanding for weeks after the app went live. ✅ `npm run lint` is **green** — the two pre-existing
   errors (`market/page.tsx`'s `Date.now()` in render, `pickups/[id]`'s `<a>`
   where a `<Link>` belongs) were fixed in Batch 11.
 - 🔴 **"A batch is committed" is not "a batch is built", and this cost a day.**
@@ -324,7 +332,7 @@ nobody else creates a file A also creates. Each owner only ever *replaces* their
 own stub. **Both are done as of 2026-08-26**, so no lane is waiting on a file to
 exist.
 
-## Post-presentation feedback (FV1–FV7) — CURRENT WORK
+## Post-presentation feedback (FV1–FV8) — THE CURRENT WORK
 
 The company reviewed the finished three-app platform and sent
 `docs/CLBIPP_Presentation_Feedback_Changes.docx` — eleven changes, P0–P2. A
@@ -333,13 +341,18 @@ a **pilot with a handful of agents**, and they want the **decision engine
 possibly switched off** for it, with a human step (a call to the office)
 retained.
 
-**Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV7, decisions
-**FD0–FD6**, and an as-built section per batch. Open questions went to the
-company as `docs/CLBIPP_Open_Questions_2026-09-10.html` (43 questions, 13 marked
-BLOCKING); **several batches cannot start until they answer.**
+**Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV8, decisions
+**FD0–FD11**, an as-built section per batch, and **§8, which is the written
+answer to the question the company is most likely to ask next** (off-duty
+availability).
+
+⚠ The 43 open questions (`docs/CLBIPP_Open_Questions_2026-09-10.html`) were sent
+and **never answered** — the company was undecided about each phase. Nothing is
+blocked on them any more; the five blocking ones were answered in-house as
+FD7–FD11. Don't re-send that document expecting it to gate anything.
 
 ⚠ **Decision-set collision.** This repo now carries four: **D1–D7** (customer),
-**D0–D10** (agent), **AD0–AD12** (admin) and **FD0–FD6** (this set). The same
+**D0–D10** (agent), **AD0–AD12** (admin) and **FD0–FD11** (this set). The same
 letter+number means different things in each. **Quote the decision with its set.**
 
 - ✅ **FV1 + FV2 built (2026-09-10)** — mandatory photos both sides, the
@@ -389,10 +402,13 @@ letter+number means different things in each. **Quote the decision with its set.
   explicitly PROVISIONAL** — the first contradicting instruction from the
   company wins, and none of them should be defended in a meeting. Everything
   FD0–FD6 is still settled.
-- 🔴 **FV3–FV6 are NOT verified through the real HTTP path.** The shared
-  Supabase project was paused for that whole session (see below), so
-  `npm run smoke` and `npm run verify-seed` never ran against them.
-  **Run all three smokes and `verify-seed` before pushing.**
+- ✅ **EVERYTHING IS VERIFIED AGAINST PRODUCTION (2026-09-23).** FV3–FV6 were
+  written while the Supabase project was paused and so went unverified for a
+  day; that is closed. All three production smokes pass — **48 + 30 + 24 = 102
+  routes** against `clbipp-*.vercel.app` — plus `verify-seed` 27/27 and the
+  admin role gate in both wrong-role directions. The admin run asserts the
+  ranked selector's own strings, so it proves the screen renders off real data
+  rather than merely that a route exists.
 
 **The rules FV1 and FV2 put in place, which new code must not undo:**
 
@@ -459,7 +475,7 @@ letter+number means different things in each. **Quote the decision with its set.
 
 ## The Field Agent app — built, and still live code
 
-Everything below governs `apps/agent`, which is finished and deployed-pending.
+Everything below governs `apps/agent`, which is finished and DEPLOYED.
 It is not this sprint's build target, but it is live code the admin app writes
 alongside — read it before touching an agent screen or the cross-app seam.
 `docs/FIELD_AGENT_TASKS.md` is its task sheet and `docs/PLAN_FIELD_AGENT_APP.md`
@@ -748,7 +764,7 @@ cd packages/core && npx vitest run src/booking.test.ts
 npm run db:migrate --workspace=@clbipp/database        # Apply schema changes (LOCAL/new DB)
 npm run reset-demo                                     # Wipe + reseed the demo data
 # Assert the seeded FIXTURES still have the shape the next batch is built
-# against — 24 checks, read-only, non-zero exit. `smoke` proves a route renders
+# against — 27 checks, read-only, non-zero exit. `smoke` proves a route renders
 # and `test` proves pure logic; neither can catch a fixture quietly vanishing.
 # 🔴 Run it after every reseed, and add a check when you add a fixture.
 # ⚠ Dispatching a seeded request from /dispatch legitimately BREAKS two of its
@@ -836,13 +852,15 @@ keeps every lane moving in parallel without anyone touching another's files.
   push.** Pre-push commands, git workflow, shared-database rules, the traps that
   pass review, and the two orderings that actually matter.
 - `docs/PLAN_FEEDBACK_V2.md` — **the current work.** The company's
-  post-presentation feedback mapped onto the three apps: batches FV1–FV7,
-  decisions **FD0–FD6**, as-built notes per batch, and the write-up of the
-  2026-09-10 database-wipe incident and the four rules taken from it.
+  post-presentation feedback mapped onto the three apps: batches FV1–FV8,
+  decisions **FD0–FD11**, as-built notes per batch, the 2026-09-10
+  database-wipe incident and the rules taken from it, and **§8 — the deliberate
+  availability gaps and how to close them when asked.**
 - `docs/CLBIPP_Presentation_Feedback_Changes.docx` — the company's feedback
   itself. Eleven changes with their own P0–P2 priorities.
 - `docs/CLBIPP_Open_Questions_2026-09-10.html` — the 43 questions sent back
-  (rendered to PDF for them). **13 are marked BLOCKING and gate FV3–FV7.**
+  (rendered to PDF for them). ⚠ **Never answered** — 13 were marked BLOCKING
+  and the five that mattered were decided in-house as FD7–FD11 instead. Historical.
 - `docs/ADMIN_TASKS.md` — **the executable task sheet for this sprint.** Per
   batch: files, numbered steps, done-when checklist — plus a **17-item trap
   list** at the top that is worth reading once on its own. **Read this first.**
