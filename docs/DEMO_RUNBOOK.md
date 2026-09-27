@@ -58,8 +58,14 @@ PKP-2026-000109  certified                                    ← a finished cer
 PKP-2026-000110  cancelled
 PKP-2026-000113  tested       (split across two manifests — the AD6 story)
 PKP-2026-000114  requested    🔴 stale agent (reactivated)
+PKP-2026-000115  requested                                    ← same-day partner of 101 (Beat 2's run)
+PKP-2026-000116  tested       second life, on no manifest     ← Beat 6b: ships to the refurbisher
 Agent day view today: 2 assigned · 1 collected · ₹2592.00
 ```
+
+Plus, from the seed's last lines: `4 transport boxes, 48 tags (13 bound, 35
+unused), 12 hub check-ins, run RUN-<date>-5EED` (in progress: box `BX-A001W`,
+stops 105 and 102). `npm run verify-seed` should print **38/38**.
 
 ### 1.3 Servers
 
