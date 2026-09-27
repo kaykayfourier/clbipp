@@ -73,6 +73,31 @@ export const ADMIN_AUDIT_ACTIONS = [
    * changes where the battery physically goes.
    */
   "item.pathway",
+  // ── feedback_logistics (2026-09-27 · FV10–FV15) ─────────────────────────
+  // ⚠ Each of these must ALSO be added to the restated list in
+  // packages/database/prisma/verify-seed.ts (it cannot import this file).
+  /** A sheet of battery tags minted (FV10 · FD12). Subject: the issue batch. */
+  "tag.issue",
+  /** A transport box registered, or switched active/inactive (FV11 · FD14). */
+  "container.register",
+  "container.status",
+  /**
+   * A collection run built from the dispatch board (FV11 · FD16). Its
+   * `requested` stops are ALSO assigned by it — each of those gets its own
+   * `pickup.assign` row, so `/audit?action=pickup.assign` stays complete.
+   */
+  "run.create",
+  /** A planned run cancelled before it started. The stops keep their agent. */
+  "run.cancel",
+  /**
+   * A hub check-in line recorded BY HAND — received without a scan, or
+   * declared missing (FV12 · FD15). Requires a typed `reason`. A scan writes no
+   * audit row: the check row itself records who and when, and a scan asserts
+   * nothing a human could have got wrong.
+   */
+  "custody.reconcile",
+  /** An agent marked on or off duty (FV15 · FD19). */
+  "agent.duty",
 ] as const
 
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number]
@@ -90,6 +115,10 @@ export const ADMIN_AUDIT_SUBJECTS = [
   "dispatch_manifest",
   "custody_batch",
   "profile",
+  // feedback_logistics (FV10–FV11)
+  "item_tag",
+  "transport_container",
+  "collection_run",
 ] as const
 
 export type AdminAuditSubject = (typeof ADMIN_AUDIT_SUBJECTS)[number]
@@ -112,6 +141,9 @@ export const REASON_REQUIRED_ACTIONS: readonly AdminAuditAction[] = [
   // Overriding the engine's destination decides whether a battery is reused or
   // shredded. If any action owes a written reason, it is this one.
   "item.pathway",
+  // A battery line nobody scanned, or one that is not there. The hub is being
+  // spoken for by an admin (there is no hub-staff app), so the trail needs why.
+  "custody.reconcile",
 ]
 
 export function isReasonRequired(action: AdminAuditAction): boolean {

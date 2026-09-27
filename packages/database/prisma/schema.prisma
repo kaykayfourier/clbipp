@@ -322,6 +322,54 @@ enum ExceptionResolution {
   reject
 }
 
+// ── Presentation feedback, completed (feedback_logistics · FV9–FV15) ─────────
+
+// What a downstream partner DOES with a battery (FV13 · FD17). Until this
+// column existed every partner was a recycler, which left the feedback's
+// Second Life pathway with a label and no destination — and, because AD6
+// advances a pickup only when EVERY item is on a manifest, a pickup holding one
+// second-life line could never move past `tested` again.
+//
+// A refurbisher is still a CPCB-registered party (the Battery Waste Management
+// Rules register refurbishers as well as recyclers), so it keeps
+// `cpcbRegNo` and `acceptedChemistries` and rides the same manifest lifecycle.
+enum PartnerKind {
+  recycler
+  refurbisher
+}
+
+// Whether an agent is working (FV15 · FD19). ONE flag, set by an admin — §8
+// Step 1 of docs/PLAN_FEEDBACK_V2.md. There are still no working hours and no
+// roster; this is the 80% answer to "why doesn't dispatch show who's off".
+// 🔴 Read ONLY through `availabilityOf()` in @clbipp/core/dispatch-ranking.
+enum DutyStatus {
+  on_duty
+  off_duty
+}
+
+// A dispatcher's same-day grouping of pickups for one agent (FV11 · FD16).
+// NOT a lifecycle stage and NOT a custody hand-off — see CollectionRun.
+enum CollectionRunStatus {
+  planned
+  in_progress
+  completed
+  cancelled
+}
+
+// What the hub found when it checked a battery line in (FV12 · FD15).
+enum CustodyCheckOutcome {
+  received
+  missing
+}
+
+// How that finding was made. A scan is the normal path; the other two are the
+// exceptions and each writes an AdminAudit row with a reason.
+enum CustodyCheckMethod {
+  scan
+  tagged_at_hub
+  manual
+}
+
 // 🔴 MUST stay in step with `keyof Config["margin_tiers"]` in
 // packages/decision-engine/src/decisionEngine/types.ts. The engine already
 // honours Config.supplier_margin_overrides (selection.ts) — it had nowhere to
@@ -379,13 +427,19 @@ model Profile {
   safetyTrainedAt DateTime? @map("safety_trained_at")
   agentRating     Decimal?  @map("agent_rating") @db.Decimal(3, 2)
 
+  // FV15 · FD19. Meaningful for agents only; defaults on for everyone so no
+  // existing row changes meaning. Written by the admin console (Prisma), never
+  // through PostgREST — grants.sql's profile column allowlist does not name it,
+  // so a vendor cannot set it on themselves.
+  dutyStatus DutyStatus @default(on_duty) @map("duty_status")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   // Two relations to Pickup (as vendor, as assigned agent) so both MUST be
   // named — Prisma cannot disambiguate them otherwise.
-  pickups         Pickup[]       @relation("VendorPickups")
-  assignedPickups Pickup[]       @relation("AgentPickups")
+  pickups         Pickup[]        @relation("VendorPickups")
+  assignedPickups Pickup[]        @relation("AgentPickups")
   addresses       Address[]
   offers          Offer[]
   certificates    Certificate[]
@@ -393,6 +447,7 @@ model Profile {
   walletTxns      WalletTxn[]
   invoices        Invoice[]
   custodyBatches  CustodyBatch[]
+  collectionRuns  CollectionRun[] @relation("AgentRuns")
 
   // Admin console (admin_app_v1). Four separate relations, no @relation names
   // needed — each points at a different model, so Prisma can tell them apart.
@@ -510,9 +565,18 @@ model Pickup {
   collectionScheduledAt DateTime? @map("collection_scheduled_at")
   collectedAt           DateTime? @map("collected_at")
 
+  // ── Which collection run this pickup is a stop on, and where in it (FV11) ──
+  // A LOGISTICS grouping written by the dispatcher, not a lifecycle fact: a
+  // pickup on a run still moves through the nine stages exactly as one that is
+  // not. Null means a standalone job. `runSequence` is the suggested stop
+  // order (1-based), not a promise about the route.
+  collectionRunId String? @map("collection_run_id")
+  runSequence     Int?    @map("run_sequence")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
+  collectionRun   CollectionRun?   @relation(fields: [collectionRunId], references: [id], onDelete: SetNull)
   vendor          Profile          @relation("VendorPickups", fields: [vendorId], references: [id])
   agent           Profile?         @relation("AgentPickups", fields: [agentId], references: [id])
   address         Address?         @relation(fields: [addressId], references: [id])
@@ -530,6 +594,7 @@ model Pickup {
   @@index([agentId])
   @@index([status])
   @@index([custodyBatchId])
+  @@index([collectionRunId])
   @@index([createdAt(sort: Desc)])
   @@map("pickups")
 }
@@ -579,6 +644,13 @@ model BatteryItem {
   pathwaySetBy  String? @map("pathway_set_by") @db.Uuid
   pathwayReason String? @map("pathway_reason")
 
+  // ── Why this line left the vendor's site WITHOUT a tag (FV10 · FD13) ──
+  // Tagging is mandatory at collection, but never a hard stop in front of a
+  // waiting vendor: an agent with no sheet left may collect and say why. Null
+  // means "tagged, or not collected yet". The hub tags the line on receipt
+  // (CustodyCheckMethod.tagged_at_hub). The tag itself is ItemTag, below.
+  untaggedReason String? @map("untagged_reason")
+
   // ── Damage rubric, scored by the agent on site (D1 — the engine runs PER
   // ITEM, so the rubric lives here and not on the Pickup header). The three
   // sub-scores are the agent's raw input; damageScore is what the engine
@@ -625,8 +697,10 @@ model BatteryItem {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  pickup     Pickup          @relation(fields: [pickupId], references: [id], onDelete: Cascade)
-  exceptions ItemException[]
+  pickup       Pickup            @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  exceptions   ItemException[]
+  tag          ItemTag?
+  custodyCheck CustodyItemCheck?
 
   @@index([pickupId])
   // /quotes and /trace/[traceId] both look an item up by its engine run id.
@@ -802,6 +876,12 @@ model Certificate {
   materialSummary Json     @default("[]") @map("material_summary")
   // Impact dashboard. See §6 — this number needs a cited source before demo.
   co2AvoidedKg    Decimal? @map("co2_avoided_kg") @db.Decimal(10, 2)
+  // FV13 · FD17. Mass of this pickup that went to a refurbisher rather than a
+  // recycler. Stated on the certificate beside the recovered materials and
+  // NEVER folded into them: a battery given a second life was not broken down,
+  // and counting it as recovered metal would be a false compliance figure.
+  // Null on certificates minted before this column existed.
+  secondLifeKg    Decimal? @map("second_life_kg") @db.Decimal(10, 2)
 
   certifiedAt DateTime @default(now()) @map("certified_at")
 
@@ -867,6 +947,13 @@ model Recycler {
   capacityKg          Decimal?      @map("capacity_kg") @db.Decimal(10, 2)
   isActive            Boolean       @default(true) @map("is_active")
 
+  // FV13 · FD17. A recycler breaks a battery down; a refurbisher gives it a
+  // second life. Which manifests may name this partner follows from it —
+  // `isShippableTo()` in @clbipp/core/pathway, enforced in createManifest.
+  // ⚠ The model keeps its name: renaming the table is a migration across three
+  // apps for no behavioural gain. Screens say "partner" where both are meant.
+  kind PartnerKind @default(recycler)
+
   createdAt DateTime @default(now()) @map("created_at")
 
   manifests DispatchManifest[]
@@ -903,6 +990,13 @@ model DispatchManifest {
   // A manifest carries items from several pickups, so a certificate takes this
   // pro-rated by that pickup's share of the load — see buildCertificatePayload.
   recoveryData Json? @map("recovery_data")
+
+  // FV13 · FD17. What a REFURBISHER reported back at reconciliation — units
+  // restored, units that turned out unrecoverable, where they went. A
+  // refurbisher recovers no metal, so `recoveryData` stays null on its
+  // manifests; forcing figures into it would put invented material recovery on
+  // a vendor's certificate.
+  outcomeNote String? @map("outcome_note")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -948,9 +1042,10 @@ model CustodyBatch {
   handedOffAt DateTime @default(now()) @map("handed_off_at")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  agent    Profile  @relation(fields: [agentId], references: [id])
-  facility Facility @relation(fields: [facilityId], references: [id])
-  pickups  Pickup[]
+  agent      Profile            @relation(fields: [agentId], references: [id])
+  facility   Facility           @relation(fields: [facilityId], references: [id])
+  pickups    Pickup[]
+  itemChecks CustodyItemCheck[]
 
   @@index([agentId, handedOffAt(sort: Desc)])
   @@map("custody_batches")
@@ -1104,4 +1199,148 @@ model ItemException {
   // the front of it — the screen filters, it does not rely on ordering.
   @@index([resolvedAt])
   @@map("item_exceptions")
+}
+
+// ── Physical logistics: boxes, runs, tags, hub check-in (feedback_logistics) ──
+// The presentation feedback's §4, completed 2026-09-27 (FV10–FV12). Decisions
+// FD12–FD16 in docs/PLAN_FEEDBACK_V2.md §9 — ours and provisional.
+//
+// 🔴 NONE OF THIS IS A LIFECYCLE STAGE. The nine stages stay locked (FD0).
+// A run is a dispatcher's grouping, a box is a reusable object, a tag is a
+// label, and a hub check is a finding — every one of them is a FACT about a
+// pickup that moves through the same nine stages it always did.
+//
+// 🔴 RLS: all five tables are closed (AD3) — enabled with ZERO policies, in the
+// migration itself and in supabase/policies.sql. Every reader and writer is
+// Prisma (table owner) in the admin or agent app. grants.sql hands `anon`
+// SELECT on every future table, so a new table without RLS would be public.
+
+// A reusable transport box with a permanent QR label (FV11 · FD14). Registered
+// once in the console; its `code` is printed and stuck on the box.
+//
+// 🔴 NOT the CustodyBatch — that is question J3's answer. A custody batch is a
+// hand-off EVENT (agent → hub, once). A box is an OBJECT that does many runs,
+// and one drop-off can empty several boxes. Linked through the items (each tag
+// records the box its line went into), never merged.
+model TransportContainer {
+  id         String   @id @default(uuid())
+  // BX-XXXXC — Crockford base-32 with a check character (@clbipp/core/tags).
+  code       String   @unique
+  label      String
+  capacityKg Decimal? @map("capacity_kg") @db.Decimal(8, 2)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  loads RunContainer[]
+  tags  ItemTag[]
+
+  @@map("transport_containers")
+}
+
+// Same-day nearby pickups grouped for one agent and one vehicle (FV11 · FD16).
+//
+// Built by a dispatcher from the board's SUGGESTIONS — never automatically, and
+// it never assigns anyone the dispatcher did not choose (FV8's rule). A run is
+// started by the agent scanning a box, and completed at the hub drop-off.
+model CollectionRun {
+  id      String              @id @default(uuid())
+  // RUN-YYYYMMDD-XXXX, derived from the id at creation.
+  runNo   String              @unique @map("run_no")
+  agentId String              @map("agent_id") @db.Uuid
+  runDate DateTime            @map("run_date") @db.Date
+  vehicle String?
+  status  CollectionRunStatus @default(planned)
+  notes   String?
+
+  // The admin who built it. No relation, same as BatteryItem.recordedBy: the
+  // `run.create` AdminAudit row is where authorship is answerable.
+  createdBy   String    @map("created_by") @db.Uuid
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  agent      Profile        @relation("AgentRuns", fields: [agentId], references: [id])
+  pickups    Pickup[]
+  containers RunContainer[]
+
+  @@index([agentId, runDate])
+  @@index([status])
+  @@map("collection_runs")
+}
+
+// A box loaded onto a run (FV11). A join rather than a column on the box
+// because the HISTORY matters: which boxes did RUN-x carry, and was this box
+// free when someone tried to load it? A box is on at most one open run —
+// `unloadedAt IS NULL` — enforced in the loading action.
+model RunContainer {
+  id          String    @id @default(uuid())
+  runId       String    @map("run_id")
+  containerId String    @map("container_id")
+  loadedBy    String    @map("loaded_by") @db.Uuid
+  loadedAt    DateTime  @default(now()) @map("loaded_at")
+  // Stamped at the hub drop-off, or when the agent finishes an empty run.
+  unloadedAt  DateTime? @map("unloaded_at")
+
+  run       CollectionRun      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  container TransportContainer @relation(fields: [containerId], references: [id])
+
+  @@unique([runId, containerId])
+  @@index([containerId, unloadedAt])
+  @@map("run_containers")
+}
+
+// A pre-issued battery tag (FV10 · FD12). Minted by the office in a sheet
+// (`issueBatch`), printed, carried in the van, and BOUND to one battery line at
+// collection — or at the hub, for a line that left without one (FD13).
+//
+// ONE tag per BatteryItem (`batteryItemId` is unique): a line IS the lot in
+// this data model — there is no per-unit row to tag. The tag links to the item,
+// and through it to the pickup; `containerId` is the box the line went into.
+model ItemTag {
+  id            String    @id @default(uuid())
+  // TG-XXXXXXC — Crockford base-32 with a check character (@clbipp/core/tags).
+  code          String    @unique
+  issueBatch    String    @map("issue_batch")
+  issuedBy      String    @map("issued_by") @db.Uuid
+  batteryItemId String?   @unique @map("battery_item_id")
+  containerId   String?   @map("container_id")
+  boundBy       String?   @map("bound_by") @db.Uuid
+  boundAt       DateTime? @map("bound_at")
+  // True when the HUB applied it on receipt, not the agent at collection.
+  boundAtHub    Boolean   @default(false) @map("bound_at_hub")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  batteryItem BatteryItem?        @relation(fields: [batteryItemId], references: [id])
+  container   TransportContainer? @relation(fields: [containerId], references: [id])
+
+  @@index([issueBatch])
+  @@index([containerId])
+  @@map("item_tags")
+}
+
+// One battery line, checked in at the hub against its custody batch
+// (FV12 · FD15) — "the facility scans and reconciles the received batteries".
+//
+// 🔴 The gate on `collected → tested`: a pickup advances only when EVERY one of
+// its lines has a `received` row here. A `missing` line HOLDS the pickup — AD6's
+// "every item, or not at all", one edge earlier. One row per line (unique on
+// the item); a line declared missing and later found is updated, not
+// duplicated.
+model CustodyItemCheck {
+  id             String              @id @default(uuid())
+  custodyBatchId String              @map("custody_batch_id")
+  batteryItemId  String              @unique @map("battery_item_id")
+  outcome        CustodyCheckOutcome
+  method         CustodyCheckMethod
+  tagCode        String?             @map("tag_code")
+  // Mandatory for `manual` and for `missing` (enforced in the action).
+  note           String?
+  checkedBy      String              @map("checked_by") @db.Uuid
+  checkedAt      DateTime            @default(now()) @map("checked_at")
+
+  custodyBatch CustodyBatch @relation(fields: [custodyBatchId], references: [id], onDelete: Cascade)
+  batteryItem  BatteryItem  @relation(fields: [batteryItemId], references: [id], onDelete: Cascade)
+
+  @@index([custodyBatchId])
+  @@map("custody_item_checks")
 }

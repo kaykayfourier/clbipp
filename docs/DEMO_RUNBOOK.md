@@ -82,7 +82,16 @@ Once Khalid's deploy lands, the first two can be the Vercel URLs instead
 |---|---|---|
 | Vendor | 3000 | `business@test` / `businesstest` |
 | Field agent | 3001 | `agent@test` / `demo1234` |
+| Field agent 2 | 3001 | `agent2@test` / `demo1234` — Neha Verma, on duty, no jobs (added 2026-09-27) |
+| Field agent 3 | 3001 | `agent3@test` / `demo1234` — Mohit Sharma, **off duty** (shows as unavailable) |
 | Admin console | 3002 | `admin@test` / `demo1234` |
+
+**The tag sheet and boxes (2026-09-27).** The seed issues one sheet of 48 tags
+(`TG-DM0001V` … `TG-DM0048C`); the first 13 are already on collected batteries.
+Unused ones to type or scan in the demo: **`TG-DM00145`, `TG-DM0015G`,
+`TG-DM0016V`, `TG-DM00176`, `TG-DM0018H`**. Boxes: **`BX-A001W`** (on today's
+run), `BX-A0023`, `BX-A003A`, `BX-A004H`. Better still: print a sheet from
+`/tags` and the box labels from `/containers` and scan real paper with a phone.
 
 Log all three in **before** the company is in the room. Put the agent app on a
 real phone if you can — it is a field app and it reads like one.
@@ -137,6 +146,15 @@ date, submit.
 - Show `/audit` → the `pickup.assign` row, with a before/after diff and **who**
   did it.
 - 💬 *"Every admin action is logged with an actor. This is a compliance product."*
+- **New (FV14/FV15):** point at the **Priority** column (a swollen or leaking
+  declaration is *Urgent*) and the **Battery type / Load size / Priority**
+  filters. In the agent list, **Mohit Sharma — Unavailable · Off duty**: marked
+  on `/agents`, and dispatch refuses him.
+- **New (FV11 — feedback §4.3), optional, ~60s:** the **Same-day groups** panel
+  proposes `PKP-2026-000101 · PKP-2026-000115` (0.7 km apart, both for today).
+  **Plan a run** → pick **Neha Verma** → **Build run**. 💬 *"The board suggests;
+  a person decides. Nothing is grouped or assigned on its own."* (⚠ This
+  assigns 101 — do it after Beat 2's own dispatch, or pick 101 there.)
 
 ### Beat 3 — the engine (:3001, ~3 min) — **the most impressive part, do not rush it**
 
@@ -175,8 +193,14 @@ board. 💬 *"The app will stop an agent from making an offer that loses money."
   no recovery rate %**. Press **Accept**.
 - ✅ Lands on **"Offer Accepted"** — *not* "Handover Confirmed". The batteries
   have not moved. 💬 *"A vendor cannot mark their own battery collected."*
-- **:3001 as the agent** → the same job now offers **Collect**. Complete it —
-  **draw a real signature**.
+- **:3001 as the agent** → the same job now offers **Collect**. 🆕 **Tag the
+  load first** (feedback §4.2): line 1 → **Scan tag** (or type `TG-DM00145`);
+  line 2 → **No tag available?** → "sheet ran out" — to show the way out.
+  💬 *"Every battery leaves with a tag or a recorded reason. The check
+  character means a mistyped code is refused, never bound to the wrong
+  battery."* Then **draw a real signature** and confirm.
+- ✅ **Confirm collection** stays disabled until every line is tagged or
+  explained — and the server refuses it too.
 - ✅ `offered → collected`, and a payable is raised for the vendor automatically.
 - **:3000 as the vendor** → `/payment/[id]` → the amount is the offer they
   accepted, to the paise. Settle it.
@@ -185,13 +209,29 @@ board. 💬 *"The app will stop an agent from making an offer that loses money."
 ### Beat 5 — into custody (:3001, ~90s)
 
 **Hop to `PKP-2026-000105`** (`collected`, no custody batch — "pending drop-off").
+It is also the collected stop on **today's run** (`RUN-…-5EED`, card on the day
+view, box `BX-A001W`). Line 1 carries `TG-DM0001V`; line 2 left **untagged** with
+a reason — that is the hub's job in Beat 6.
 
-- Agent app → **Drop-off** → select it → receiving staff name → signature.
-- ✅ A `CustodyBatch` is created. Show the **chain-of-custody PDF**.
+- Agent app → **Drop-off** → select it (and 104 if you collected it) →
+  receiving staff name → signature.
+- ✅ A `CustodyBatch` is created. The run **stays open with its box still on
+  it** — `PKP-2026-000102` is still to visit, so the van goes back out. (A
+  drop-off that leaves no stop to visit closes the run and frees the box; the
+  agent can also end the run from `/run/[id]` once the van is empty.) The receipt screen lists
+  every line with its **tag and box**. Show the **chain-of-custody PDF**.
 
 ### Beat 6 — the admin tail (:3002, ~4 min) — **the part no competitor demo has**
 
-- `/lifecycle` → the new custody batch is there → **Advance** → `collected → tested`.
+- `/lifecycle` → the new custody batch is there → 🆕 **Check in** first
+  (feedback §6 step 10). Type/scan `TG-DM0001V` → received. On 105's untagged
+  line → **Tag now** with `TG-DM0016V`. (104's lines: its tag code, and **Tag
+  now** for the one you left untagged.) Try a code from another batch —
+  `TG-DM00026` — and show the refusal.
+  💬 *"The drop-off is the agent's word. The check-in is the hub's own count —
+  and nothing is tested until every battery is accounted for."*
+- **Mark tested** → `collected → tested`. (One unchecked or *missing* line holds
+  its whole pickup.)
   💬 *"The unit of advance changes with the stage, because the actor changes."*
 - `/manifests/new` → facility → select **both** of 105's lead-acid lines →
   recycler **Sunrise Lead** (the only one that accepts lead-acid — watch the
@@ -208,6 +248,19 @@ board. 💬 *"The app will stop an agent from making an offer that loses money."
 💬 *"This pickup will not advance until every one of its items is accounted for.
 Chemistry segregation sends one pickup's batteries to different recyclers, so
 'the manifest arrived' is not the same as 'the pickup is done'."*
+
+### Beat 6b — Second Life (:3002, ~2 min, optional) 🆕
+
+`PKP-2026-000116` is tested and its EV packs were judged fit for refurbishment.
+
+- `/manifests/new` → **Second Life → refurbisher** → tick 116's line → only
+  **Evergreen Second-Life Cells** is offered (the recyclers are for recycling
+  stock). Create → Dispatch → **Confirm received** (116 → processed) →
+  **Reconcile** asks for an *outcome report*, not metals → recovered →
+  `/lifecycle` → **Certify**.
+- ✅ The certificate states **180 kg routed to second life** and claims **no
+  recovered metal**. 💬 *"A reused battery was not broken down, so we don't
+  pretend it yielded nickel."*
 
 ### Beat 7 — close the loop (:3000, ~60s)
 
@@ -279,10 +332,11 @@ when it is merely old.
 | — | *intake* | Agent | Each item → confirm **`li_ion_lfp`**, weight, condition → damage rubric → **Compute** |
 | 4 | `offered` | Agent | Review the band → **Send offer** |
 | — | `acceptedAt` | Customer | Accept. Lands on **"Offer Accepted"** — status does *not* move |
-| 5 | `collected` | Agent | **Collect** → draw a real signature. A payable is raised automatically |
+| 5 | `collected` | Agent | **Collect** → 🆕 bind a tag to each line (`TG-DM00145`, `TG-DM0015G`) → draw a real signature. A payable is raised automatically |
 | — | *money* | Customer | `/payment/[id]` → amount matches the offer to the paise → settle |
 | — | *custody* | Agent | **Drop-off** → select the pickup → staff name → signature → `CustodyBatch` + PDF |
-| 6 | `tested` | Admin | `/lifecycle` → the new batch → **Advance** |
+| — | *check-in* | Admin | 🆕 `/lifecycle` → the new batch → **Check in** → scan/type both tags → every line **received** |
+| 6 | `tested` | Admin | **Mark tested** (disabled until the check-in is complete) |
 | 7 | `processed` | Admin | `/manifests/new` → Okhla hub → both items → **Verdant Cell Recovery** → create → **Dispatch** → **Confirm received** |
 | 8 | `recovered` | Admin | Same manifest → **Reconcile** → enter recovered masses |
 | 9 | `certified` | Admin | `/lifecycle` → **Certify** → mints the `Certificate` |
@@ -332,6 +386,10 @@ for. Fix it afterwards.
 | Agent home reads `0 · 0 · ₹0` | Stale seed, not a bug | Nothing, mid-demo. Reseed before the next one. |
 | A booked pickup never reaches the agent | Nothing wrote `requested → scheduled` | Dispatch it on `/dispatch`. Fallback: `npm run assign-job` |
 | `/lifecycle` has nothing to advance | No custody batch exists yet | Do Beat 5 (the agent drop-off) first — this is by design |
+| **Mark tested** is greyed out | The hub has not checked every line in (FD15) | **Check in** → scan/type each tag; **Tag now** for an untagged line |
+| **Confirm collection** is greyed out | A line has no tag and no reason (FD13) | Scan a tag from the sheet, or "No tag available?" with a reason |
+| Scanner says "does not check out" | A character was misread or mistyped | That is the check character working — re-type carefully |
+| Camera will not open on the phone | Not HTTPS (a LAN IP over http is not a secure context) | Type the code — every scan field takes typing |
 | A pickup will not leave `tested` | AD6 — an item is still at the hub | Open `/lifecycle`, read the coverage row. Expected, not broken |
 | The recycler dropdown is empty | No active recycler accepts that chemistry | Check the item chemistries — AD7 is enforced in the action |
 | Need to re-run a beat | — | `npm run demo-stage -- --reset <pickup-id>` **after** the demo |
@@ -364,20 +422,24 @@ That is expected after a demo — reseed rather than reading it as a defect.
 
 ---
 
-## §7 · Verified state as of 2026-08-31
+## §7 · Verified state as of 2026-09-27
 
-Everything below was run, not assumed:
+Everything below was run, not assumed (details: §10 of `PLAN_FEEDBACK_V2.md`):
 
 | Check | Result |
 |---|---|
 | `npm run build` | 3/3 apps, `ƒ Proxy (Middleware)` on each |
-| `npm run lint` | 0 errors (1 known unused-var warning) |
-| `npm run test` | 304 passing |
-| `npm run verify-seed` | 24/24 |
-| `npm run smoke` (dev **and** production builds) | customer 46/46 · agent 30/30 · admin 24/24 |
+| `npm run lint` | 0 errors, 0 warnings |
+| `npm run test` | 420 passing |
+| `npm run verify-seed` | 38/38 |
+| `npm run smoke` (dev) | customer 48/48 · agent 32/32 · admin 31/31 |
 | Six role-gate pairings | all six bounce |
-| PDF document routes | real PDFs on dev **and** production |
-| Deployed apps | customer + agent live (admin pending Khalid's Batch 17) |
+| FV9–FV16 HTTP harness | tags, boxes, runs, drop-off, hub check-in, second life, scale photo — see the plan |
+| Deployed apps | all three live; **FV9–FV16 not pushed yet** — production still runs the 2026-09-23 build |
+
+⚠ If the demo machine's dev servers have been up for hours and actions start
+timing out, restart them — a long-lived `next dev` exhausted the connection pool
+on 2026-09-27.
 
 Two warnings carried in older docs were re-tested and **could not be reproduced**
 — the `api/documents/*` 404 under Turbopack dev, and the 24-hour market-freshness

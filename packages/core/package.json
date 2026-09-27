@@ -15,7 +15,11 @@
     "./exception-classify": "./src/exception-classify.ts",
     "./collection": "./src/collection.ts",
     "./pathway": "./src/pathway.ts",
-    "./dispatch-ranking": "./src/dispatch-ranking.ts"
+    "./dispatch-ranking": "./src/dispatch-ranking.ts",
+    "./tags": "./src/tags.ts",
+    "./run-planning": "./src/run-planning.ts",
+    "./dispatch-priority": "./src/dispatch-priority.ts",
+    "./custody-check": "./src/custody-check.ts"
   },
   "scripts": {
     "test": "vitest run"

@@ -1,9 +1,15 @@
+import Link from 'next/link'
+
 import { prisma } from '@clbipp/database'
 import { categoryLabel } from '@clbipp/core/intake'
+import { dispatchPriority, loadSizeOf } from '@clbipp/core/dispatch-priority'
+import { formatKm } from '@clbipp/core/dispatch-ranking'
+import { RUN_RADIUS_KM, runStopEligibility, stopDateKey, suggestRunGroups } from '@clbipp/core/run-planning'
 
-import { formatAge } from '@/lib/ist'
+import { dbDateKey, formatAge, formatDateKey, istDateKey } from '@/lib/ist'
 import { liveJobCounts } from '@/lib/job-load'
-import { PageHead } from '@/components/console'
+import { OPEN_RUN_STATUSES, loadStopRows } from '@/lib/runs'
+import { PageHead, Panel, secondaryButtonClass } from '@/components/console'
 
 import { DispatchBoard, type DispatchRow } from './DispatchBoard'
 
@@ -41,7 +47,7 @@ export const dynamic = 'force-dynamic'
 const LIVE = ['requested', 'scheduled', 'arrived', 'offered'] as const
 
 export default async function DispatchPage() {
-  const [pickups, loads] = await Promise.all([
+  const [pickups, loads, stopRows] = await Promise.all([
     prisma.pickup.findMany({
       where: { status: { in: [...LIVE] } },
       // Oldest first: this is a queue, and the row that has been waiting three
@@ -59,13 +65,19 @@ export default async function DispatchPage() {
         vendor: { select: { fullName: true, companyName: true } },
         agent: { select: { fullName: true } },
         address: { select: { city: true } },
-        items: { select: { id: true, category: true, quantity: true, weightKg: true } },
+        conditionFlags: true,
+        scheduledSlot: true,
+        collectionRun: { select: { id: true, runNo: true, status: true } },
+        items: { select: { id: true, category: true, quantity: true, weightKg: true, condition: true } },
       },
     }),
     liveJobCounts(),
+    // FV11 — the same facts the run builder and createCollectionRun read.
+    loadStopRows(),
   ])
 
   const now = new Date()
+  const todayKey = istDateKey(now)
 
   const rows: DispatchRow[] = pickups.map((p) => {
     // `weightKg` is the TOTAL weight of a line, not per unit
@@ -74,6 +86,32 @@ export default async function DispatchPage() {
     const units = p.items.reduce((sum, i) => sum + i.quantity, 0)
     const kg = p.items.reduce((sum, i) => sum + Number(i.weightKg ?? 0), 0)
     const categories = [...new Set(p.items.map((i) => categoryLabel(i.category)))]
+    const categoryKeys = [...new Set(p.items.map((i) => i.category))]
+
+    // FV14 · FD18 — derived on every render, never stored. The date is the one
+    // this job is actually waiting on: a booked collection, else the slot, else
+    // what the vendor asked for.
+    const waitingOnKey = p.collectionScheduledAt
+      ? istDateKey(p.collectionScheduledAt)
+      : p.status !== 'requested' && p.scheduledSlot
+        ? istDateKey(p.scheduledSlot)
+        : p.preferredDate
+          ? dbDateKey(p.preferredDate)
+          : null
+    const { priority, reasons } = dispatchPriority(
+      {
+        status: p.status,
+        conditions: [...p.conditionFlags, ...p.items.map((i) => i.condition)],
+        createdAt: p.createdAt,
+        dateKey: waitingOnKey,
+      },
+      todayKey,
+      now,
+    )
+    const openRun =
+      p.collectionRun && (OPEN_RUN_STATUSES as readonly string[]).includes(p.collectionRun.status)
+        ? p.collectionRun
+        : null
 
     return {
       id: p.id,
@@ -91,6 +129,12 @@ export default async function DispatchPage() {
       units,
       kg,
       categories: categories.join(' · ') || categoryLabel(p.category),
+      categoryKeys: categoryKeys.length > 0 ? categoryKeys : [p.category],
+      sizeBand: loadSizeOf(kg),
+      priority,
+      priorityReasons: reasons,
+      runId: openRun?.id ?? null,
+      runNo: openRun?.runNo ?? null,
       createdAt: p.createdAt.toISOString(),
       preferredDate: p.preferredDate ? p.preferredDate.toISOString().slice(0, 10) : null,
       collectionScheduledAt: p.collectionScheduledAt
@@ -103,6 +147,17 @@ export default async function DispatchPage() {
   const waiting = rows.filter((r) => r.status === 'requested')
   const staleCount = waiting.filter((r) => r.staleAgent).length
   const booked = rows.filter((r) => r.collectionScheduledAt !== null)
+  const urgent = rows.filter((r) => r.priority === 'urgent').length
+
+  // FV11 · FD16 — feedback §4.3. Same-day groups of UNASSIGNED requests that
+  // sit within RUN_RADIUS_KM of each other. A suggestion with a link; nothing
+  // is grouped or assigned until a dispatcher builds the run.
+  const groups = suggestRunGroups(
+    stopRows
+      .filter((r) => r.status === 'requested')
+      .filter((r) => runStopEligibility(r.facts, { agentId: null, dateKey: todayKey, todayKey }).ok)
+      .map((r) => ({ id: r.id, dateKey: rollForward(stopDateKey(r.facts, todayKey), todayKey), city: r.city, lat: r.lat, lng: r.lng })),
+  )
 
   // FV4 / feedback §2.2. The dispatcher's other half of the assignment
   // decision: who is already carrying what. One definition, `lib/job-load.ts`,
@@ -135,7 +190,37 @@ export default async function DispatchPage() {
           label="Carrying a stale agent"
           tone={staleCount > 0 ? 'warning' : 'default'}
         />
+        <Stat value={String(urgent)} label="Urgent — declared hazard" tone={urgent > 0 ? 'warning' : 'default'} />
       </div>
+
+      {groups.length > 0 && (
+        <Panel
+          title="Same-day groups — could share one run"
+          aside={`Unassigned requests within ${RUN_RADIUS_KM} km, straight-line`}
+        >
+          <ul className="flex flex-col gap-2">
+            {groups.map((g) => (
+              <li
+                key={g.pickupIds.join(',')}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-console-line px-3 py-2.5"
+              >
+                <div className="text-xs text-text-primary">
+                  <span className="font-semibold">{formatDateKey(g.dateKey)}</span>
+                  <span className="mx-2 font-mono font-bold">{g.pickupIds.join(' · ')}</span>
+                  <span className="text-text-secondary">
+                    {g.basis === 'distance' && g.spreadKm !== null
+                      ? `${g.pickupIds.length} stops within ${formatKm(g.spreadKm)}`
+                      : `${g.pickupIds.length} stops in the same city — no coordinates to measure`}
+                  </span>
+                </div>
+                <Link href={`/runs/new?date=${g.dateKey}&pickups=${g.pickupIds.join(',')}`} className={secondaryButtonClass}>
+                  Plan a run
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       {byLoad.length > 0 && (
         <div className="rounded-xl border border-console-line bg-surface px-4 py-3">
@@ -163,6 +248,12 @@ export default async function DispatchPage() {
       </p>
     </>
   )
+}
+
+/** A request whose preferred day has passed is still waiting — today is the
+ *  earliest it can go on a run, so that is the day it is grouped on. */
+function rollForward(key: string | null, todayKey: string): string | null {
+  return key !== null && key < todayKey ? todayKey : key
 }
 
 /** A DateTime column rendered as a plain date key ("YYYY-MM-DD") in the server's

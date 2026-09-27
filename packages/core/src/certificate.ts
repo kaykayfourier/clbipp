@@ -29,6 +29,7 @@
 
 import { prisma } from '@clbipp/database'
 import { co2eAvoidedKg, aggregateMaterials } from './impact'
+import { destinationOf } from './pathway'
 
 export interface CertificatePayload {
   pickupId: string
@@ -45,6 +46,13 @@ export interface CertificatePayload {
    * `estimated` is defensible; one that silently pretends is not.
    */
   materialSource: 'measured' | 'estimated' | 'none'
+  /**
+   * FV13 · FD17 — mass of this pickup whose destination was Second Life, i.e.
+   * shipped to a refurbisher rather than a recycler. Stated on the certificate
+   * BESIDE the materials and never inside them: a battery given a second life
+   * was not broken down, so it recovered no metal.
+   */
+  secondLifeKg: number
 }
 
 /** The weight one BatteryItem contributes. The agent's confirmed figure wins
@@ -98,6 +106,7 @@ export async function buildCertificatePayload(
           weightKg: true,
           chemistry: true,
           category: true,
+          pathway: true,
         },
       },
       offer: {
@@ -117,6 +126,19 @@ export async function buildCertificatePayload(
 
   const totalWeightKg =
     Math.round(items.reduce((sum, i) => sum + i.weightKg, 0) * 10) / 10
+
+  // FV13 · FD17. What went to a refurbisher, and — its complement — the share
+  // of this pickup that was actually broken down for material. The measured
+  // path below needs neither (a refurbisher's manifest carries no recovery
+  // figures, so it contributes nothing on its own); the ESTIMATE path does,
+  // because the offer's breakdown was priced as if every battery were recycled.
+  const secondLifeRaw = pickup.items.reduce(
+    (sum, item) => sum + (destinationOf(item.pathway) === 'second_life' ? itemWeight(item) : 0),
+    0,
+  )
+  const secondLifeKg = Math.round(secondLifeRaw * 10) / 10
+  const rawTotal = items.reduce((sum, i) => sum + i.weightKg, 0)
+  const recycledShare = rawTotal > 0 ? Math.max(0, (rawTotal - secondLifeRaw) / rawTotal) : 1
 
   // 🔴 Never CO₂ arithmetic outside impact.ts. This is the one call.
   const co2AvoidedKg = co2eAvoidedKg(items)
@@ -189,6 +211,7 @@ export async function buildCertificatePayload(
       })),
       co2AvoidedKg,
       materialSource: 'measured',
+      secondLifeKg,
     }
   }
 
@@ -209,7 +232,11 @@ export async function buildCertificatePayload(
         if (typeof material !== 'string' || material.length === 0) return []
         // Accept either key: an offer written by a future engine version may
         // already speak the certificate's dialect.
-        const kg = Number(recovered_kg ?? weight_kg)
+        // 🔴 FV13 · FD17 — scaled to the RECYCLED share. The engine priced
+        // the whole load as if it were all going to be broken down; the part
+        // that went to a refurbisher recovered nothing, and claiming its
+        // metals on a compliance document would be a false figure.
+        const kg = Number(recovered_kg ?? weight_kg) * recycledShare
         if (!Number.isFinite(kg) || kg <= 0) return []
         return [{ material, recovered_kg: kg }]
       })
@@ -227,5 +254,6 @@ export async function buildCertificatePayload(
     materialSummary,
     co2AvoidedKg,
     materialSource: materialSummary.length > 0 ? 'estimated' : 'none',
+    secondLifeKg,
   }
 }

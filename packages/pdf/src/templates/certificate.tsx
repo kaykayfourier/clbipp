@@ -68,6 +68,20 @@ export function CertificateTemplate({ doc }: { doc: CertificateDoc }) {
           </>
         )}
 
+        {/* FV13 · FD17. A battery given a second life was not broken down, so
+            it appears here and NEVER in the materials table above — counting
+            it as recovered metal would be a false compliance figure. */}
+        {doc.secondLifeKg !== null && doc.secondLifeKg > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>SECOND LIFE</Text>
+            <Row
+              label="Routed to a registered refurbisher for reuse"
+              value={`${doc.secondLifeKg.toLocaleString('en-IN')} kg`}
+              last
+            />
+          </>
+        )}
+
         {doc.co2AvoidedKg !== null && (
           <>
             <Text style={styles.sectionLabel}>ENVIRONMENTAL IMPACT</Text>
@@ -83,8 +97,9 @@ export function CertificateTemplate({ doc }: { doc: CertificateDoc }) {
           <Text>
             Verification reference: {doc.publicToken}
             {'\n'}
-            This certificate confirms that the consignment above was collected,
-            processed and recycled through the Back2Basics recovery chain. Each
+            This certificate confirms that the consignment above was collected
+            and processed through the Back2Basics recovery chain — recycled for
+            material, or refurbished for a second life where stated. Each
             stage is recorded with a timestamp, location and handler in the
             platform&apos;s chain-of-custody log.
           </Text>

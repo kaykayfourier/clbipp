@@ -110,6 +110,10 @@ async function assignJob(pickupId: string, agent: { id: string; name: string }):
         agentId: agent.id,
         scheduledSlot: new Date(),
         etaMinutes: ETA_MINUTES,
+        // FV11 — a CLI assignment is a job outside any run, same as /dispatch's
+        // single assignment (a rebooked pickup may still name its old run).
+        collectionRunId: null,
+        runSequence: null,
       },
     })
     if (updated.count === 0) return false

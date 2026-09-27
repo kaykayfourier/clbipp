@@ -51,11 +51,15 @@ async function main() {
   const unassigned = await prisma.pickup.count({ where: { status: "requested", agentId: null } })
   check("≥3 unassigned `requested` pickups for /dispatch", unassigned >= 3, `${unassigned} rows`)
 
-  // 3 — three recyclers, non-overlapping chemistries
-  const recyclers = await prisma.recycler.findMany({ select: { name: true, acceptedChemistries: true } })
+  // 3 — three recyclers, non-overlapping chemistries. FV13: the partner table
+  // now also holds refurbishers, which are a different journey and are
+  // deliberately excluded from the segregation check.
+  const partners = await prisma.recycler.findMany({ select: { name: true, acceptedChemistries: true, kind: true } })
+  const recyclers = partners.filter((r) => r.kind === "recycler")
   const all = recyclers.flatMap((r) => r.acceptedChemistries)
   check("3 recyclers", recyclers.length === 3)
   check("recycler chemistries do not overlap", new Set(all).size === all.length, all.join(","))
+  check("FV13: ≥1 refurbisher for Second Life", partners.some((p) => p.kind === "refurbisher"))
 
   // 4 — AD6: a pickup whose items go to two different recyclers, on manifests
   //     at DIFFERENT statuses
@@ -147,7 +151,9 @@ async function main() {
     // ⚠ Adding a verb there means adding it here, or the first real use of it
     // fails this check after a demo. `custody.advance` (Admin Batch 6) is the
     // first one that happened to.
-    ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin","item.pathway"].includes(a.action)),
+    ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin","item.pathway",
+     // feedback_logistics (FV10–FV15)
+     "tag.issue","container.register","container.status","run.create","run.cancel","custody.reconcile","agent.duty"].includes(a.action)),
     `${audits.length} rows`)
 
   // 12 — FV2/FV1 evidence rules, made a fixture rather than a hope.
@@ -176,6 +182,97 @@ async function main() {
     "FV1: every seeded battery line carries a customer photo",
     noPhoto === 0,
     `${noPhoto} lines with no photo`,
+  )
+
+  // 13 — feedback_logistics (FV10–FV15, 2026-09-27). Each of these is a
+  // fixture a screen or a rule depends on; a reseed that loses one lets a
+  // regression through with every other check green.
+
+  // FV10 · FD12/FD13 — every collected line carries a tag OR a recorded reason.
+  const collectedLines = await prisma.batteryItem.findMany({
+    where: { pickup: { status: { in: ["collected", "tested", "processed", "recovered", "certified"] } } },
+    select: { id: true, untaggedReason: true, tag: { select: { code: true } } },
+  })
+  check(
+    "FV10: every collected line is tagged or says why not",
+    collectedLines.length > 0 && collectedLines.every((l) => l.tag || l.untaggedReason),
+    `${collectedLines.filter((l) => !l.tag && !l.untaggedReason).length} of ${collectedLines.length} unaccounted`,
+  )
+  check(
+    "FV10: one line left untagged with a reason (the hub's tag-at-receipt path)",
+    collectedLines.some((l) => !l.tag && (l.untaggedReason ?? "").length > 0),
+  )
+  const unusedTags = await prisma.itemTag.count({ where: { batteryItemId: null } })
+  check("FV10: ≥20 unused tags in circulation (the demo scans some)", unusedTags >= 20, `${unusedTags} unused`)
+
+  // FV12 · FD15 — nothing past `collected` without every line checked in.
+  const pastHub = await prisma.batteryItem.findMany({
+    where: { pickup: { status: { in: ["tested", "processed", "recovered", "certified"] } } },
+    select: { custodyCheck: { select: { outcome: true } } },
+  })
+  check(
+    "FV12: every line past `tested` was checked in at the hub as received",
+    pastHub.length > 0 && pastHub.every((l) => l.custodyCheck?.outcome === "received"),
+    `${pastHub.filter((l) => l.custodyCheck?.outcome !== "received").length} of ${pastHub.length} not`,
+  )
+
+  // FV11 · FD14/FD16 — an open run with a box, and no box on two open runs.
+  const openRuns = await prisma.collectionRun.findMany({
+    where: { status: { in: ["planned", "in_progress"] } },
+    select: { runNo: true, containers: { where: { unloadedAt: null }, select: { containerId: true } }, _count: { select: { pickups: true } } },
+  })
+  check(
+    "FV11: an open run with a box loaded and ≥2 stops",
+    openRuns.some((r) => r.containers.length > 0 && r._count.pickups >= 2),
+    openRuns.map((r) => `${r.runNo}:${r._count.pickups} stops/${r.containers.length} box`).join(" "),
+  )
+  const loadedBoxes = openRuns.flatMap((r) => r.containers.map((c) => c.containerId))
+  check("FV11: no box is loaded on two open runs", new Set(loadedBoxes).size === loadedBoxes.length)
+  check("FV11: ≥1 box free for a new run", (await prisma.transportContainer.count({ where: { isActive: true } })) > loadedBoxes.length)
+
+  // FV11 — fixture 9: the same-day pair dispatch must suggest, and the far one it must not.
+  const sites = await prisma.pickup.findMany({
+    where: { id: { in: ["PKP-2026-000101", "PKP-2026-000115", "PKP-2026-000111"] } },
+    select: { id: true, preferredDate: true, address: { select: { lat: true, lng: true } } },
+  })
+  const at = (id: string) => sites.find((p) => p.id === id)
+  const km = (a?: { lat: unknown; lng: unknown } | null, b?: { lat: unknown; lng: unknown } | null) => {
+    if (!a || !b) return Infinity
+    const R = 6371, rad = (d: number) => (d * Math.PI) / 180
+    const [la1, lo1, la2, lo2] = [Number(a.lat), Number(a.lng), Number(b.lat), Number(b.lng)]
+    const h = Math.sin(rad(la2 - la1) / 2) ** 2 + Math.cos(rad(la1)) * Math.cos(rad(la2)) * Math.sin(rad(lo2 - lo1) / 2) ** 2
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+  }
+  const pairKm = km(at("PKP-2026-000101")?.address, at("PKP-2026-000115")?.address)
+  const farKm = km(at("PKP-2026-000101")?.address, at("PKP-2026-000111")?.address)
+  check(
+    "fixture 9: 101 + 115 share a preferred day and sit within 8 km; 111 is far",
+    at("PKP-2026-000101")?.preferredDate?.getTime() === at("PKP-2026-000115")?.preferredDate?.getTime() && pairKm <= 8 && farKm > 8,
+    `pair ${pairKm.toFixed(1)} km, far ${farKm.toFixed(1)} km`,
+  )
+
+  // FV13 · FD17 — fixture 10: second-life stock, on no manifest.
+  const secondLife = await prisma.batteryItem.findMany({
+    where: { pathway: { in: ["refurbish", "reuse"] }, pickup: { status: "tested" } },
+    select: { id: true },
+  })
+  const manifested = new Set(
+    (await prisma.dispatchManifest.findMany({ select: { itemIds: true } })).flatMap((m) =>
+      Array.isArray(m.itemIds) ? (m.itemIds as unknown[]).filter((x): x is string => typeof x === "string") : [],
+    ),
+  )
+  check(
+    "fixture 10: ≥1 tested second-life line, on NO manifest",
+    secondLife.length > 0 && secondLife.every((i) => !manifested.has(i.id)),
+    `${secondLife.length} lines`,
+  )
+
+  // FV15 · FD19 — an off-duty agent exists, and the demo agent is on duty.
+  const agents = await prisma.profile.findMany({ where: { role: "agent" }, select: { email: true, dutyStatus: true } })
+  check(
+    "FV15: agent@test on duty, ≥1 other agent off duty",
+    agents.some((a) => a.email === "agent@test" && a.dutyStatus === "on_duty") && agents.some((a) => a.dutyStatus === "off_duty"),
+    agents.map((a) => `${a.email}=${a.dutyStatus}`).join(" "),
   )
 
   console.log("")

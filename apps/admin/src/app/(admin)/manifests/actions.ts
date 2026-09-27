@@ -9,6 +9,7 @@ import type { BatteryType } from '@clbipp/database'
 import type { AdminAuditAction, AdminAuditSubject } from '@clbipp/core/audit'
 import { manifestNumber } from '@clbipp/core/format'
 import { chemistryLabel } from '@clbipp/core/intake'
+import { MIN_OUTCOME_NOTE_CHARS, PARTNER_KIND_LABELS, isShippableTo } from '@clbipp/core/pathway'
 
 import { requireAdmin } from '@/lib/admin-identity'
 import {
@@ -91,7 +92,7 @@ export async function createManifest(input: {
 
   const recycler = await prisma.recycler.findUnique({
     where: { id: recyclerId },
-    select: { id: true, name: true, isActive: true, acceptedChemistries: true },
+    select: { id: true, name: true, isActive: true, acceptedChemistries: true, kind: true },
   })
   if (!recycler) return { error: 'That recycler does not exist.', manifestId: null }
   // AD7, half one. An inactive recycler is one we may not ship to at all.
@@ -111,6 +112,7 @@ export async function createManifest(input: {
           chemistry: true,
           weightKg: true,
           confirmedWeightKg: true,
+          pathway: true,
           pickup: {
             select: { id: true, status: true, custodyBatchId: true },
           },
@@ -165,6 +167,22 @@ export async function createManifest(input: {
         return {
           ok: false as const,
           error: `${alreadyOn.length} of those items ${alreadyOn.length === 1 ? 'is' : 'are'} already on a manifest. Reload to see the current stock.`,
+        }
+      }
+
+      // 🔴 FV13 · FD17 — the DESTINATION rule, before the chemistry one. A
+      // second-life battery never goes on a recycler's lorry, and a recycling
+      // (or unrouted flat-rate) one never goes to a refurbisher. Enforced here,
+      // not in the builder's destination toggle — AD7's posture: the form is
+      // not the boundary.
+      const misrouted = items.filter((i) => !isShippableTo(recycler.kind, i.pathway))
+      if (misrouted.length > 0) {
+        return {
+          ok: false as const,
+          error:
+            recycler.kind === 'refurbisher'
+              ? `${misrouted.length} selected item${misrouted.length === 1 ? ' is' : 's are'} not second-life stock. A refurbisher takes only items whose pathway is reuse or refurbish.`
+              : `${misrouted.length} selected item${misrouted.length === 1 ? ' is' : 's are'} second-life stock. Ship ${misrouted.length === 1 ? 'it' : 'them'} to a refurbisher, not ${recycler.name}.`,
         }
       }
 
@@ -265,7 +283,7 @@ export async function dispatchManifest(manifestId: string): Promise<ManifestResu
       manifestNo: true,
       status: true,
       itemIds: true,
-      recycler: { select: { id: true, name: true, isActive: true, acceptedChemistries: true } },
+      recycler: { select: { id: true, name: true, isActive: true, acceptedChemistries: true, kind: true } },
     },
   })
   if (!before) return { error: 'That manifest does not exist.', manifestId: null }
@@ -297,8 +315,18 @@ export async function dispatchManifest(manifestId: string): Promise<ManifestResu
 
   const items = await prisma.batteryItem.findMany({
     where: { id: { in: snapshotIds } },
-    select: { id: true, chemistry: true },
+    select: { id: true, chemistry: true, pathway: true },
   })
+  // FV13 · FD17 re-checked at dispatch: an admin can override an item's
+  // pathway (FV5) after the draft was built, and the lorry must not leave with
+  // a battery that now belongs to the other kind of partner.
+  const misrouted = items.filter((i) => !isShippableTo(before.recycler.kind, i.pathway))
+  if (misrouted.length > 0) {
+    return {
+      error: `${misrouted.length} item${misrouted.length === 1 ? ' on this manifest has' : 's on this manifest have'} had ${misrouted.length === 1 ? 'its' : 'their'} pathway changed since the draft was built and no longer belong${misrouted.length === 1 ? 's' : ''} with a ${PARTNER_KIND_LABELS[before.recycler.kind].toLowerCase()}. Rebuild this manifest.`,
+      manifestId: null,
+    }
+  }
   const accepted = new Set<BatteryType>(before.recycler.acceptedChemistries)
   const rejected = items.filter((i) => i.chemistry === null || !accepted.has(i.chemistry))
   if (rejected.length > 0) {
@@ -513,6 +541,9 @@ export async function confirmManifestReceived(manifestId: string): Promise<Manif
 export async function reconcileManifest(
   manifestId: string,
   recovery: readonly RecoveryLine[],
+  /** FV13 · FD17 — a refurbisher's report. Required for a refurbisher, and
+   *  the ONLY thing it reports: it recovers no metal. */
+  outcomeNote: string = '',
 ): Promise<ManifestAdvanceResult> {
   const gate = await requireAdmin()
   if (!gate.ok) return { error: gate.error, advanced: 0, held: 0 }
@@ -520,19 +551,6 @@ export async function reconcileManifest(
 
   const id = manifestId.trim()
   if (!id) return { error: 'No manifest selected.', advanced: 0, held: 0 }
-
-  // Re-parse rather than trust the caller: this runs the same defensive filter
-  // the column is read back through, so what is stored is exactly what will
-  // parse. It also folds away zeroes and blanks the form submits for the metals
-  // nobody typed into.
-  const lines = parseRecoveryData(recovery)
-  if (lines.length === 0) {
-    return {
-      error: `Enter the recovered mass for at least one metal (${RECOVERY_METALS.slice(0, 4).join(', ')}, …). Reconciling with no figures would leave every certificate from this load quoting an estimate.`,
-      advanced: 0,
-      held: 0,
-    }
-  }
 
   const before = await prisma.dispatchManifest.findUnique({
     where: { id },
@@ -542,10 +560,37 @@ export async function reconcileManifest(
       status: true,
       itemIds: true,
       totalWeightKg: true,
-      recycler: { select: { name: true } },
+      recycler: { select: { name: true, kind: true } },
     },
   })
   if (!before) return { error: 'That manifest does not exist.', advanced: 0, held: 0 }
+
+  const isRefurb = before.recycler.kind === 'refurbisher'
+  const note = outcomeNote.trim()
+
+  // Re-parse rather than trust the caller: this runs the same defensive filter
+  // the column is read back through, so what is stored is exactly what will
+  // parse. It also folds away zeroes and blanks the form submits for the metals
+  // nobody typed into.
+  //
+  // 🔴 FV13 · FD17 — a REFURBISHER's manifest takes no metals at all, even if a
+  // crafted POST sends some: a battery restored for a second life recovered no
+  // material, and figures here would reach a vendor's certificate as if it had.
+  const lines = isRefurb ? [] : parseRecoveryData(recovery)
+  if (isRefurb && note.length < MIN_OUTCOME_NOTE_CHARS) {
+    return {
+      error: `Record what ${before.recycler.name} reported — how many units were restored and where they went — in at least ${MIN_OUTCOME_NOTE_CHARS} characters. It is the only record of this second-life outcome.`,
+      advanced: 0,
+      held: 0,
+    }
+  }
+  if (!isRefurb && lines.length === 0) {
+    return {
+      error: `Enter the recovered mass for at least one metal (${RECOVERY_METALS.slice(0, 4).join(', ')}, …). Reconciling with no figures would leave every certificate from this load quoting an estimate.`,
+      advanced: 0,
+      held: 0,
+    }
+  }
   if (before.status !== 'received') {
     return {
       error:
@@ -589,7 +634,9 @@ export async function reconcileManifest(
         // `InputJsonValue` wants an index signature that a named interface does
         // not carry. `parseRecoveryData` above is what actually guarantees the
         // contents, and the same function reads them back.
-        data: { status: 'reconciled', recoveryData: lines as unknown as Prisma.InputJsonValue },
+        data: isRefurb
+          ? { status: 'reconciled', outcomeNote: note }
+          : { status: 'reconciled', recoveryData: lines as unknown as Prisma.InputJsonValue },
       })
       if (updated.count === 0) return null
 
@@ -600,7 +647,9 @@ export async function reconcileManifest(
         to: 'recovered',
         actorId: admin.id,
         note: () =>
-          `Reconciled against ${before.recycler.name}'s recovery report — manifest ${before.manifestNo}. Recorded by an admin; there is no recycler portal.`,
+          isRefurb
+            ? `Second-life outcome confirmed by ${before.recycler.name} — manifest ${before.manifestNo}. Recorded by an admin; there is no partner portal.`
+            : `Reconciled against ${before.recycler.name}'s recovery report — manifest ${before.manifestNo}. Recorded by an admin; there is no recycler portal.`,
       })
 
       await tx.adminAudit.create({
@@ -617,6 +666,7 @@ export async function reconcileManifest(
             recoveredKg: Math.round(recoveredKg * 100) / 100,
             shippedKg,
             recovery: lines as unknown as Prisma.InputJsonValue,
+            ...(isRefurb ? { partnerKind: 'refurbisher', outcomeNote: note } : {}),
             advancedPickupIds: moved.advanced.map((a) => a.pickupId),
             heldPickupIds: moved.held.map((h) => h.pickupId),
           },
@@ -716,7 +766,11 @@ export async function reconcileManifestAction(formData: FormData) {
     return [{ material: metal, recovered_kg: kg }]
   })
 
-  const { error, advanced, held } = await reconcileManifest(manifestId, recovery)
+  const { error, advanced, held } = await reconcileManifest(
+    manifestId,
+    recovery,
+    String(formData.get('outcomeNote') ?? ''),
+  )
 
   if (error) redirect(`${href}?error=${encodeURIComponent(error)}`)
 

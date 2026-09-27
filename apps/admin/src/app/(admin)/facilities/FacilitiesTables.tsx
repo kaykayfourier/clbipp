@@ -19,6 +19,8 @@ export interface FacilityRow {
 export interface RecyclerRow {
   id: string
   name: string
+  /** FV13 · FD17 — recycler, or refurbisher (second life). */
+  kind: 'recycler' | 'refurbisher'
   cpcbRegNo: string
   acceptedChemistries: string[]
   capacityKg: number | null
@@ -45,7 +47,21 @@ export function FacilitiesTables({ facilities, recyclers }: { facilities: readon
   ]
 
   const recyclerColumns: DataTableColumn<RecyclerRow>[] = [
-    { key: 'name', header: 'Recycler', sortValue: (r) => r.name, cell: (r) => <span className="font-medium text-text-primary">{r.name}</span> },
+    { key: 'name', header: 'Partner', sortValue: (r) => r.name, cell: (r) => <span className="font-medium text-text-primary">{r.name}</span> },
+    {
+      key: 'kind',
+      header: 'Takes',
+      sortValue: (r) => r.kind,
+      cell: (r) => (
+        <span
+          className={`inline-flex rounded-full px-2 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.08em] ${
+            r.kind === 'refurbisher' ? 'bg-success-bg text-success-text' : 'bg-background text-text-secondary'
+          }`}
+        >
+          {r.kind === 'refurbisher' ? 'Second life' : 'Recycling'}
+        </span>
+      ),
+    },
     { key: 'cpcb', header: 'CPCB reg. no.', sortValue: (r) => r.cpcbRegNo, cell: (r) => <span className="font-mono text-[11px] text-text-secondary">{r.cpcbRegNo}</span> },
     {
       key: 'chem',
@@ -71,13 +87,15 @@ export function FacilitiesTables({ facilities, recyclers }: { facilities: readon
         <DataTable columns={facilityColumns} rows={facilities} getRowKey={(r) => r.id} emptyHeading="No facilities" pageSize={10} />
       </div>
       <div className="flex flex-col gap-2">
-        <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.09em] text-text-secondary">CPCB-registered recyclers</h2>
+        <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.09em] text-text-secondary">
+          CPCB-registered partners — recyclers, and refurbishers for second life
+        </h2>
         <DataTable
           columns={recyclerColumns}
           rows={recyclers}
           getRowKey={(r) => r.id}
-          getSearchText={(r) => `${r.name} ${r.cpcbRegNo} ${r.acceptedChemistries.join(' ')}`}
-          searchPlaceholder="Search recycler, CPCB reg., chemistry…"
+          getSearchText={(r) => `${r.name} ${r.cpcbRegNo} ${r.kind} ${r.acceptedChemistries.join(' ')}`}
+          searchPlaceholder="Search partner, CPCB reg., chemistry…"
           emptyHeading="No recyclers"
           pageSize={10}
         />

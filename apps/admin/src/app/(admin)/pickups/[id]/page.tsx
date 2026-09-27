@@ -100,6 +100,10 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           chemistry: true,
           confirmedWeightKg: true,
           weightMethod: true,
+          weightPhotoUrl: true,
+          untaggedReason: true,
+          tag: { select: { code: true, boundAtHub: true, container: { select: { code: true, label: true } } } },
+          custodyCheck: { select: { outcome: true, method: true, note: true } },
           pathwayReason: true,
           confirmedCondition: true,
           agentPhotoUrls: true,
@@ -123,7 +127,9 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
         orderBy: { occurredAt: 'asc' },
         select: { id: true, status: true, actorRole: true, notes: true, lat: true, lng: true, photoUrls: true, occurredAt: true },
       },
-      custodyBatch: { select: { batchNo: true, handedOffAt: true, facility: { select: { name: true } } } },
+      custodyBatch: { select: { id: true, batchNo: true, handedOffAt: true, facility: { select: { name: true } } } },
+      collectionRun: { select: { id: true, runNo: true, status: true } },
+      runSequence: true,
       receipt: { select: { receiptNo: true, pdfUrl: true } },
       certificate: { select: { pdfUrl: true, certifiedAt: true } },
       invoice: { select: { number: true, pdfUrl: true } },
@@ -137,7 +143,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
   // round trip per item/event — a pickup with a dozen items and a dozen status
   // events would otherwise fire two dozen separate signed-url calls.
   const allPaths = [
-    ...pickup.items.flatMap((i) => [...i.photoUrls, ...i.agentPhotoUrls]),
+    ...pickup.items.flatMap((i) => [...i.photoUrls, ...i.agentPhotoUrls, ...(i.weightPhotoUrl ? [i.weightPhotoUrl] : [])]),
     ...pickup.statusEvents.flatMap((e) => e.photoUrls),
   ]
   const { urls: signedList } = allPaths.length > 0 ? await createSignedUrls('pickup-photos', allPaths) : { urls: [] }
@@ -193,7 +199,12 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           <Section title="Items">
             <div className="flex flex-col gap-3">
               {pickup.items.map((item) => (
-                <ItemCard key={item.id} item={item} pickupStatus={pickup.status} />
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  pickupStatus={pickup.status}
+                  scalePhotoUrl={item.weightPhotoUrl ? (signedMap.get(item.weightPhotoUrl) ?? null) : null}
+                />
               ))}
             </div>
           </Section>
@@ -297,13 +308,43 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
             </Card>
           </Section>
 
+          {/* FV11 — the run this pickup is a stop on, if any. */}
+          {pickup.collectionRun ? (
+            <Section title="Collection run">
+              <Card variant="outline">
+                <CardContent className="flex flex-col">
+                  <DetailRow
+                    label="Run"
+                    value={
+                      <Link href={`/runs/${pickup.collectionRun.id}`} className="font-mono underline underline-offset-2">
+                        {pickup.collectionRun.runNo}
+                      </Link>
+                    }
+                  />
+                  <DetailRow label="Stop" value={pickup.runSequence !== null ? `#${pickup.runSequence}` : '—'} />
+                  <DetailRow label="Run status" value={pickup.collectionRun.status.replace('_', ' ')} last />
+                </CardContent>
+              </Card>
+            </Section>
+          ) : null}
+
           {pickup.custodyBatch ? (
             <Section title="Hub hand-off">
               <Card variant="outline">
                 <CardContent className="flex flex-col">
                   <DetailRow label="Batch" value={pickup.custodyBatch.batchNo} />
                   <DetailRow label="Facility" value={pickup.custodyBatch.facility.name} />
-                  <DetailRow label="Handed off" value={formatDateTime(pickup.custodyBatch.handedOffAt)} last />
+                  <DetailRow label="Handed off" value={formatDateTime(pickup.custodyBatch.handedOffAt)} />
+                  {/* FV12 · FD15 — the hub's own count, line by line. */}
+                  <DetailRow
+                    label="Check-in"
+                    value={
+                      <Link href={`/custody/${pickup.custodyBatch.id}`} className="underline underline-offset-2">
+                        {`${pickup.items.filter((i) => i.custodyCheck?.outcome === 'received').length} / ${pickup.items.length} lines received`}
+                      </Link>
+                    }
+                    last
+                  />
                 </CardContent>
               </Card>
             </Section>
@@ -376,6 +417,10 @@ type ItemWithExceptions = {
   chemistry: string | null
   confirmedWeightKg: unknown
   weightMethod: unknown
+  weightPhotoUrl: string | null
+  untaggedReason: string | null
+  tag: { code: string; boundAtHub: boolean; container: { code: string; label: string } | null } | null
+  custodyCheck: { outcome: string; method: string; note: string | null } | null
   pathwayReason: unknown
   confirmedCondition: string | null
   agentPhotoUrls: string[]
@@ -398,9 +443,12 @@ type ItemWithExceptions = {
 function ItemCard({
   item,
   pickupStatus,
+  scalePhotoUrl,
 }: {
   item: ItemWithExceptions
   pickupStatus: string
+  /** FV10 — signed URL of the battery-on-the-scale photo, when one was taken. */
+  scalePhotoUrl: string | null
 }) {
   // 🔴 Past `tested` the battery has physically left, and its pathway is part
   // of the record a compliance certificate is built from. Re-routing it then
@@ -463,6 +511,17 @@ function ItemCard({
                 />
                 <MiniRow label="Condition" value={item.confirmedCondition ? (conditionLabel(item.confirmedCondition) ?? item.confirmedCondition) : '—'} />
                 <MiniRow label="Photos" value={String(item.agentPhotoUrls.length)} />
+                {/* FV10 — feedback §3.1: "a photograph showing the battery and
+                    the scale reading". Optional; its absence next to a
+                    divergence flag below is itself worth noticing. */}
+                {scalePhotoUrl ? (
+                  <div className="flex justify-between gap-2 py-0.5 text-[11px]">
+                    <span className="text-text-secondary">Scale photo</span>
+                    <a href={scalePhotoUrl} target="_blank" rel="noreferrer" className="font-bold text-text-primary underline underline-offset-2">
+                      View reading
+                    </a>
+                  </div>
+                ) : null}
               </>
             ) : (
               <p className="text-xs text-text-disabled">Not yet on site</p>
@@ -481,6 +540,45 @@ function ItemCard({
             {divergence.deltaKg > 0 ? 'above' : 'below'} the customer&apos;s figure (
             {(Math.abs(divergence.fraction) * 100).toFixed(0)}%)
             {isWeightMethod(item.weightMethod) ? `, by ${WEIGHT_METHOD_LABELS[item.weightMethod].toLowerCase()}` : ''}.
+            {!scalePhotoUrl ? ' No scale photo was taken.' : ''}
+          </div>
+        ) : null}
+
+        {/* FV10–FV12 — the physical chain: tag, box, and the hub's check-in.
+            Shown once the line has been collected (it carries a tag or a
+            recorded reason for not). */}
+        {item.tag || item.untaggedReason ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-console-line pt-2.5 text-[11px]">
+            <span className="text-text-secondary">
+              Tag{' '}
+              {item.tag ? (
+                <Link href={`/tags?code=${encodeURIComponent(item.tag.code)}`} className="font-mono font-bold text-text-primary underline underline-offset-2">
+                  {item.tag.code}
+                </Link>
+              ) : (
+                <span className="text-warning-text">none — “{item.untaggedReason}”</span>
+              )}
+              {item.tag?.boundAtHub ? ' (applied at the hub)' : ''}
+            </span>
+            {item.tag?.container ? (
+              <span className="text-text-secondary">
+                Box <span className="font-mono text-text-primary">{item.tag.container.code}</span>
+              </span>
+            ) : null}
+            <span className="text-text-secondary">
+              Hub{' '}
+              <span
+                className={
+                  item.custodyCheck?.outcome === 'received'
+                    ? 'font-bold text-success-text'
+                    : item.custodyCheck?.outcome === 'missing'
+                      ? 'font-bold text-error-text'
+                      : 'text-text-disabled'
+                }
+              >
+                {item.custodyCheck ? item.custodyCheck.outcome : 'not checked in'}
+              </span>
+            </span>
           </div>
         ) : null}
 

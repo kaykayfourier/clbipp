@@ -25,12 +25,19 @@ import type {
   BatteryType,
   ManifestStatus,
   PickupStatus,
+  RecoveryPathway,
 } from "../src/generated/client"
 import { loadAppEnv } from "./env"
 import { solidPng, PHOTO_COLOURS } from "./placeholder-image"
 
 const CUSTOMER_EMAIL = "business@test"
 const AGENT_EMAIL = "agent@test"
+// FV8/FV15 — a roster of one could not show a ranking or an off-duty agent.
+// Two more agents, same demo password: one on duty (so the ranked selector has
+// a real choice to explain) and one OFF duty (so "Unavailable — off duty" is a
+// state the dispatcher can actually see).
+const AGENT2_EMAIL = "agent2@test"
+const AGENT3_EMAIL = "agent3@test"
 const ADMIN_EMAIL = "admin@test"
 // Demo-only password for the seeded agent/admin logins. Not a secret; these
 // accounts exist so the Agent and Admin apps have something to log into.
@@ -170,6 +177,13 @@ async function ensureAuthUser(
  * schema only cascades from Pickup to BatteryItem.
  */
 async function wipe() {
+  // feedback_logistics (FV10–FV12). Tags and hub checks point at battery items,
+  // box loads at runs and boxes; all four go before the items and pickups they
+  // reference. Runs and boxes themselves go after the pickups (which hold the
+  // run FK) — see below.
+  await prisma.custodyItemCheck.deleteMany()
+  await prisma.itemTag.deleteMany()
+  await prisma.runContainer.deleteMany()
   await prisma.safetyChecklist.deleteMany()
   // Admin console (admin_app_v1). item_exceptions cascades from battery_items
   // anyway, but the order is stated rather than relied on — the other two hold
@@ -188,6 +202,8 @@ async function wipe() {
   await prisma.statusEvent.deleteMany()
   await prisma.batteryItem.deleteMany()
   await prisma.pickup.deleteMany()
+  await prisma.collectionRun.deleteMany()
+  await prisma.transportContainer.deleteMany()
   await prisma.address.deleteMany()
   await prisma.pricingRate.deleteMany()
   // After pickups (they hold the FK) and before facilities (it holds one).
@@ -312,6 +328,25 @@ const RECYCLERS = [
 
 type RecyclerKey = (typeof RECYCLERS)[number]["key"]
 
+/**
+ * FV13 · FD17 — the partner Second Life goes to. A REFURBISHER, not a
+ * recycler: it restores batteries for further use and recovers no metal, so a
+ * manifest to it records an outcome, not material figures. Deliberately not a
+ * real firm, for the same reason the recyclers above are not.
+ *
+ * Takes the three li-ion chemistries — second life is a li-ion question (a
+ * spent lead-acid or flat-rate line is never judged reusable by the engine).
+ * ⚠ Kept OUT of RECYCLERS so fixture 3's "chemistries do not overlap" holds:
+ * that rule is about segregating material streams between recyclers, and a
+ * refurbisher is a different journey entirely.
+ */
+const REFURBISHER = {
+  name: "Evergreen Second-Life Cells Pvt Ltd",
+  cpcbRegNo: "CPCB/EPR/RF/2025/000061",
+  acceptedChemistries: ["li_ion_nmc", "li_ion_lfp", "li_ion_nca"] as BatteryType[],
+  capacityKg: 60000,
+}
+
 /** Which recycler takes which chemistry. The inverse of the table above. */
 const RECYCLER_FOR_CHEMISTRY: Partial<Record<BatteryType, RecyclerKey>> = {
   li_ion_nmc: "nickel",
@@ -430,6 +465,10 @@ async function seedReferenceData(adminId: string) {
     recyclerIds[r.key] = row.id
   }
 
+  await prisma.recycler.create({
+    data: { ...REFURBISHER, acceptedChemistries: [...REFURBISHER.acceptedChemistries], kind: "refurbisher" },
+  })
+
   return { facility, recyclerIds }
 }
 
@@ -543,7 +582,29 @@ type ItemSpec = {
   weightKg: number
   condition: BatteryCondition
   chemistry: BatteryType
+  /** FV13 · FD17 — the verdict for this line once assessed. Defaults to
+   *  `recycle`; a `refurbish` / `reuse` line is second-life stock. */
+  pathway?: RecoveryPathway
 }
+
+/**
+ * FV11 · FD16 — vendor sites with REAL, distinct coordinates.
+ *
+ * Every fixture used to share the warehouse address, so every pickup sat at the
+ * same point and "nearby" was meaningless: same-day grouping would have put
+ * Bhiwadi and Kalkaji on one van. The requested fixtures — the ones dispatch
+ * groups — now each have their own site, placed where their `location` says.
+ * Sharma Logistics is a fleet account with several depots, so a multi-site
+ * address book is also just realistic.
+ */
+const SITES = {
+  kalkaji: { label: "Kalkaji office", line1: "Plot 7, Kalkaji Industrial Area", city: "New Delhi", state: "Delhi", pincode: "110019", lat: 28.5494, lng: 77.2588 },
+  nehruPlace: { label: "Nehru Place annexe", line1: "Block C, Nehru Place", city: "New Delhi", state: "Delhi", pincode: "110019", lat: 28.5485, lng: 77.2513 },
+  bhiwadi: { label: "Bhiwadi plant", line1: "G1-512, RIICO Industrial Area", city: "Bhiwadi", state: "Rajasthan", pincode: "301019", lat: 28.2104, lng: 76.8606 },
+  manesar: { label: "Manesar yard", line1: "Plot 88, Sector 8, IMT Manesar", city: "Gurugram", state: "Haryana", pincode: "122052", lat: 28.3515, lng: 76.9428 },
+  peeragarhi: { label: "Peeragarhi depot", line1: "B-3, Peeragarhi Industrial Area", city: "New Delhi", state: "Delhi", pincode: "110087", lat: 28.682, lng: 77.0935 },
+} as const
+type SiteKey = keyof typeof SITES
 
 type PickupSpec = {
   id: string
@@ -570,6 +631,9 @@ type PickupSpec = {
 
   /** Override for the derived preferred date — a reactivation picks a NEW one. */
   preferredDateDaysAgo?: number
+
+  /** FV11 — the vendor site this pickup is at. Omitted = the main warehouse. */
+  site?: SiteKey
 }
 
 const PICKUPS: PickupSpec[] = [
@@ -578,6 +642,7 @@ const PICKUPS: PickupSpec[] = [
     status: "requested",
     category: "portable",
     location: "Kalkaji Mandir, New Delhi",
+    site: "kalkaji",
     notes: "Office laptop and power-bank cells cleared from storage.",
     daysAgo: 1,
     items: [
@@ -722,6 +787,7 @@ const PICKUPS: PickupSpec[] = [
     status: "requested",
     category: "industrial",
     location: "Bhiwadi Industrial Area, Rajasthan",
+    site: "bhiwadi",
     notes: "UPS bank decommissioned — needs a two-person lift.",
     daysAgo: 1,
     items: [
@@ -735,6 +801,7 @@ const PICKUPS: PickupSpec[] = [
     status: "requested",
     category: "ev",
     location: "Manesar Sector 8, Haryana",
+    site: "manesar",
     notes: "Two-wheeler fleet swap — packs already crated.",
     daysAgo: 2,
     items: [
@@ -790,11 +857,53 @@ const PICKUPS: PickupSpec[] = [
     reactivatedFrom: "offered",
     category: "automotive",
     location: "Peeragarhi, New Delhi",
+    site: "peeragarhi",
     notes: "Cancelled and rebooked by the vendor — original quote no longer valid.",
     daysAgo: 20,
     preferredDateDaysAgo: -3,
     items: [
       { category: "automotive", quantity: 6, weightKg: 84, condition: "healthy", chemistry: "lead_acid" },
+    ],
+  },
+
+  // ── feedback_logistics fixtures (2026-09-27) ──────────────────────────────
+
+  {
+    // 🔴 FIXTURE 9 — the SAME-DAY GROUP (FV11 · FD16). Unassigned, preferred
+    // for today like PKP-2026-000101, and ~0.7 km from it (Nehru Place vs
+    // Kalkaji). Together they are the one pair `suggestRunGroups` must
+    // propose on /dispatch; PKP-2026-000111 is also for today but 55 km away
+    // in Bhiwadi, and must NOT be grouped with them. Move either site and the
+    // suggestion panel goes quiet.
+    id: "PKP-2026-000115",
+    status: "requested",
+    category: "portable",
+    location: "Nehru Place, New Delhi",
+    notes: "IT refresh — old laptop and UPS packs, boxed at reception.",
+    daysAgo: 1,
+    site: "nehruPlace",
+    items: [
+      { category: "portable", quantity: 30, weightKg: 14.5, condition: "healthy", chemistry: "li_ion_nmc" },
+    ],
+  },
+  {
+    // 🔴 FIXTURE 10 — SECOND-LIFE STOCK (FV13 · FD17). A tested pickup whose
+    // only line was judged fit for refurbishment, so it can go ONLY to a
+    // refurbisher. It sits on no manifest: /manifests/new offers it under
+    // "Second Life → refurbisher", and never under a recycler.
+    //
+    // Before FV13 this pickup could never have advanced past `tested` — AD6
+    // needs every item on a manifest and nothing could take it. Reconciling a
+    // refurbisher manifest is what moves it now, and its certificate states
+    // 180 kg of second life and NO recovered metal.
+    id: "PKP-2026-000116",
+    status: "tested",
+    category: "ev",
+    location: "Noida Sector 63, UP",
+    notes: "Fleet swap — packs healthy, retired on range not failure.",
+    daysAgo: 10,
+    items: [
+      { category: "ev", quantity: 2, weightKg: 180, condition: "healthy", chemistry: "li_ion_lfp", pathway: "refurbish" },
     ],
   },
 ]
@@ -854,6 +963,8 @@ async function seed() {
   // precondition entirely; a reseed is now self-sufficient from a wiped DB.
   const vendorId = await ensureAuthUser(CUSTOMER_EMAIL, "Aarav Sharma", CUSTOMER_PASSWORD)
   const agentId = await ensureAuthUser(AGENT_EMAIL, "Ravi Kumar")
+  const agent2Id = await ensureAuthUser(AGENT2_EMAIL, "Neha Verma")
+  const agent3Id = await ensureAuthUser(AGENT3_EMAIL, "Mohit Sharma")
   const adminId = await ensureAuthUser(ADMIN_EMAIL, "Priya Nair")
 
   await prisma.profile.upsert({
@@ -899,7 +1010,7 @@ async function seed() {
     // scratch on every run. Without this reset a second `npm run reset-demo`
     // leaves the cache at double the ledger it is supposed to cache, and the
     // profile screen reconciles the two.
-    update: { role: "agent", walletBalancePaise: 0 },
+    update: { role: "agent", walletBalancePaise: 0, dutyStatus: "on_duty" },
     create: {
       id: agentId,
       email: AGENT_EMAIL,
@@ -913,6 +1024,35 @@ async function seed() {
       agentRating: 4.7,
     },
   })
+
+  // FV8/FV15 — the rest of the roster. Neha is on duty with no jobs, so she is
+  // the one the ranked selector recommends for a fresh request; Mohit is marked
+  // OFF duty, so the selector shows him disabled with "Off duty" and dispatch
+  // refuses him. Both safety-trained: off duty must be the only reason Mohit is
+  // unavailable, or the fixture proves nothing.
+  const ROSTER = [
+    { id: agent2Id, email: AGENT2_EMAIL, fullName: "Neha Verma", phone: "+91 98110 55012", zone: "Delhi NCR — East", vehicle: "Mahindra Jeeto · UP 16 CT 2291", duty: "on_duty" as const, rating: 4.5 },
+    { id: agent3Id, email: AGENT3_EMAIL, fullName: "Mohit Sharma", phone: "+91 98730 66231", zone: "Delhi NCR — West", vehicle: "Tata Ace · HR 26 EQ 8804", duty: "off_duty" as const, rating: 4.2 },
+  ]
+  for (const a of ROSTER) {
+    await prisma.profile.upsert({
+      where: { id: a.id },
+      update: { role: "agent", walletBalancePaise: 0, dutyStatus: a.duty, safetyTrainedAt: day(45) },
+      create: {
+        id: a.id,
+        email: a.email,
+        fullName: a.fullName,
+        vendorType: "individual",
+        role: "agent",
+        phone: a.phone,
+        agentZone: a.zone,
+        agentVehicle: a.vehicle,
+        safetyTrainedAt: day(45),
+        agentRating: a.rating,
+        dutyStatus: a.duty,
+      },
+    })
+  }
 
   await prisma.profile.upsert({
     where: { id: adminId },
@@ -987,6 +1127,13 @@ async function seed() {
     },
   })
 
+  // FV11 — one address per vendor site, so distance means something.
+  const siteIds = {} as Record<SiteKey, string>
+  for (const [key, site] of Object.entries(SITES) as Array<[SiteKey, (typeof SITES)[SiteKey]]>) {
+    const row = await prisma.address.create({ data: { profileId: vendorId, ...site } })
+    siteIds[key] = row.id
+  }
+
   for (const spec of PICKUPS) {
     const weight = totalWeight(spec.items)
     const quote = spec.items.reduce((sum, i) => sum + linePrice(i), 0)
@@ -1036,7 +1183,7 @@ async function seed() {
         publicToken: demoPublicToken(spec.id),
         agentId: hasAgent ? agentId : null,
         category: spec.category,
-        addressId: warehouse.id,
+        addressId: spec.site ? siteIds[spec.site] : warehouse.id,
         location: spec.location,
         notes: spec.notes,
         status: spec.status,
@@ -1097,7 +1244,8 @@ async function seed() {
                   // The verdict for this item. Every seeded load is a recycle
                   // — the offers below already say so — so this agrees with
                   // Offer.pathway rather than inventing a second answer.
-                  pathway: "recycle" as const,
+                  // FV13 — a second-life line says so; everything else is recycle.
+                  pathway: item.pathway ?? ("recycle" as const),
                   // 🔴 LI-ION ONLY (D1). A flat-rate item never runs the engine
                   // and therefore has no engine run id. Every admin table that
                   // joins on `trace_id` has to survive that — half the seeded
@@ -1409,10 +1557,12 @@ async function seed() {
         data: {
           pickupId: spec.id,
           vendorId,
-          pathway: "recycle",
+          // FV13 — an all-second-life load is offered as refurbish.
+          pathway: spec.items.every((i) => i.pathway === "refurbish") ? "refurbish" : "recycle",
           estimatedPrice: quote,
-          rationale:
-            "Material recovery is the best route for this load — chemistry and condition both support full recycling.",
+          rationale: spec.items.every((i) => i.pathway === "refurbish")
+            ? "Healthy packs retired on range, not failure — fit for second-life stationary storage."
+            : "Material recovery is the best route for this load — chemistry and condition both support full recycling.",
           materialBreakdown: [
             { material: "Nickel", weight_kg: Math.round(weight * 0.18) },
             { material: "Cobalt", weight_kg: Math.round(weight * 0.07) },
@@ -1464,10 +1614,14 @@ async function seed() {
   const manifestCount = await seedManifests(facility.id, recyclerIds)
   const exceptionCount = await seedExceptions(adminId)
   await seedAuditTrail(adminId, ENGINE_CONFIG_VERSION)
+  const logistics = await seedLogistics({ adminId, agentId })
 
   console.log(`Seeded ${PICKUPS.length} pickups (one per lifecycle stage) for ${CUSTOMER_EMAIL}.`)
   console.log(`Seeded ${RECYCLERS.length} recyclers, ${manifestCount} manifests, ${exceptionCount} item exceptions.`)
-  console.log(`Agent login: ${AGENT_EMAIL} / ${DEMO_PASSWORD}`)
+  console.log(
+    `Seeded ${logistics.boxes} transport boxes, ${logistics.tags} tags (${logistics.bound} bound, ${logistics.tags - logistics.bound} unused), ${logistics.checks} hub check-ins, run ${logistics.runNo}.`,
+  )
+  console.log(`Agent login: ${AGENT_EMAIL} / ${DEMO_PASSWORD} (also ${AGENT2_EMAIL}, ${AGENT3_EMAIL} — off duty)`)
   console.log(`Admin login: ${ADMIN_EMAIL} / ${DEMO_PASSWORD}`)
 }
 
@@ -1554,6 +1708,10 @@ async function seedManifests(
     if (!stage) continue
 
     spec.items.forEach((item, idx) => {
+      // 🔴 FV13 · FD17 — second-life stock never goes on a RECYCLER manifest.
+      // Fixture 10 is left off every manifest on purpose: it is what
+      // /manifests/new offers to a refurbisher.
+      if (item.pathway === "refurbish" || item.pathway === "reuse") return
       const recycler = RECYCLER_FOR_CHEMISTRY[item.chemistry]
       // No recycler accepts this chemistry — the AD7 gate having something real
       // to reject. Nothing seeded hits this today.
@@ -1781,6 +1939,179 @@ async function seedAuditTrail(adminId: string, configVersion: string) {
       },
     })
   }
+}
+
+
+// ─── Physical logistics (feedback_logistics · FV10–FV12) ─────────────────────
+//
+// Boxes, a sheet of tags, the tags already bound to every collected line, the
+// hub's check-in of the seeded custody batch, and one collection run under way.
+// Each piece is here so a screen has something real to show AND so a rule has
+// something real to reject:
+//
+//   * 48 tags, 13 bound — the other 35 are the sheet an agent carries, and the
+//     codes a demo scans onto PKP-2026-000104 when it is collected.
+//   * PKP-2026-000105's second line left WITHOUT a tag, with a reason (FD13) —
+//     the hub tags it on receipt, which is the "Tag now" path on /custody.
+//   * Every line in CB-2026-000301 checked in as received (FD15) — those
+//     pickups are past `tested`, and the gate says nothing reaches `tested`
+//     unchecked. A seed that contradicted that would be the first thing a
+//     reviewer noticed.
+//   * RUN-…-5EED: agent@test, today, box BX-A001W loaded, stops
+//     PKP-2026-000105 (collected into that box) and PKP-2026-000102 (still to
+//     visit). Handing 105 in at the hub empties the box; the run stays open
+//     because 102 is not done.
+
+/**
+ * 🔴 RESTATED from packages/core/src/tags.ts (`checkChar` / `makeCode`) — this
+ * package must not import core. `tags.test.ts` pins the exact codes below
+ * (TG-DM0001V, BX-A001W, …), so if either copy drifts, core's tests fail.
+ */
+const CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+function makeCode(kind: "tag" | "container", body: string): string {
+  let sum = kind === "tag" ? 7 : 11
+  for (let i = 0; i < body.length; i += 1) sum += CODE_ALPHABET.indexOf(body[i]) * (2 * i + 1)
+  return `${kind === "tag" ? "TG" : "BX"}-${body}${CODE_ALPHABET[sum % 32]}`
+}
+
+const SEED_TAG_COUNT = 48
+const SEED_BOXES = [
+  { body: "A001", label: "Blue crate 60 L #1", capacityKg: 60 },
+  { body: "A002", label: "Blue crate 60 L #2", capacityKg: 60 },
+  { body: "A003", label: "Blue crate 60 L #3", capacityKg: 60 },
+  { body: "A004", label: "Steel drum 200 L", capacityKg: 200 },
+]
+
+/** Pinned for scripts/smoke.mjs (`/runs/<id>`, `/run/<id>`). The first four hex
+ *  of the id are the run number's suffix, hence the readable "5eed". */
+const SEED_RUN_ID = "5eed0501-0000-4000-8000-000000000501"
+
+/** The line of PKP-2026-000105 that left untagged (FD13). */
+const UNTAGGED_FIXTURE = { pickupId: "PKP-2026-000105", index: 1, reason: "Casing swollen — label would not stick, bagged separately." }
+
+async function seedLogistics({ adminId, agentId }: { adminId: string; agentId: string }) {
+  // ── Boxes ──────────────────────────────────────────────────────────────────
+  const boxes = []
+  for (const b of SEED_BOXES) {
+    boxes.push(
+      await prisma.transportContainer.create({
+        data: { code: makeCode("container", b.body), label: b.label, capacityKg: b.capacityKg, createdAt: day(20) },
+      }),
+    )
+  }
+  const runBox = boxes[0]
+
+  // ── One sheet of tags, as the office would print it ────────────────────────
+  const issuedAt = day(10)
+  const issueBatch = `ISS-${issuedAt.getFullYear()}${String(issuedAt.getMonth() + 1).padStart(2, "0")}${String(issuedAt.getDate()).padStart(2, "0")}-SEED`
+  const codes = Array.from({ length: SEED_TAG_COUNT }, (_, i) => makeCode("tag", `DM${String(i + 1).padStart(4, "0")}`))
+  await prisma.itemTag.createMany({
+    data: codes.map((code) => ({ code, issueBatch, issuedBy: adminId, createdAt: issuedAt })),
+  })
+
+  // ── Today's run: agent@test, box A001, stops 105 (collected) and 102 ──────
+  const today = new Date()
+  const runDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
+  const runNo = `RUN-${runDate.toISOString().slice(0, 10).replace(/-/g, "")}-${SEED_RUN_ID.replace(/-/g, "").slice(0, 4).toUpperCase()}`
+  await prisma.collectionRun.create({
+    data: {
+      id: SEED_RUN_ID,
+      runNo,
+      agentId,
+      runDate,
+      vehicle: "Tata Ace · DL 1LR 4471",
+      status: "in_progress",
+      notes: "Okhla side first. Gate B at Okhla Phase II — call on arrival.",
+      createdBy: adminId,
+      startedAt: day(0.25),
+      createdAt: day(0.5),
+    },
+  })
+  await prisma.runContainer.create({
+    data: { runId: SEED_RUN_ID, containerId: runBox.id, loadedBy: agentId, loadedAt: day(0.25) },
+  })
+  await prisma.pickup.update({ where: { id: "PKP-2026-000105" }, data: { collectionRunId: SEED_RUN_ID, runSequence: 1 } })
+  await prisma.pickup.update({ where: { id: "PKP-2026-000102" }, data: { collectionRunId: SEED_RUN_ID, runSequence: 2 } })
+
+  // ── Bind tags to every line that has been collected ────────────────────────
+  const collectedIdx = LIFECYCLE.indexOf("collected")
+  let next = 0
+  let bound = 0
+  for (const spec of PICKUPS) {
+    const reached = spec.status === "cancelled" ? -1 : LIFECYCLE.indexOf(spec.status as (typeof LIFECYCLE)[number])
+    if (spec.reactivatedFrom || reached < collectedIdx) continue
+    for (const [idx] of spec.items.entries()) {
+      const itemId = demoItemId(spec.id, idx)
+      if (spec.id === UNTAGGED_FIXTURE.pickupId && idx === UNTAGGED_FIXTURE.index) {
+        await prisma.batteryItem.update({ where: { id: itemId }, data: { untaggedReason: UNTAGGED_FIXTURE.reason } })
+        continue
+      }
+      await prisma.itemTag.update({
+        where: { code: codes[next] },
+        data: {
+          batteryItemId: itemId,
+          // Only the run's pickup went into a tracked box; the older loads
+          // predate runs and travelled loose.
+          containerId: spec.id === "PKP-2026-000105" ? runBox.id : null,
+          boundBy: agentId,
+          boundAt: day(Math.max(spec.daysAgo - collectedIdx, 0)),
+        },
+      })
+      next += 1
+      bound += 1
+    }
+  }
+
+  // ── The hub's check-in of CB-2026-000301 — every line received ─────────────
+  const inBatch = await prisma.batteryItem.findMany({
+    where: { pickup: { custodyBatchId: CUSTODY_BATCH_ID } },
+    select: { id: true, tag: { select: { code: true } } },
+  })
+  const batch = await prisma.custodyBatch.findUniqueOrThrow({ where: { id: CUSTODY_BATCH_ID }, select: { handedOffAt: true } })
+  await prisma.custodyItemCheck.createMany({
+    data: inBatch.map((item, i) => ({
+      custodyBatchId: CUSTODY_BATCH_ID,
+      batteryItemId: item.id,
+      outcome: "received" as const,
+      method: "scan" as const,
+      tagCode: item.tag?.code ?? null,
+      checkedBy: adminId,
+      checkedAt: new Date(batch.handedOffAt.getTime() + (20 + i) * 60_000),
+    })),
+  })
+
+  // ── The audit rows these actions would have written ────────────────────────
+  // 🔴 Literals from ADMIN_AUDIT_ACTIONS (packages/core/src/audit.ts), restated.
+  await prisma.adminAudit.createMany({
+    data: [
+      ...boxes.map((b) => ({
+        actorId: adminId,
+        action: "container.register",
+        subjectType: "transport_container",
+        subjectId: b.id,
+        after: { code: b.code, label: b.label },
+        createdAt: day(20),
+      })),
+      {
+        actorId: adminId,
+        action: "tag.issue",
+        subjectType: "item_tag",
+        subjectId: issueBatch,
+        after: { issueBatch, count: SEED_TAG_COUNT },
+        createdAt: issuedAt,
+      },
+      {
+        actorId: adminId,
+        action: "run.create",
+        subjectType: "collection_run",
+        subjectId: SEED_RUN_ID,
+        after: { runNo, stops: ["PKP-2026-000105", "PKP-2026-000102"], assigned: [] },
+        createdAt: day(0.5),
+      },
+    ],
+  })
+
+  return { boxes: boxes.length, tags: SEED_TAG_COUNT, bound, checks: inBatch.length, runNo }
 }
 
 async function main() {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   destinationOf,
+  isShippableTo,
+  partnerKindFor,
   isPathwayValue,
   isShippableToRecycler,
   splitByDestination,
@@ -86,4 +88,35 @@ describe("isPathwayValue", () => {
     expect(isPathwayValue("second_life")).toBe(false);
     expect(isPathwayValue(null)).toBe(false);
   });
+});
+
+
+describe("isShippableTo (FV13 · FD17)", () => {
+    it("a recycler takes recycling and unrouted items, never second life", () => {
+        expect(isShippableTo("recycler", "recycle")).toBe(true);
+        expect(isShippableTo("recycler", "dispose")).toBe(true);
+        expect(isShippableTo("recycler", null)).toBe(true);
+        expect(isShippableTo("recycler", "reuse")).toBe(false);
+        expect(isShippableTo("recycler", "refurbish")).toBe(false);
+    });
+
+    it("🔴 a refurbisher takes ONLY second life — an unrouted line is not quietly refurbished", () => {
+        expect(isShippableTo("refurbisher", "reuse")).toBe(true);
+        expect(isShippableTo("refurbisher", "refurbish")).toBe(true);
+        expect(isShippableTo("refurbisher", "recycle")).toBe(false);
+        expect(isShippableTo("refurbisher", null)).toBe(false);
+    });
+
+    it("every item has exactly one kind of partner that can take it", () => {
+        for (const p of ["reuse", "refurbish", "recycle", "dispose", null]) {
+            const takers = (["recycler", "refurbisher"] as const).filter((k) => isShippableTo(k, p));
+            expect(takers, String(p)).toHaveLength(1);
+        }
+    });
+
+    it("maps a destination to the partner kind that receives it", () => {
+        expect(partnerKindFor("second_life")).toBe("refurbisher");
+        expect(partnerKindFor("recycling")).toBe("recycler");
+        expect(partnerKindFor(null)).toBe("recycler");
+    });
 });

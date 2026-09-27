@@ -91,3 +91,42 @@ export function formatAge(since: Date, now: Date = new Date()): string {
   const days = Math.floor(hours / 24)
   return `${days}d ${hours % 24}h`
 }
+
+// ─── Date KEYS (feedback_logistics, FV11/FV14) ───────────────────────────────
+// Collection runs, same-day grouping and dispatch priority all compare CALENDAR
+// DAYS, not instants. A key is "YYYY-MM-DD" in IST — sortable as a string and
+// immune to the server clock being UTC.
+
+/** A Date → its IST calendar day, "YYYY-MM-DD". */
+export function istDateKey(date: Date): string {
+  return toIstLocalValue(date).slice(0, 10)
+}
+
+/**
+ * A `@db.Date` column value → its key. Postgres DATE comes back from Prisma as
+ * UTC midnight, so the UTC parts ARE the calendar date — converting it through
+ * IST would be harmless (+5:30 stays on the same day) but reading UTC says what
+ * is actually meant.
+ */
+export function dbDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+/** "YYYY-MM-DD" → the Date to WRITE into a `@db.Date` column (UTC midnight). */
+export function dateKeyToDbDate(key: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return null
+  const d = new Date(`${key}T00:00:00Z`)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** "YYYY-MM-DD" + "HH:mm" → that instant, read as IST. */
+export function istInstant(dateKey: string, time: string): Date | null {
+  return parseIstLocal(`${dateKey}T${time}`)
+}
+
+/** "27 Sept" — a date key for display, without a year. */
+export function formatDateKey(key: string): string {
+  const d = dateKeyToDbDate(key)
+  if (!d) return key
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(d)
+}

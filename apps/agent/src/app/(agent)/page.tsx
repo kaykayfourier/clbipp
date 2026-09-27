@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
+import { RUN_STATUS_LABELS } from '@clbipp/core/run-planning'
 import { AppShell, Card, CardContent, InstallPrompt, ListRow, PagePadding, SectionLabel } from '@clbipp/ui'
 
 import { isActiveJob, isTodaysWork, jobHref, jobNextStep, jobSubtitle } from '@/lib/job-nav'
@@ -105,7 +106,7 @@ export default async function Page() {
   // but ONLY so the browser's Realtime subscription can see rows — Prisma
   // connects as the table owner and never consults it, so this where-clause is
   // still the only thing standing between an agent and someone else's jobs.
-  const [profile, jobs, collectedToday, assignedToday] = await Promise.all([
+  const [profile, jobs, collectedToday, assignedToday, runs] = await Promise.all([
     prisma.profile.findUnique({
       where: { id: user.id },
       select: { fullName: true },
@@ -146,6 +147,21 @@ export default async function Page() {
       where: {
         agentId: user.id,
         scheduledSlot: { gte: startOfToday(), lte: endOfToday() },
+      },
+    }),
+
+    // FV11 · FD16 — this agent's open collection runs. Built by dispatch,
+    // started here by scanning a box. Scoped by agentId in code (D10).
+    prisma.collectionRun.findMany({
+      where: { agentId: user.id, status: { in: ['planned', 'in_progress'] } },
+      orderBy: { runDate: 'asc' },
+      select: {
+        id: true,
+        runNo: true,
+        runDate: true,
+        status: true,
+        _count: { select: { pickups: true } },
+        containers: { where: { unloadedAt: null }, select: { container: { select: { code: true } } } },
       },
     }),
   ])
@@ -218,6 +234,34 @@ export default async function Page() {
             synced when connection returned") goes here. Left out on purpose —
             there is no offline queue to report on until the PWA work lands, and
             a hard-coded banner would be a lie on the screen. */}
+
+        {/* FV11 — a run groups today's nearby stops into one van and one or
+            more QR-tracked boxes. The card is the way in; the run screen is
+            where the box is scanned. */}
+        {runs.map((run) => (
+          <Link key={run.id} href={`/run/${run.id}`}>
+            <Card variant="elevated">
+              <CardContent className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-widest text-text-secondary">
+                    {`Collection run · ${RUN_STATUS_LABELS[run.status]}`}
+                  </div>
+                  <div className="font-mono text-sm font-bold text-text-primary">{run.runNo}</div>
+                  <div className="text-xs text-text-secondary">
+                    {`${run.runDate.toLocaleDateString('en-IN', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })} · ${run._count.pickups} stop${run._count.pickups === 1 ? '' : 's'} · ${
+                      run.containers.length > 0
+                        ? `box ${run.containers.map((c) => c.container.code).join(', ')}`
+                        : 'scan a box to start'
+                    }`}
+                  </div>
+                </div>
+                <span className="shrink-0 text-lg text-text-secondary" aria-hidden="true">
+                  ›
+                </span>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
 
         <div className="flex flex-col gap-3">
           <SectionLabel>Your jobs</SectionLabel>

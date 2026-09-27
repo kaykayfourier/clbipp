@@ -74,6 +74,14 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   'lifecycle.override': 'Lifecycle overridden',
   'supplier.margin': 'Supplier margin changed',
   'item.pathway': 'Battery pathway overridden',
+  // feedback_logistics (FV10–FV15)
+  'tag.issue': 'Battery tags issued',
+  'container.register': 'Transport box registered',
+  'container.status': 'Transport box retired / reinstated',
+  'run.create': 'Collection run built',
+  'run.cancel': 'Collection run cancelled',
+  'custody.reconcile': 'Hub check-in recorded by hand',
+  'agent.duty': 'Agent duty changed',
 }
 
 const SUBJECT_LABELS: Record<AdminAuditSubject, string> = {
@@ -85,6 +93,9 @@ const SUBJECT_LABELS: Record<AdminAuditSubject, string> = {
   dispatch_manifest: 'Manifest',
   custody_batch: 'Custody batch',
   profile: 'Profile',
+  item_tag: 'Tag sheet',
+  transport_container: 'Transport box',
+  collection_run: 'Collection run',
 }
 
 /**
@@ -92,24 +103,32 @@ const SUBJECT_LABELS: Record<AdminAuditSubject, string> = {
  * own is rendered as plain text rather than as a dead link — a link that goes
  * nowhere is worse than none on a page whose job is to be trustworthy.
  */
-function subjectHref(subjectType: string, subjectId: string): string | null {
+function subjectHref(subjectType: string, subjectId: string, action: string): string | null {
   switch (subjectType) {
     case 'pickup':
       return `/pickups/${encodeURIComponent(subjectId)}`
     case 'dispatch_manifest':
       return `/manifests/${encodeURIComponent(subjectId)}`
+    case 'collection_run':
+      return `/runs/${encodeURIComponent(subjectId)}`
+    case 'custody_batch':
+      return `/custody/${encodeURIComponent(subjectId)}`
     case 'item_exception':
       // No per-exception route; the "all" view is where a resolved one is
       // visible at all (the default view filters to open).
       return '/exceptions?state=all'
-    case 'custody_batch':
-      return '/lifecycle'
     case 'engine_config':
       return '/config'
     case 'market_prices':
       return '/market'
     case 'profile':
-      return '/suppliers'
+      // FV15: an agent's duty change is a profile row too, but it belongs to
+      // the agent roster, not the supplier list.
+      return action === 'agent.duty' ? '/agents' : '/suppliers'
+    case 'transport_container':
+      return '/containers'
+    case 'item_tag':
+      return '/tags'
     default:
       return null
   }
@@ -282,7 +301,7 @@ export default async function AuditPage({
             </thead>
             <tbody>
               {rows.map((row) => {
-                const href = subjectHref(row.subjectType, row.subjectId)
+                const href = subjectHref(row.subjectType, row.subjectId, row.action)
                 // 🔴 Narrow, don't just test — a boolean flag next to
                 // `row.action` leaves it a bare `string`, which cannot index
                 // the label map or reach isReasonRequired(). This is the one

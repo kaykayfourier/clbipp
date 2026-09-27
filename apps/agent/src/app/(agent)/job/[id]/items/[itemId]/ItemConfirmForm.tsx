@@ -68,6 +68,7 @@ export function ItemConfirmForm({
   defaultChemistry,
   defaultCondition,
   existingPhotoPaths,
+  existingWeightPhotoPath,
 }: {
   pickupId: string
   itemId: string
@@ -79,6 +80,8 @@ export function ItemConfirmForm({
   defaultCondition: string
   /** Paths already stored on the row, re-posted so a re-submit keeps them. */
   existingPhotoPaths: readonly string[]
+  /** FV10 — the stored scale-reading photo, kept across a re-submit. */
+  existingWeightPhotoPath: string | null
 }) {
   const [chemistry, setChemistry] = useState<ChemistryValue | null>(
     (CHEMISTRY_OPTIONS.find((o) => o.value === defaultChemistry)?.value ?? null) as ChemistryValue | null,
@@ -100,6 +103,42 @@ export function ItemConfirmForm({
   // value to the action, so this is display state, not the source of truth.
   const [weightKg, setWeightKg] = useState('')
   const [weightMethod, setWeightMethod] = useState<WeightMethodValue | null>(null)
+
+  // FV10 — feedback §3.1: "Where stronger evidence is required, allow a
+  // photograph showing the battery and the scale reading." ONE photo, optional,
+  // offered for a scale or label reading (an estimate has no reading to show).
+  // Prompted harder when the weight diverges from the declaration — that is
+  // exactly the line someone will later ask to see proof for.
+  const [scalePhoto, setScalePhoto] = useState<Photo | null>(
+    existingWeightPhotoPath ? { path: existingWeightPhotoPath, previewUrl: '' } : null,
+  )
+  const [scaleUploading, setScaleUploading] = useState(false)
+  const [scaleError, setScaleError] = useState<string | null>(null)
+
+  async function handleScalePhoto(fileList: FileList | null) {
+    const file = fileList?.[0]
+    if (!file) return
+    setScaleError(null)
+    setScaleUploading(true)
+    const result = await uploadFile({
+      bucket: 'pickup-photos',
+      userId,
+      file,
+      segments: ['jobs', pickupId, itemId, 'scale'],
+    })
+    setScaleUploading(false)
+    if (result.error !== null) {
+      setScaleError(result.error)
+      return
+    }
+    // Replacing a NEW (unsaved) photo removes the orphan; a stored one stays
+    // until the form is saved, same rule as the line photos above.
+    if (scalePhoto?.previewUrl) {
+      URL.revokeObjectURL(scalePhoto.previewUrl)
+      void removeFile('pickup-photos', scalePhoto.path)
+    }
+    setScalePhoto({ path: result.path, previewUrl: URL.createObjectURL(file) })
+  }
 
   const measured = weightKg.trim() === '' ? null : Number(weightKg)
   const divergence = weightDivergence(
@@ -191,6 +230,9 @@ export function ItemConfirmForm({
       {[...keptPaths, ...added.map((p) => p.path)].map((path) => (
         <input key={path} type="hidden" name="photoPaths" value={path} />
       ))}
+      {scalePhoto && weightMethod !== 'estimated' ? (
+        <input type="hidden" name="weightPhotoPath" value={scalePhoto.path} />
+      ) : null}
 
       {/* ── Chemistry ─────────────────────────────────────────────────────
           NOTHING IS PRESELECTED on a first pass. Chemistry is the one thing the
@@ -326,6 +368,56 @@ export function ItemConfirmForm({
         {weightMethod === null && (
           <p className="text-[11px] text-error-text">Pick how you got the weight.</p>
         )}
+
+        {/* FV10 — the reading itself, when there is one to photograph. */}
+        {weightMethod !== null && weightMethod !== 'estimated' ? (
+          <Card variant="elevated">
+            <CardContent className="flex flex-col gap-2">
+              <p className="text-sm font-semibold text-text-primary">
+                {weightMethod === 'digital_scale' ? 'Photo of the scale reading — optional' : 'Photo of the weight on the label — optional'}
+              </p>
+              <p className={`text-[11px] leading-relaxed ${divergence?.material ? 'text-warning-text' : 'text-text-secondary'}`}>
+                {divergence?.material
+                  ? 'This weight differs from what the vendor declared. A photo with the reading legible is what settles it if anyone asks.'
+                  : 'The battery with the reading legible in the same frame. Makes the number checkable by someone who was not here.'}
+              </p>
+              {scaleError ? <p className="text-[11px] font-semibold text-error">{scaleError}</p> : null}
+              {scalePhoto ? (
+                <div className="flex items-center gap-3">
+                  {scalePhoto.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={scalePhoto.previewUrl} alt="Scale reading" className="h-16 w-16 rounded-[10px] object-cover" />
+                  ) : (
+                    <span className="flex h-16 w-16 items-center justify-center rounded-[10px] bg-background text-[10px] text-text-secondary">
+                      Saved
+                    </span>
+                  )}
+                  <label htmlFor="scalePhoto" className="cursor-pointer text-xs font-semibold text-text-primary underline underline-offset-2">
+                    Retake
+                  </label>
+                </div>
+              ) : (
+                <label
+                  htmlFor="scalePhoto"
+                  className="flex h-11 cursor-pointer items-center justify-center rounded-[10px] border-2 border-dashed border-border text-sm font-semibold text-text-primary"
+                >
+                  {scaleUploading ? 'Uploading…' : 'Photograph the reading'}
+                </label>
+              )}
+              <input
+                type="file"
+                id="scalePhoto"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  void handleScalePhoto(e.target.files)
+                  e.target.value = ''
+                }}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       {/* ── Condition ─────────────────────────────────────────────────────

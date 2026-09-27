@@ -11,6 +11,12 @@
 // dead button is worse than an absent one (the same call Batch 8's task list
 // makes about "Cash out" and "Notifications").
 //
+// FV10 (2026-09-27): QR scanning now EXISTS — but for battery TAGS at
+// collection and transport BOXES on a run (components/qr-scanner.tsx), not for
+// intake. Intake stays manual: there is nothing on a battery to scan until we
+// put a tag on it, and that happens after the vendor accepts. This page now
+// says so instead of implying scanning is missing altogether.
+//
 // 🔴 THE SAFETY GATE IS ALREADY WIRED, so whoever builds this screen inherits it
 // rather than having to remember it. Scanning a battery is handling a battery.
 // Keep the two lines below; see apps/agent/src/lib/safety-gate.ts.
@@ -43,8 +49,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     <AppShell title="Scan" showBack backHref={`/job/${id}/items`} hideNav>
       <PagePadding className="flex flex-col gap-4">
         <Banner variant="info">
-          QR scanning is not in this build. Enter each line by hand from the item
-          list — that is the primary path, not a fallback.
+          Intake is entered by hand from the item list — that is the primary path,
+          not a fallback. QR scanning is used later: you scan a tag onto each line
+          when you collect, and scan a box to start a collection run.
         </Banner>
         <Link href={`/job/${id}/items`}>
           <Button variant="primary" fullWidth>

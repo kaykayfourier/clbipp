@@ -1145,3 +1145,25 @@ Built from `docs/field agent selection.txt`, the company's expansion of feedback
 §2.2. ⚠ Two things it deliberately does NOT do, both because the data does not
 exist: no shift/working-hours model, and no continuous location tracking. Both
 are on the company's own "later enhancement" list.
+
+## 2026-09-27 — FV9–FV16 (the rest of the feedback document) built by Aamir + Claude, all lanes
+
+The company moved to an iterative approach — "build something, we react" — so
+the remaining feedback (§4 tags, QR boxes and same-day grouping; §5's
+second-life destination; §3.1's scale photo; §2.1's optional filters) was built
+in one pass, plus the duty flag from §8 of the plan. Lanes crossed freely under
+do-it-and-note-it; recorded here so the record is honest.
+
+| Batch | Nominal owner | Actually done by | Notes |
+|---|---|---|---|
+| FV9 — `feedback_logistics` migration + core logic | B (schema, `packages/core`) | Aamir | One additive migration, applied with `db execute`, generated schema-to-schema (no shadow DB). |
+| FV10 — tags + scale photo | A (writes) + B (PDF) + C (screens) | Aamir | New `packages/pdf` label templates; `qrcode` added to `@clbipp/pdf`, `jsqr` to the agent app. |
+| FV11 — boxes, runs, same-day grouping | A (dispatch writes) + C | Aamir | Reuses FV8's `AgentSelector` unchanged. |
+| FV12 — hub check-in; custody screen + PDF | A (lifecycle write) + B (7b PDF) | Aamir | 🔴 Also finished Batch 7b's `/dropoff/[batchId]`, which was still the Batch 0b stub, and fixed its PDF route (UUID printed as the facility name, a bucket that never existed, double upload). |
+| FV13 — refurbisher partners | A (manifests) + B (certificate) | Aamir | Closes a real defect: a pickup with a second-life line could never advance past `tested`. |
+| FV14 — dispatch type / size / priority | A + C | Aamir | Composed C's `DataTable` + `FilterChips`; kit untouched except one new `blocks.tsx` of shared panels for the six new screens. |
+| FV15 — duty status | A | Aamir | §8 Step 1 exactly as written there. |
+| FV16 — seed, verify-seed, demo-stage, smoke | B + A | Aamir | Seed gained two agents (`agent2@test`, `agent3@test`), per-site vendor addresses, two fixtures (9, 10), boxes, a tag sheet, a run under way. |
+
+**Decisions FD12–FD19 are ours and provisional**, same standing as FD7–FD11 —
+§9.2 of `docs/PLAN_FEEDBACK_V2.md`. FD12 reverses FD11 (no tagging).

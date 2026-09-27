@@ -7,6 +7,7 @@ import { prisma } from '@clbipp/database'
 import type { AdminAuditAction, AdminAuditSubject } from '@clbipp/core/audit'
 import { isReasonRequired } from '@clbipp/core/audit'
 import { buildCertificatePayload } from '@clbipp/core/certificate'
+import { pickupCheckState } from '@clbipp/core/custody-check'
 import { isLifecycleStage } from '@clbipp/ui'
 
 import { requireAdmin } from '@/lib/admin-identity'
@@ -48,10 +49,18 @@ const PICKUP_SUBJECT: AdminAuditSubject = 'pickup'
 const TX_TIMEOUT_MS = 20_000
 const TX_MAX_WAIT_MS = 10_000
 
-export type AdvanceResult = { error: string | null; advanced: number }
+export type AdvanceResult = { error: string | null; advanced: number; held: number }
 
 /**
- * Advance every pickup in one hub drop-off from `collected` to `tested`.
+ * Advance every pickup in one hub drop-off from `collected` to `tested` —
+ * 🔴 but only those the hub has FULLY CHECKED IN (FV12 · FD15).
+ *
+ * Feedback §6 step 10: the facility scans and reconciles what it received. A
+ * pickup whose every battery line has a `received` check row advances; one with
+ * an unchecked or missing line is HELD and reported, never advanced. AD5's unit
+ * is still the batch — one click for the whole load — but AD6's "every item, or
+ * not at all" now applies per pickup inside it. Before FV12 this advanced every
+ * collected pickup in the batch on the agent's word alone.
  *
  * Idempotent by construction, exactly the way `assignPickup` is: `status:
  * 'collected'` inside the guarded `updateMany` WHERE is the race guard, and the
@@ -61,11 +70,11 @@ export type AdvanceResult = { error: string | null; advanced: number }
  */
 export async function advanceCustodyBatch(batchId: string): Promise<AdvanceResult> {
   const gate = await requireAdmin()
-  if (!gate.ok) return { error: gate.error, advanced: 0 }
+  if (!gate.ok) return { error: gate.error, advanced: 0, held: 0 }
   const admin = gate.admin
 
   const id = batchId.trim()
-  if (!id) return { error: 'No custody batch selected.', advanced: 0 }
+  if (!id) return { error: 'No custody batch selected.', advanced: 0, held: 0 }
 
   const batch = await prisma.custodyBatch.findUnique({
     where: { id },
@@ -75,7 +84,7 @@ export async function advanceCustodyBatch(batchId: string): Promise<AdvanceResul
       facility: { select: { name: true } },
     },
   })
-  if (!batch) return { error: 'That custody batch does not exist.', advanced: 0 }
+  if (!batch) return { error: 'That custody batch does not exist.', advanced: 0, held: 0 }
 
   const result = await prisma.$transaction(
     async (tx) => {
@@ -86,11 +95,23 @@ export async function advanceCustodyBatch(batchId: string): Promise<AdvanceResul
       // pickup this advances".
       const pending = await tx.pickup.findMany({
         where: { custodyBatchId: id, status: 'collected' },
-        select: { id: true },
+        select: { id: true, items: { select: { id: true, custodyCheck: { select: { outcome: true } } } } },
       })
-      if (pending.length === 0) return { advanced: 0, ids: [] as string[] }
+      if (pending.length === 0) return { advanced: 0, held: 0, ids: [] as string[] }
 
-      const ids = pending.map((p) => p.id)
+      // 🔴 FV12 · FD15 — the hub's check-in, read inside the transaction so the
+      // gate and the write see the same rows.
+      const ready = pending.filter(
+        (p) =>
+          pickupCheckState(
+            p.id,
+            p.items.map((i) => ({ itemId: i.id, outcome: i.custodyCheck?.outcome ?? null })),
+          ).ready,
+      )
+      const held = pending.length - ready.length
+      if (ready.length === 0) return { advanced: 0, held, ids: [] as string[] }
+
+      const ids = ready.map((p) => p.id)
 
       const updated = await tx.pickup.updateMany({
         where: { id: { in: ids }, status: 'collected' },
@@ -109,7 +130,7 @@ export async function advanceCustodyBatch(batchId: string): Promise<AdvanceResul
       // cannot arise today: the unit of advance is the whole batch, so two
       // concurrent callers are always advancing the same set, never
       // overlapping subsets. Noted rather than defended against.
-      if (updated.count === 0) return { advanced: 0, ids: [] as string[] }
+      if (updated.count === 0) return { advanced: 0, held, ids: [] as string[] }
 
       // One status event PER PICKUP (the batch is the unit of ACTION, not of
       // the audit trail — each pickup's own timeline has to show it reached
@@ -122,7 +143,7 @@ export async function advanceCustodyBatch(batchId: string): Promise<AdvanceResul
           actorId: admin.id,
           // 🔴 'admin', never 'recycler' or 'hub'. See the header.
           actorRole: 'admin',
-          notes: `Tested at ${batch.facility.name} — hub batch ${batch.batchNo}.`,
+          notes: `Checked in line by line and tested at ${batch.facility.name} — hub batch ${batch.batchNo}. Recorded by an admin; there is no hub-staff app.`,
         })),
       })
 
@@ -134,26 +155,30 @@ export async function advanceCustodyBatch(batchId: string): Promise<AdvanceResul
           subjectType: AUDIT_SUBJECT,
           subjectId: id,
           before: { status: 'collected', pickupIds: ids },
-          after: { status: 'tested', pickupIds: ids },
+          after: { status: 'tested', pickupIds: ids, heldAtCheckIn: held },
           // `reason` omitted — isReasonRequired('custody.advance') is false.
           // This is the normal path. Batch 7's lifecycle.override is the one
           // that has to justify itself.
         },
       })
 
-      return { advanced: updated.count, ids }
+      return { advanced: updated.count, held, ids }
     },
     { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
   )
 
   if (result.advanced === 0) {
     return {
-      error: 'Nothing in this batch is waiting at collected — it has already been tested.',
+      error:
+        result.held > 0
+          ? `Nothing in ${batch.batchNo} is fully checked in yet — ${result.held} pickup${result.held === 1 ? ' is' : 's are'} waiting on the hub's scan. Check the load in first.`
+          : 'Nothing in this batch is waiting at collected — it has already been tested.',
       advanced: 0,
+      held: result.held,
     }
   }
 
-  return { error: null, advanced: result.advanced }
+  return { error: null, advanced: result.advanced, held: result.held }
 }
 
 /**
@@ -166,7 +191,7 @@ export async function advanceCustodyBatchAction(formData: FormData) {
   const batchId = String(formData.get('batchId') ?? '')
   if (!batchId) redirect('/lifecycle')
 
-  const { error, advanced } = await advanceCustodyBatch(batchId)
+  const { error, advanced, held } = await advanceCustodyBatch(batchId)
 
   if (error) redirect(`/lifecycle?error=${encodeURIComponent(error)}`)
 
@@ -176,8 +201,9 @@ export async function advanceCustodyBatchAction(formData: FormData) {
   revalidatePath('/manifests/new')
   revalidatePath('/pickups')
   revalidatePath('/inventory')
+  revalidatePath(`/custody/${batchId}`)
 
-  redirect(`/lifecycle?advanced=${advanced}`)
+  redirect(`/lifecycle?advanced=${advanced}${held > 0 ? `&held=${held}` : ''}`)
 }
 
 // ─── Batch 7: certify, and the manual override ───────────────────────────────
@@ -302,6 +328,8 @@ export async function certifyPickup(pickupId: string): Promise<CertifyResult> {
           totalWeightKg: payload.totalWeightKg,
           materialSummary: payload.materialSummary,
           co2AvoidedKg: payload.co2AvoidedKg,
+          // FV13 · FD17 — stated beside the materials, never inside them.
+          secondLifeKg: payload.secondLifeKg,
           // `publicToken` omitted: it is `dbgenerated("gen_random_uuid()")`, a
           // POSTGRES default, so it applies to this write. That is NOT true of
           // Prisma-side `@default(uuid())` (trap 3) — the distinction matters
@@ -339,6 +367,7 @@ export async function certifyPickup(pickupId: string): Promise<CertifyResult> {
             // from" gets an answer from the trail rather than from inference.
             materialSource: payload.materialSource,
             materialSummary: payload.materialSummary,
+            secondLifeKg: payload.secondLifeKg,
           },
         },
       })

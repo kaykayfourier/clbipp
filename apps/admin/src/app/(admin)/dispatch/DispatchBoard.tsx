@@ -3,6 +3,15 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 
+import { CATEGORY_LABELS } from '@clbipp/core/intake'
+import {
+  LOAD_SIZE_BANDS,
+  PRIORITY_LABELS,
+  PRIORITY_RANK,
+  type DispatchPriority,
+  type LoadSize,
+} from '@clbipp/core/dispatch-priority'
+
 import { DataTable, FilterChips, type DataTableColumn } from '@/components/console'
 
 // ─── The dispatch board's filters, sorting and table (FV4) ───────────────────
@@ -48,6 +57,15 @@ export type DispatchRow = {
   preferredDate: string | null
   collectionScheduledAt: string | null
   waitingLabel: string
+  /** FV14 — declared category keys, for the battery-type filter. */
+  categoryKeys: string[]
+  /** FV14 · FD18 — declared-kg band and derived priority, with its reasons. */
+  sizeBand: LoadSize
+  priority: DispatchPriority
+  priorityReasons: string[]
+  /** FV11 — set when this job is a stop on an open collection run. */
+  runId: string | null
+  runNo: string | null
 }
 
 /** The operational buckets a dispatcher actually works in. Deliberately NOT the
@@ -75,6 +93,11 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
   const [city, setCity] = useState<string>('')
   const [from, setFrom] = useState<string>('')
   const [to, setTo] = useState<string>('')
+  // FV14 — feedback §2.1's "optionally filter by battery quantity/type and
+  // operational priority".
+  const [category, setCategory] = useState<string>('')
+  const [size, setSize] = useState<string>('')
+  const [priority, setPriority] = useState<string>('')
 
   const agents = useMemo(() => {
     const seen = new Map<string, string>()
@@ -84,6 +107,11 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
 
   const cities = useMemo(
     () => [...new Set(rows.map((r) => r.city).filter((c): c is string => Boolean(c)))].sort(),
+    [rows],
+  )
+
+  const categoryOptions = useMemo(
+    () => [...new Set(rows.flatMap((r) => r.categoryKeys))].sort(),
     [rows],
   )
 
@@ -98,6 +126,9 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
       if (bucket && bucketOf(r) !== bucket) return false
       if (agent && r.agentId !== agent) return false
       if (city && r.city !== city) return false
+      if (category && !r.categoryKeys.includes(category)) return false
+      if (size && r.sizeBand !== size) return false
+      if (priority && r.priority !== priority) return false
       // The date range reads whichever date this row is actually waiting on:
       // a booked collection is filtered by its collection date, everything
       // else by the vendor's preferred date. Filtering both against one column
@@ -107,7 +138,7 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
       if (to && (!key || key > to)) return false
       return true
     })
-  }, [rows, bucket, agent, city, from, to])
+  }, [rows, bucket, agent, city, from, to, category, size, priority])
 
   const columns: readonly DataTableColumn<DispatchRow>[] = useMemo(
     () => [
@@ -123,6 +154,16 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
             >
               {r.id}
             </Link>
+            {r.runNo && r.runId ? (
+              <div className="mt-1">
+                <Link
+                  href={`/runs/${r.runId}`}
+                  className="inline-flex items-center rounded-full bg-primary-black px-2 py-0.5 font-mono text-[9.5px] font-bold tracking-[0.04em] text-primary-green"
+                >
+                  {r.runNo}
+                </Link>
+              </div>
+            ) : null}
             {r.staleAgent ? (
               <div className="mt-1">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-bg px-2 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.08em] text-warning-text">
@@ -142,6 +183,29 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
             <div className="font-medium text-text-primary">{r.vendorCompany || r.vendorName}</div>
             {r.vendorCompany ? (
               <div className="text-xs text-text-secondary">{r.vendorName}</div>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        key: 'priority',
+        header: 'Priority',
+        sortValue: (r) => PRIORITY_RANK[r.priority],
+        cell: (r) => (
+          <div title={r.priorityReasons.join(' · ') || 'Nothing pressing'}>
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.08em] ${
+                r.priority === 'urgent'
+                  ? 'bg-error-bg text-error-text'
+                  : r.priority === 'high'
+                    ? 'bg-warning-bg text-warning-text'
+                    : 'bg-background text-text-secondary'
+              }`}
+            >
+              {PRIORITY_LABELS[r.priority]}
+            </span>
+            {r.priorityReasons[0] ? (
+              <div className="mt-1 max-w-[180px] text-[11px] leading-snug text-text-secondary">{r.priorityReasons[0]}</div>
             ) : null}
           </div>
         ),
@@ -249,10 +313,34 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
           ))}
         </Select>
 
+        <Select label="Battery type" value={category} onChange={setCategory} placeholder="Any type">
+          {categoryOptions.map((c) => (
+            <option key={c} value={c}>
+              {CATEGORY_LABELS[c] ?? c}
+            </option>
+          ))}
+        </Select>
+
+        <Select label="Load size" value={size} onChange={setSize} placeholder="Any size">
+          {(Object.keys(LOAD_SIZE_BANDS) as LoadSize[]).map((k) => (
+            <option key={k} value={k}>
+              {LOAD_SIZE_BANDS[k].label}
+            </option>
+          ))}
+        </Select>
+
+        <Select label="Priority" value={priority} onChange={setPriority} placeholder="Any priority">
+          {(Object.keys(PRIORITY_LABELS) as DispatchPriority[]).map((k) => (
+            <option key={k} value={k}>
+              {PRIORITY_LABELS[k]}
+            </option>
+          ))}
+        </Select>
+
         <DateInput label="From" value={from} onChange={setFrom} />
         <DateInput label="To" value={to} onChange={setTo} />
 
-        {(agent || city || from || to) && (
+        {(agent || city || from || to || category || size || priority) && (
           <button
             type="button"
             onClick={() => {
@@ -260,6 +348,9 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
               setCity('')
               setFrom('')
               setTo('')
+              setCategory('')
+              setSize('')
+              setPriority('')
             }}
             className="h-9 rounded-lg border border-console-line px-3 text-xs font-medium text-text-secondary hover:text-text-primary"
           >

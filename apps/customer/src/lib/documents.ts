@@ -104,6 +104,8 @@ async function certificateDoc(pickupId: string, vendorId: string): Promise<Certi
     totalWeightKg: num(cert.totalWeightKg),
     materials,
     co2AvoidedKg: optionalNum(cert.co2AvoidedKg),
+    // FV13 · FD17 — second-life mass, printed beside the materials, never in them.
+    secondLifeKg: optionalNum(cert.secondLifeKg),
     certifiedAt: cert.certifiedAt,
     publicToken: cert.publicToken,
   }
@@ -120,6 +122,11 @@ async function receiptDoc(pickupId: string, vendorId: string): Promise<ReceiptDo
         select: {
           category: true,
           vendor: { select: { fullName: true, companyName: true } },
+          // FV10 — the tag each line left with, printed on the vendor's copy.
+          items: {
+            orderBy: { createdAt: 'asc' },
+            select: { category: true, quantity: true, tag: { select: { code: true } } },
+          },
         },
       },
     },
@@ -146,6 +153,10 @@ async function receiptDoc(pickupId: string, vendorId: string): Promise<ReceiptDo
     capturedLat: optionalNum(receipt.capturedLat),
     capturedLng: optionalNum(receipt.capturedLng),
     publicToken: receipt.publicToken,
+    lines: receipt.pickup.items.map((i, idx) => ({
+      description: `Line ${idx + 1} · ${CATEGORY_LABELS[i.category]} × ${i.quantity}`,
+      tagCode: i.tag?.code ?? null,
+    })),
   }
 }
 

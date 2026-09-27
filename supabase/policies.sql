@@ -381,3 +381,25 @@ using (
 alter table engine_configs enable row level security;
 alter table admin_audits enable row level security;
 alter table item_exceptions enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Physical logistics (feedback_logistics, 2026-09-27 · FV10–FV12)
+-- ---------------------------------------------------------------------------
+-- Boxes, collection runs, box loads, battery tags and hub check-ins. Same
+-- posture as the three admin tables above, for the same reason: every reader
+-- and writer is Prisma (table owner) in the admin or agent app, and grants.sql
+-- hands `anon`/`authenticated` access to every future table — so RLS on with
+-- ZERO policies is what keeps them closed to PostgREST.
+--
+-- ⚠ The migration itself runs these five lines too, so there is no window
+-- between applying it and re-running this file. Restated here so a rebuild
+-- from this file alone agrees. Idempotent.
+--
+-- ⚠ The agent app reads tags and runs through Prisma, scoped in code to
+-- `agentId === user.id` (D10) — no agent policy is needed and none is added.
+-- ---------------------------------------------------------------------------
+alter table transport_containers enable row level security;
+alter table collection_runs enable row level security;
+alter table run_containers enable row level security;
+alter table item_tags enable row level security;
+alter table custody_item_checks enable row level security;

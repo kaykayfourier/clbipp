@@ -5,7 +5,8 @@ import { ReceiptTemplate } from './templates/receipt'
 import { InvoiceTemplate } from './templates/invoice'
 import type { CertificateDoc, ReceiptDoc, InvoiceDoc } from './types'
 import { CustodyTemplate } from './templates/custody'
-import type { CustodyDoc } from './types'
+import { ContainerLabelsTemplate, TagLabelsTemplate } from './templates/labels'
+import type { ContainerLabelsDoc, CustodyDoc, TagLabelsDoc } from './types'
 
 // ─── Render entry points ─────────────────────────────────────────────────────
 // "server-only" lives HERE and not in the templates or the types, for the same
@@ -31,4 +32,13 @@ export function renderInvoicePdf(doc: InvoiceDoc): Promise<Buffer> {
 
 export function renderCustodyPdf(doc: CustodyDoc): Promise<Buffer> {
   return renderToBuffer(<CustodyTemplate doc={doc} />)
+}
+/** FV10 · FD12 — a printable sheet of pre-issued battery tags. */
+export function renderTagLabelsPdf(doc: TagLabelsDoc): Promise<Buffer> {
+  return renderToBuffer(<TagLabelsTemplate doc={doc} />)
+}
+
+/** FV11 · FD14 — permanent QR labels for transport boxes. */
+export function renderContainerLabelsPdf(doc: ContainerLabelsDoc): Promise<Buffer> {
+  return renderToBuffer(<ContainerLabelsTemplate doc={doc} />)
 }

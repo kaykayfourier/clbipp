@@ -136,6 +136,16 @@ export async function confirmItem(formData: FormData) {
     return fail('Add at least one photo of this line before saving it.')
   }
 
+  // FV10 — the optional scale-reading photo (feedback §3.1). Same ownership
+  // re-check as the line photos, for the same reason. Dropped for an
+  // `estimated` weight: there is no reading to show, and a photo stored against
+  // a guess would read as evidence for a measurement that never happened.
+  const weightPhotoRaw = String(formData.get('weightPhotoPath') ?? '').trim()
+  if (weightPhotoRaw && !photoPathsBelongTo([weightPhotoRaw], user.id)) {
+    return fail('That scale photo was not uploaded by you.')
+  }
+  const weightPhotoPath = value.weightMethod === 'estimated' ? null : weightPhotoRaw || null
+
   // Re-confirming REPLACES the photo set rather than appending to it, so the
   // stored evidence always matches what the agent can see on the screen they
   // just submitted. Appending would make a corrected condition ("actually it's
@@ -152,6 +162,7 @@ export async function confirmItem(formData: FormData) {
       confirmed_condition: value.confirmedCondition,
       // FV2 · FD3: how that weight was obtained travels with the number itself.
       weight_method: value.weightMethod,
+      weight_photo_url: weightPhotoPath,
       agent_photo_urls: photoPaths,
       recorded_by: user.id,
       recorded_at: new Date().toISOString(),

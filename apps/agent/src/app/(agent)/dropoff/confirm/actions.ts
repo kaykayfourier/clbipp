@@ -58,11 +58,13 @@ export async function confirmDropoff(formData: FormData) {
     where: { id: { in: pickupIds }, agentId: user.id, status: 'collected', custodyBatchId: null },
     select: {
       id: true,
+      collectionRunId: true,
       items: { select: { confirmedWeightKg: true, weightKg: true } },
       receipt: { select: { itemCount: true } },
     },
   })
   if (pickups.length === 0) return fail('None of the selected jobs are still eligible for drop-off.')
+  const runIds = [...new Set(pickups.map((p) => p.collectionRunId).filter((r): r is string => r !== null))]
 
   const totalWeightKg = pickups.reduce(
     (sum, p) => sum + p.items.reduce((s, i) => s + Number(i.confirmedWeightKg ?? i.weightKg ?? 0), 0),
@@ -115,6 +117,34 @@ export async function confirmDropoff(formData: FormData) {
           lng,
         })),
       })
+
+      // ── FV11 · FD14 — the boxes come off the van here ───────────────────
+      // A run is finished at the hub only when nothing is left to do on it:
+      // no collected load still held back in the van, AND no stop still to
+      // visit. A mid-run drop-off (van full, two stops to go) leaves the run
+      // open and its boxes ON it — they go straight back out in the van, and
+      // the next tag bound on the run still records the box its line went
+      // into. Scoped to this agent's own runs (D10).
+      const now = new Date()
+      for (const runId of runIds) {
+        const stillOpen = await tx.pickup.count({
+          where: {
+            collectionRunId: runId,
+            OR: [
+              { status: { in: ['scheduled', 'arrived', 'offered'] } },
+              { status: 'collected', custodyBatchId: null },
+            ],
+          },
+        })
+        if (stillOpen > 0) continue
+        const closed = await tx.collectionRun.updateMany({
+          where: { id: runId, agentId: user.id, status: { in: ['planned', 'in_progress'] } },
+          data: { status: 'completed', completedAt: now },
+        })
+        if (closed.count > 0) {
+          await tx.runContainer.updateMany({ where: { runId, unloadedAt: null }, data: { unloadedAt: now } })
+        }
+      }
 
       return batch.id
     },

@@ -15,14 +15,20 @@ import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { createSignedUrls } from '@clbipp/auth/storage-server'
 import { formatPaise } from '@clbipp/core/format'
+import { chemistryLabel } from '@clbipp/core/intake'
 import { AppShell, Banner, Button, Card, CardContent, DetailRow, PagePadding, SectionLabel } from '@clbipp/ui'
+
+import { TagLoad } from '../collect/TagLoad'
 
 export default async function Page({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ ok?: string; error?: string }>
 }) {
   const { id } = await params
+  const { ok, error } = await searchParams
 
   const supabase = await createClient()
   const {
@@ -35,7 +41,22 @@ export default async function Page({
     select: {
       id: true,
       status: true,
+      custodyBatchId: true,
       vendor: { select: { fullName: true } },
+      // FV10 — the tags this load left with.
+      items: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          category: true,
+          quantity: true,
+          chemistry: true,
+          weightKg: true,
+          confirmedWeightKg: true,
+          untaggedReason: true,
+          tag: { select: { code: true, container: { select: { code: true } } } },
+        },
+      },
       receipt: {
         select: {
           receiptNo: true,
@@ -59,10 +80,27 @@ export default async function Page({
     signatureUrl = urls[0]?.url ?? null
   }
 
+  const lines = pickup.items.map((i) => ({
+    id: i.id,
+    category: i.category,
+    quantity: i.quantity,
+    chemistryLabel: i.chemistry ? (chemistryLabel(i.chemistry) ?? i.chemistry) : null,
+    weightKg: Number(i.confirmedWeightKg ?? i.weightKg ?? 0),
+    tagCode: i.tag?.code ?? null,
+    boxCode: i.tag?.container?.code ?? null,
+    untaggedReason: i.untaggedReason,
+  }))
+  const untagged = lines.filter((l) => !l.tagCode)
+  // FD13 — a line that left without a tag can still be tagged in the van, up
+  // to the hub drop-off; after that the hub owns it.
+  const canStillTag = pickup.status === 'collected' && pickup.custodyBatchId === null && untagged.length > 0
+
   return (
     <AppShell title="Receipt" showBack backHref={`/job/${id}`} hideNav>
       <PagePadding className="flex flex-col gap-4">
         <Banner variant="success">Collected — receipt {pickup.receipt.receiptNo}</Banner>
+        {ok && <Banner variant="success">{ok}</Banner>}
+        {error && <Banner variant="error">{error}</Banner>}
 
         <SectionLabel>{pickup.vendor.fullName}</SectionLabel>
         <Card variant="elevated">
@@ -89,6 +127,31 @@ export default async function Page({
             />
           </CardContent>
         </Card>
+
+        {/* FV10 — the tag on each line, as the hub will scan them. */}
+        <SectionLabel>Tags</SectionLabel>
+        <Card variant="elevated">
+          <CardContent className="flex flex-col">
+            {lines.map((l, idx) => (
+              <DetailRow
+                key={l.id}
+                label={`Line ${idx + 1}${l.boxCode ? ` · box ${l.boxCode}` : ''}`}
+                value={l.tagCode ?? 'Untagged — hub tags on receipt'}
+                last={idx === lines.length - 1}
+              />
+            ))}
+          </CardContent>
+        </Card>
+
+        {canStillTag ? (
+          <TagLoad
+            pickupId={pickup.id}
+            lines={untagged}
+            boxes={[]}
+            runNo={null}
+            returnTo={`/job/${id}/receipt`}
+          />
+        ) : null}
 
         {signatureUrl && (
           <div className="flex flex-col gap-2">

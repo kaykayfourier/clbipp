@@ -27,6 +27,11 @@ import { createManifestAction } from '../actions'
 // The checkboxes are REAL <input type="checkbox" name="itemIds"> in the DOM, so
 // the form still submits correctly with JavaScript disabled — React only
 // controls which of them are checked.
+//
+// FV13 · FD17 (2026-09-27): step 0 is now the DESTINATION. A second-life battery
+// ships to a refurbisher and a recycling one to a recycler — `isShippableTo()`
+// in @clbipp/core/pathway, enforced in `createManifest`. Until this step existed
+// a second-life item appeared nowhere here, and its pickup could never advance.
 
 export interface BuilderItem {
   itemId: string
@@ -40,6 +45,8 @@ export interface BuilderItem {
   facilityId: string
   facilityName: string
   handedOffLabel: string
+  /** FV13 — which kind of partner may take this item. */
+  partnerKind: 'recycler' | 'refurbisher'
 }
 
 export interface BuilderRecycler {
@@ -49,6 +56,7 @@ export interface BuilderRecycler {
   isActive: boolean
   acceptedChemistries: string[]
   acceptedLabels: string[]
+  kind: 'recycler' | 'refurbisher'
 }
 
 export interface BuilderFacility {
@@ -68,11 +76,15 @@ export function ManifestBuilder({
   const [facilityId, setFacilityId] = useState(facilities[0]?.id ?? '')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [recyclerId, setRecyclerId] = useState('')
+  const [kind, setKind] = useState<'recycler' | 'refurbisher'>('recycler')
 
   const visible = useMemo(
-    () => items.filter((i) => i.facilityId === facilityId),
-    [items, facilityId],
+    () => items.filter((i) => i.facilityId === facilityId && i.partnerKind === kind),
+    [items, facilityId, kind],
   )
+  const partners = useMemo(() => recyclers.filter((r) => r.kind === kind), [recyclers, kind])
+  const countFor = (k: 'recycler' | 'refurbisher') =>
+    items.filter((i) => i.facilityId === facilityId && i.partnerKind === k).length
 
   // Selection is scoped to the visible facility: switching facilities unmounts
   // the other facility's inputs, so they cannot submit. Intersecting here keeps
@@ -93,7 +105,8 @@ export function ManifestBuilder({
 
   /** AD7, mirrored for the UI only. The action is the real gate. */
   function rejectionFor(r: BuilderRecycler): string | null {
-    if (!r.isActive) return 'not an active recycler'
+    if (r.kind !== kind) return kind === 'refurbisher' ? 'a recycler, not a refurbisher' : 'a refurbisher, not a recycler'
+    if (!r.isActive) return 'not an active partner'
     if (selectedVisible.length === 0) return null
     if (hasUnrecorded) return 'an item has no recorded chemistry'
     const missing = selectedChemistries.filter((c) => !r.acceptedChemistries.includes(c))
@@ -104,7 +117,7 @@ export function ManifestBuilder({
     return `does not accept ${[...new Set(labels)].join(', ')}`
   }
 
-  const eligible = recyclers.filter((r) => rejectionFor(r) === null)
+  const eligible = partners.filter((r) => rejectionFor(r) === null)
   const chosen = recyclers.find((r) => r.id === recyclerId) ?? null
   const chosenRejection = chosen ? rejectionFor(chosen) : null
 
@@ -123,6 +136,41 @@ export function ManifestBuilder({
 
   return (
     <form action={createManifestAction} className="flex flex-col gap-5">
+      {/* ── 0 · Destination (FV13 · FD17) ───────────────────────────────── */}
+      <Panel
+        step="0"
+        title="Destination"
+        hint="Second Life and Recycling are different journeys. A second-life battery goes to a refurbisher, never on a recycler's lorry; everything else — including every flat-rate line — goes to a recycler."
+      >
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Destination">
+          {(
+            [
+              { k: 'recycler', label: 'Recycling → recycler' },
+              { k: 'refurbisher', label: 'Second Life → refurbisher' },
+            ] as const
+          ).map(({ k, label }) => (
+            <button
+              key={k}
+              type="button"
+              role="radio"
+              aria-checked={kind === k}
+              onClick={() => {
+                setKind(k)
+                setSelected(new Set())
+                setRecyclerId('')
+              }}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${
+                kind === k
+                  ? 'border-primary-black bg-primary-black text-primary-green'
+                  : 'border-console-line text-text-primary hover:bg-background'
+              }`}
+            >
+              {label} · {countFor(k)}
+            </button>
+          ))}
+        </div>
+      </Panel>
+
       {/* ── 1 · Facility ─────────────────────────────────────────────────── */}
       <Panel
         step="1"
@@ -153,8 +201,9 @@ export function ManifestBuilder({
       >
         {visible.length === 0 ? (
           <p className="text-xs leading-relaxed text-text-secondary">
-            Nothing shippable at this facility. Stock appears here once a hub batch is advanced to
-            tested on the lifecycle board.
+            {kind === 'refurbisher'
+              ? 'No second-life stock at this facility. An item appears here when its pathway is reuse or refurbish (the engine\'s verdict, or an admin\'s override on the pickup) and its pickup has reached tested.'
+              : 'Nothing shippable at this facility. Stock appears here once a hub batch is advanced to tested on the lifecycle board.'}
           </p>
         ) : (
           <>
@@ -236,8 +285,8 @@ export function ManifestBuilder({
       {/* ── 3 · Recycler ─────────────────────────────────────────────────── */}
       <Panel
         step="3"
-        title="Recycler"
-        hint="AD7 — a manifest may only name an active recycler whose accepted chemistries cover EVERY item on it. That is chemistry-wise segregation, and it is why one pickup's items can end up on two manifests."
+        title={kind === 'refurbisher' ? 'Refurbisher' : 'Recycler'}
+        hint="AD7 — a manifest may only name an active partner of the right kind whose accepted chemistries cover EVERY item on it. That is chemistry-wise segregation, and it is why one pickup's items can end up on two manifests."
       >
         <select
           name="recyclerId"
@@ -245,8 +294,8 @@ export function ManifestBuilder({
           onChange={(e) => setRecyclerId(e.target.value)}
           className="w-full max-w-[520px] rounded-lg border border-console-line bg-surface px-3 py-2 text-sm text-text-primary"
         >
-          <option value="">Choose a recycler…</option>
-          {recyclers.map((r) => {
+          <option value="">{kind === 'refurbisher' ? 'Choose a refurbisher…' : 'Choose a recycler…'}</option>
+          {partners.map((r) => {
             const rejection = rejectionFor(r)
             return (
               <option key={r.id} value={r.id} disabled={rejection !== null}>
@@ -258,7 +307,13 @@ export function ManifestBuilder({
         </select>
 
         <ul className="mt-3 flex flex-col gap-1.5">
-          {recyclers.map((r) => {
+          {partners.length === 0 ? (
+            <li className="text-[11px] text-warning-text">
+              No {kind === 'refurbisher' ? 'refurbisher' : 'recycler'} is registered. Add one to the partner directory
+              before this stock can move.
+            </li>
+          ) : null}
+          {partners.map((r) => {
             const rejection = rejectionFor(r)
             return (
               <li key={r.id} className="flex flex-wrap items-baseline gap-2 text-[11px]">
@@ -280,7 +335,7 @@ export function ManifestBuilder({
 
         {selectedVisible.length > 0 && eligible.length === 0 ? (
           <div className="mt-3 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-xs leading-relaxed text-warning-text">
-            No active recycler accepts every chemistry in this selection. Split it — that is exactly
+            No active {kind === 'refurbisher' ? 'refurbisher' : 'recycler'} accepts every chemistry in this selection. Split it — that is exactly
             what AD7 is for, and it is why a pickup&rsquo;s items legitimately end up on two
             different manifests.
           </div>

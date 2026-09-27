@@ -297,6 +297,9 @@ export async function reschedulePickup(
   const { error: updateError } = await admin
     .from('pickups')
     .update(
+      // FV11 — either way the pickup leaves any collection run it was on: the
+      // run was planned for the OLD date (one agent, one day), and a stop that
+      // has moved to another day is not on it any more. Dispatch re-plans it.
       reactivating
         ? {
             status: nextStatus,
@@ -305,8 +308,10 @@ export async function reschedulePickup(
             agent_fee_paise: null,
             scheduled_slot: null,
             eta_minutes: null,
+            collection_run_id: null,
+            run_sequence: null,
           }
-        : { status: nextStatus, preferred_date: preferredDate }
+        : { status: nextStatus, preferred_date: preferredDate, collection_run_id: null, run_sequence: null }
     )
     .eq('id', pickupId)
 

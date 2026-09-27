@@ -1,47 +1,52 @@
-# Plan — Presentation Feedback (FV1–FV8)
+# Plan — Presentation Feedback (FV1–FV16)
 
 Source: `docs/CLBIPP_Presentation_Feedback_Changes.docx` (eleven changes, P0–P2)
 plus the pilot-run conversation of 2026-09-09 (engine may be off for the pilot;
 they want a human step retained), plus `docs/field agent selection.txt` (the
 company's expansion of §2.2 into a ranked agent selector).
 
-Decisions here are numbered **FD0–FD11** and follow the same rule as AD0–AD12:
+Decisions here are numbered **FD0–FD19** and follow the same rule as AD0–AD12:
 once settled, not re-litigated mid-build. Note the collision hazard the repo
 already warns about — quote the decision with its set (**FD**, not AD or D).
-⚠ **FD0–FD6 are settled. FD7–FD11 are OURS and provisional** — see §2.5.
+⚠ **FD0–FD6 are settled. FD7–FD19 are OURS and provisional** — see §2.5 and §9.2.
 
 ---
 
-## STATE AS OF 2026-09-27 — read this first
+## STATE AS OF 2026-09-27 (evening) — read this first
 
-**Every P0 and every P1 in the feedback document is built, pushed and live.**
-Verified against production on 2026-09-23: **102 routes** (48 customer + 30
-agent + 24 admin) plus `verify-seed` 27/27 and the admin role gate both ways.
+**Every change in the feedback document is built.** P0 and P1 shipped by
+2026-09-23 (FV1–FV8, live). On 2026-09-27 the company moved to an iterative
+loop — "build something, we react" — so the remainder was built in one pass as
+**FV9–FV16** (§9 plan, §10 as built): battery tags, QR transport boxes,
+same-day collection runs, hub check-in, second life routed to a refurbisher,
+the optional dispatch filters, the scale-reading photo, and the duty flag.
 
 | | |
 |---|---|
-| §1 Core workflow (all 5) | ✅ FV1, FV2, FV3 |
-| §2.1 Dispatch filters + sorting | ✅ FV4 |
-| §2.2 Live job count → ranked selector | ✅ FV8 |
-| §3 Agent inspection + pickup | ✅ FV2, FV3 |
-| §4 Tags, QR boxes, grouping | ⛔ **Declined for the pilot** (FD11) |
-| §5 Second Life / Recycling | ✅ FV5 |
+| §1 Core workflow (all 5) | ✅ FV1, FV2, FV3 (+ FV10's scale photo) |
+| §2.1 Dispatch filters + sorting | ✅ FV4 + FV14 (type, size, priority) |
+| §2.2 Live job count → ranked selector | ✅ FV8 + FV15 (off duty) |
+| §3 Agent inspection + pickup | ✅ FV2, FV3, FV10 |
+| §4.1 QR transport boxes | ✅ FV11 |
+| §4.2 Battery tags + facility reconciliation | ✅ FV10 + FV12 |
+| §4.3 Same-day nearby grouping | ✅ FV11 |
+| §5 Second Life / Recycling | ✅ FV5 + FV13 (a destination) |
+| §6 Revised workflow, steps 1–12 | ✅ every step has a screen |
 
-**The three things a fresh session should know:**
+**The things a fresh session should know:**
 
-1. 🔴 **§8 is the most likely next conversation.** The company's notes ask for
-   off-duty / working-hours availability and we did not build it — there is no
-   duty data in this database. §8 is the written answer plus the build path; a
-   `DutyStatus` enum on `Profile` is ~half a day and covers most of it.
-2. 🔴 **FD7–FD11 are our provisional calls, not the company's answers** (§2.5).
-   They were never asked to choose. Don't defend them in a meeting.
-3. ⚠ **The manual pass has not happened.** Everything is verified
-   programmatically; nobody has judged whether the ranked order reads sensibly
-   to a human dispatcher, or whether the collection-date flow feels right on a
-   phone. `docs/MANUAL_TEST_QUEUE.md` has the checklists.
-
-**Nothing is blocked.** The 43 open questions were never answered and no longer
-gate anything.
+1. 🔴 **FV9–FV16 are verified locally, NOT pushed.** The migration IS applied
+   to the shared project (additive — the live apps run fine on it). Pushing is
+   Aamir's call; `docs/BEFORE_YOU_PUSH.md` applies, and after the push run the
+   three production smokes.
+2. 🔴 **FD7–FD19 are our provisional calls, not the company's answers** (§2.5,
+   §9.2). Don't defend them in a meeting; the first contradicting instruction
+   wins. FD12 reversed FD11.
+3. ⚠ **The manual pass has not happened** — cameras on real phones, a printed
+   sticker sheet, a USB scanner at the hub desk. `docs/MANUAL_TEST_QUEUE.md`
+   has the checklist.
+4. **Expect the next conversation to be their reaction** to the new logistics
+   screens. The cheapest likely asks are in §10's "Still not built" list.
 
 ---
 
@@ -254,7 +259,12 @@ flag; an office-quoted price path on the agent's result screen; the engine still
 running and logging (L5); a tap-to-call number and a callback request on the two
 screens where people get stuck (M2).
 
-### FV7 — Tags, containers, grouping · P2 · ⛔ NOT STARTED, BY DECISION (FD11)
+### FV7 — Tags, containers, grouping · P2 · ➡️ SUPERSEDED by FV10–FV12 (2026-09-27)
+
+⚠ Historical. FD11 declined this for the pilot; FD12 reversed that on
+2026-09-27 and it was built as FV10 (tags), FV11 (boxes + runs) and FV12 (hub
+check-in). J3 was answered: a box is NOT the `CustodyBatch` (FD14). See §9–§10.
+The original note follows.
 
 Not blocked any more — *declined for the pilot*. J3 still matters whenever it is
 picked up: it decides whether a QR container IS the `CustodyBatch` we already
@@ -313,7 +323,9 @@ did. Per-item prices are never back-filled from an override — spreading a
 commercial decision about a whole load across individual batteries would invent
 numbers nobody calculated and corrupt that comparison.
 
-**FD11 — No physical tagging in the pilot.** Pickup id and item id already
+**FD11 — No physical tagging in the pilot.** ➡️ *Reversed by FD12 on
+2026-09-27: the office prints tag sheets on sticker stock, so no printer is
+needed in the van.* Pickup id and item id already
 identify everything, and the drop-off already creates a `CustodyBatch`. Until
 there is a printer or a roll of pre-printed QR labels in a van, a tagging
 feature is a screen that asks an agent to type a code nobody issued. FV7 stays
@@ -700,3 +712,278 @@ want a warning or exception the admin can act on. Today the state is *visible*
 but **nothing raises it proactively**. There is an `ItemException` model for
 engine flags and no equivalent for dispatch. Worth doing alongside Step 1, since
 a duty flag is what makes "became unavailable" detectable in the first place.
+
+---
+
+## §9 Completing the document — FV9–FV16 (planned 2026-09-27)
+
+**Why this section exists.** On 2026-09-27 the company switched to an iterative
+approach: they will not specify §4 and §5 in advance; we build something
+reasonable, they react, we fold the reaction in. Team direction (Aamir): **finish
+every change in the feedback document now**, make sensible product calls where
+detail is missing, and make sure it all works. That reverses FD11 (no tagging in
+the pilot) and completes FD9 (second life was a label with no destination).
+
+### 9.1 What was still open, measured against the document
+
+| Doc § | Ask | State on 2026-09-27 | Batch |
+|---|---|---|---|
+| 3.1 | "allow a photograph showing the battery and the scale reading" | `weightPhotoUrl` column exists since FV2 — **nothing writes or reads it** | FV10 |
+| 2.1 | "optionally filter by battery quantity/type and operational priority" | not built | FV14 |
+| 4.1 | QR-tracked reusable transport boxes, scanned at the start of a run | not built (FD11) | FV11 |
+| 4.2 | a tag per battery / lot, linked to pickup, item and box; reconciled at the facility | not built (FD11) | FV10, FV12 |
+| 4.3 | group nearby same-day pickups into one run, one agent, one vehicle | not built (FD11) | FV11 |
+| 5 | "route the battery to the appropriate second-life process/facility" | label + a rule that keeps it OFF recycler manifests — and **no destination at all** | FV13 |
+| 6 step 10 | "the facility scans and reconciles the received batteries" | not built — `collected → tested` is one click | FV12 |
+| 6 step 12 | chain-of-custody records updated | agent's `/dropoff/[batchId]` is **still the Batch 0b stub** ("Not built yet"); the custody PDF prints the facility's **uuid** as its name, reads the superseded `approxWeightKg`, labels an item count "Pickups in batch", and uploads twice | FV12 |
+
+🔴 **A real defect found while planning, not just a gap.** FV5 keeps a
+second-life item off every recycler manifest — correctly — but AD6 advances a
+pickup past `tested` only when EVERY item is covered by a manifest. Nothing can
+ever cover a second-life item, so **a pickup holding one second-life line could
+never advance again** except by the manual override. It never showed because the
+seed sets every item to `recycle`. FV13 is its fix.
+
+### 9.2 Decisions FD12–FD19 — OURS, and provisional
+
+Same standing as FD7–FD11 (§2.5): taken in-house because the company asked us to
+propose rather than wait, **the first contradicting instruction from them wins**,
+and none should be defended in a meeting as their requirement.
+
+**FD12 — Tags are pre-issued by the office, one per battery LINE, bound at
+collection.** The console mints codes (`TG-` + 6 Crockford base-32 characters + a
+check character, so a mistyped code is rejected rather than bound) and prints
+them as an A4 sticker sheet on any office printer. That dissolves FD11's
+objection — nobody needs a printer in the van, only a sheet in the glovebox. One
+tag per `BatteryItem` because a line IS the lot in this data model (there is no
+per-unit row); a 14-battery line is strapped or crated and tagged as a lot, which
+is exactly the document's "or an operationally appropriate battery lot".
+
+**FD13 — Tagging is mandatory at collection, with a recorded way out.** Every
+line is tagged, or marked "no tag available" with a typed reason; the hub then
+tags that line on receipt. Never a hard stop in front of a waiting vendor — the
+same posture as `weightMethod: estimated` (FD3) and risk R2.
+
+**FD14 — A transport box is a permanent registered object; a collection run is
+a dispatcher's same-day grouping; NEITHER is the `CustodyBatch`** (this is J3's
+answer). A custody batch is a hand-off EVENT at a hub. A box is reusable and does
+many runs; one drop-off can empty several boxes. They are linked through the
+items (each tag records the box its line went into), never merged. The agent
+scans a box to start a run; the drop-off that leaves no stop to visit completes
+the run and frees the box (a mid-run drop-off keeps both).
+
+**FD15 — Hub check-in gates `collected → tested`.** A pickup advances only when
+every one of its lines has been checked in at the hub — scanned, tagged at
+receipt, or confirmed by hand with a reason. A line declared missing HOLDS its
+pickup. This is AD6's posture ("every item, or not at all") applied one edge
+earlier. Manual paths write an `AdminAudit` row with a mandatory reason; a scan
+does not (the check row itself records who and when).
+
+**FD16 — Runs are decision support, never automation.** The board SUGGESTS
+same-day groups — same date, within 8 km straight-line, city as the fallback
+when an address has no coordinates — and a dispatcher builds the run. Stop order
+is a nearest-neighbour suggestion, not route optimisation, and says so. Nothing
+is auto-assigned (FV8's rule stands). Max 8 stops.
+
+**FD17 — Second life gets a destination: a downstream partner has a KIND.**
+`Recycler.kind` is `recycler | refurbisher`. A second-life item ships on a
+manifest to a refurbisher; a recycling (or unrouted flat-rate) item to a
+recycler — enforced in the ACTION, not the picker (AD7's posture). The existing
+manifest lifecycle (dispatch → received → reconciled) carries both, so AD6
+coverage works for second life with no new machinery. A refurbisher
+reconciliation records an outcome note, not recovered metals, and **the
+certificate states second-life mass separately and never counts it as recovered
+material** — the estimate fallback is scaled to the recycled share only.
+
+**FD18 — Dispatch priority is derived, never stored.** `urgent` = a declared
+swollen or leaking line (a thermal risk sitting at a vendor's site) · `high` =
+waiting ≥ 3 days, or its date is today or past · `normal` otherwise.
+
+**FD19 — Duty status is one admin-set flag** (§8, Step 1 — built now because
+the iterative loop will put dispatch in front of them again). Off duty =
+`unavailable` through `availabilityOf()`, shown disabled with its reason, and
+refused at assignment. No working hours, no roster (§8 Steps 2–4 still unbuilt).
+
+### 9.3 Batches
+
+One migration for the whole set (`feedback_logistics`), additive only: new
+tables and enums, nullable columns or NOT NULL with a default, **no value added
+to an existing enum** — so the deployed apps keep working against the migrated
+database until the code is pushed. RLS is enabled on every new table INSIDE the
+migration (grants.sql hands `anon` SELECT on every future table) and restated in
+`policies.sql`.
+
+| Batch | What | Doc § |
+|---|---|---|
+| **FV9** | Migration + shared pure logic in `packages/core` (tags, run planning, priority, hub check-in, partner kind, duty) with tests | — |
+| **FV10** | Tags: issue + print (admin `/tags`), camera QR scan + bind at collection (agent), scale-reading photo, tag codes on the vendor's receipt | 3.1, 4.2 |
+| **FV11** | Boxes (admin `/containers`), runs (`/runs`, `/runs/new`, `/runs/[id]`), same-day suggestions on `/dispatch`; agent `/run/[id]` (scan a box to start) and a run card on the day view; the drop-off that leaves no stop to visit completes the run and frees its boxes | 4.1, 4.3 |
+| **FV12** | Hub check-in (`/custody/[batchId]`) gating `collected → tested`; agent `/dropoff/[batchId]` built; custody PDF fixed and extended with boxes + tags | 4.2, 6.10, 6.12 |
+| **FV13** | Refurbisher partners; manifests routed by partner kind; certificate second-life mass | 5 |
+| **FV14** | Dispatch filters: battery type, load size, priority (+ priority column) | 2.1 |
+| **FV15** | Duty status on `/agents`, through `availabilityOf()` | 2.2 / §8 |
+| **FV16** | Seed, `verify-seed`, `demo-stage --reset`, smoke; docs | — |
+
+**Verification plan:** `npm run test` · `npm run build` · `npm run lint` ·
+reseed + `verify-seed` · all three smokes · every new POST action driven through
+the real HTTP path by a throwaway harness (the Batch 3/6/7 technique) · reseed
+again to leave the shared project clean.
+
+---
+
+## §10 As built — FV9–FV16 (2026-09-27, Aamir + Claude)
+
+All eight batches of §9 were built in one pass. Everything the feedback
+document asks for now exists on a screen; FD12–FD19 (§9.2) are the calls made
+where it was silent.
+
+### What each batch shipped
+
+**FV9 — migration + shared logic.** `20260927120000_feedback_logistics`:
+five enums, five tables, seven columns, all additive, RLS enabled inside the
+migration. Generated with `migrate diff --from-schema-datamodel <HEAD's schema>
+--to-schema-datamodel` — two files in, SQL out, **no database and no shadow** —
+and applied with `db execute`. New pure modules in `packages/core`, each with
+tests and a subpath export: `tags` (codes, check character, `parseCode`),
+`run-planning` (`suggestRunGroups`, `orderStops`, `runStopEligibility`),
+`dispatch-priority`, `custody-check`; plus `isShippableTo` in `pathway`, the
+`off_duty` branch in `availabilityOf`, seven new audit verbs, and `secondLifeKg`
+in `buildCertificatePayload`.
+
+**FV10 — tags (§4.2) + the scale photo (§3.1).**
+- Admin `/tags`: issue a sheet (1–240), download it as an A4 3 × 8 sticker PDF
+  (`/api/labels/tags`, QR drawn as vectors from `qrcode`), and look any code up
+  — tag → line → pickup → box → run → hub check-in.
+- Agent collect screen: **Tag the load** — one card per line with a camera scan
+  (`components/qr-scanner.tsx`: native `BarcodeDetector`, lazy `jsqr` fallback)
+  or typed entry; "No tag available?" records a reason (FD13).
+  `confirmCollection` refuses a line that is neither. The collected status event
+  names the tags. A line left untagged can still be tagged from the receipt
+  until drop-off.
+- The vendor's receipt PDF lists each line's tag.
+- `ItemConfirmForm`: an optional "photo of the scale reading" for a scale or
+  label weight, worded harder when the weight diverges from the declaration;
+  dropped for an `estimated` weight. Shown on the admin pickup screen, and a
+  divergence with no photo says so.
+
+**FV11 — boxes (§4.1) + same-day runs (§4.3).**
+- Admin `/containers`: register (code minted, permanent), print labels, retire —
+  refused while the box is on an open run.
+- `/dispatch` suggests **same-day groups** of unassigned requests within 8 km
+  (city fallback), each with **Plan a run** → `/runs/new` (date, ticked stops,
+  FV8's ranked agent list centred on the stops, start time, gap, vehicle).
+  `createCollectionRun` re-checks every stop with the same rule, assigns the
+  `requested` ones exactly as `/dispatch` would, and writes `run.create` + one
+  `pickup.assign` per stop. `/runs` and `/runs/[id]` are the run sheets; a
+  planned run can be cancelled (stops keep their agent).
+- Agent: a run card on the day view; `/run/[id]` — scan a box to start, stops in
+  suggested order, finish an empty run. Tags bound on a run record the loaded
+  box. A drop-off completes the run and frees its boxes only when no stop is
+  left to visit and nothing is in the van; a mid-run drop-off keeps the run
+  open with its boxes on it (caught by the harness 2026-09-27 — the first
+  version closed the run as soon as the van was empty, stranding stop 102).
+- A single `/dispatch` assignment and a vendor reschedule both take a pickup off
+  any run.
+
+**FV12 — hub check-in (§4.2, §6 step 10) + the custody record (§6 step 12).**
+- Admin `/custody/[batchId]`: every line of a hand-off, a scan field
+  (keyboard-wedge USB scanners work as-is), **Tag now** for an untagged line,
+  **Record by hand** (received / missing, reason required, audit row).
+- `advanceCustodyBatch` advances only fully checked-in pickups; `/lifecycle`
+  shows `Check in n/m` per batch.
+- Agent `/dropoff/[batchId]` **built** — it was Batch 7b's stub ("Not built
+  yet"), and every real drop-off had been redirecting to it.
+- Custody PDF rebuilt: facility name (was its UUID), agent name (was an email),
+  per-line weights (was a superseded column), tags and boxes per line; cached in
+  the `receipts` bucket (the `documents` bucket it used never existed, so every
+  download re-rendered).
+
+**FV13 — second life to a refurbisher (§5).** `Recycler.kind`; the manifest
+builder's step 0 is the destination; `createManifest` / `dispatchManifest`
+enforce `isShippableTo`; a refurbisher reconciliation takes an outcome note and
+never metals (even from a crafted POST); the certificate shows a SECOND LIFE
+line and claims no metal for it. `/facilities` shows the kind.
+
+**FV14 — dispatch filters (§2.1).** Battery type, load size (declared kg bands)
+and priority (FD18) filters, a sortable priority column with its reason, a run
+badge on rows, and an "Urgent — declared hazard" tile.
+
+**FV15 — duty (§8 Step 1).** `/agents` toggles on/off duty (`agent.duty` audit);
+the selector shows **Unavailable · Off duty**; `assignPickup` and
+`createCollectionRun` refuse.
+
+**FV16 — seed, checks, tooling.** Seed: `agent2@test` (Neha Verma, on duty) and
+`agent3@test` (Mohit Sharma, off duty); per-site vendor addresses with real
+coordinates for the requested fixtures; **fixture 9** (`PKP-2026-000115`, the
+same-day partner of 101) and **fixture 10** (`PKP-2026-000116`, second-life
+stock on no manifest); a refurbisher; four boxes; a 48-tag sheet with 13 bound;
+105's second line untagged with a reason; every line in CB-2026-000301 checked
+in; run `RUN-…-5EED` under way. `verify-seed` gained checks for each of those.
+`demo-stage --reset` now also clears tags, check-ins, run membership, FV2/FV3
+columns — and the collection receipt, whose unique `pickupId` previously made a
+reset pickup impossible to collect again.
+
+### Defects found and fixed on the way
+
+1. 🔴 **A pickup with any second-life line could never advance past `tested`**
+   (FV5 kept the line off recycler manifests; AD6 needs every line on one).
+2. 🔴 **`/dropoff/[batchId]` was a stub** that every real drop-off landed on.
+3. The custody PDF printed a UUID as the facility, an email as the agent, null
+   weights, "Pickups in batch" over an item count, uploaded twice, and cached to
+   a bucket that does not exist.
+4. `demo-stage --reset` left the `PickupReceipt`, so the reset pickup could not
+   be collected again.
+5. `weightPhotoUrl` (FV2) had a column and no screen.
+
+### Verification
+
+All run 2026-09-27 against the shared project, on `next dev`:
+
+| Check | Result |
+|---|---|
+| `npm run test` | **420 passing** (core 353, auth 40, engine 27) |
+| `npm run lint` | 0 errors, 0 warnings |
+| `npm run build` | 3/3 apps, `ƒ Proxy (Middleware)` on each |
+| `npm run verify-seed` | **38/38** (11 new checks for FV9–FV16) |
+| `npm run smoke` | admin 31/31 · agent 32/32 · customer 48/48 = **111 routes** (was 102) |
+| Role gates | all six wrong-role pairings bounce; agent3@test (off duty) barred from admin |
+| HTTP harness (real session cookies, real server actions) | **73 checks, all passing** (44 in run 2 up to the drop-off, where it caught the defect below; 29 in the resumed run, covering hub check-in, second life, the scale photo and the fix itself) |
+
+The harness drove every new write through the real HTTP path: tag issue +
+label PDF, box register/retire, duty toggle, dispatch + run builder refusing an
+off-duty agent, run build (2 × `pickup.assign` + `run.create`), box loading and
+run finishing, collection refused with untagged lines, check-character rejection,
+tag normalisation, hub drop-off + custody PDF (cached in `receipts`), hub
+check-in (box code / foreign batch / never-bound tag all refused), by-hand
+`custody.reconcile`, partial advance holding a short pickup, second life →
+refurbisher (both mismatches refused), reconcile with an outcome note and no
+metals, certificate with `secondLifeKg` 180 and no materials, the scale photo.
+
+**Flags from verification:**
+
+- 🔴 **Defect found and fixed: a hub drop-off closed the run as soon as the van
+  was empty**, even with a stop still unvisited (seeded 102) — and freed its
+  boxes. Now the run completes only when no stop is left to visit AND nothing is
+  in the van; a mid-run drop-off keeps the run open with its boxes on it. The
+  agent can still end a run with nothing in the van from `/run/[id]`.
+- ⚠ **Long-lived dev servers exhausted the connection pool.** Harness run 1
+  died at step A3 with P1017 ("Server has closed the connection") after dev
+  servers had been up for hours; even a one-row update hung. Restarting them
+  fixed it. If a demo machine starts timing out, restart the servers first.
+- ⚠ **`reset-demo` takes 10+ minutes** and must not be wrapped in a timeout
+  (added to `BEFORE_YOU_PUSH.md` §3).
+- ⚠ Remote Supabase answered in 5–16 s per server action on the day — slow,
+  not broken.
+- The Turbopack `export *` warning from the generated Prisma client is
+  pre-existing and harmless.
+- Not covered by the HTTP harness: the FV6 price override and the FV3
+  collection-date flows (unit-tested and smoke-rendered only). Camera scanning
+  (`QrScanner`) is in `MANUAL_TEST_QUEUE.md` — a script cannot hold a phone.
+
+### Still not built, deliberately
+
+Working hours / per-day roster (§8 Steps 2–4) · route optimisation and travel
+time (straight-line nearest-neighbour only, and the screens say so) · a
+refurb-partner *directory* editor (partners come from the seed, like recyclers)
+· voiding a damaged tag · per-unit tracking inside a line (one tag per line is
+FD12) · agent self-service duty toggling · an offline queue for scans.

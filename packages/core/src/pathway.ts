@@ -94,3 +94,42 @@ export function isPathwayValue(value: unknown): value is PathwayValue {
  *  lifecycle override, and for the same purpose: it is the only record of why
  *  the engine's verdict was set aside. */
 export const MIN_PATHWAY_REASON_CHARS = 12;
+
+// ─── Where each destination physically goes (FV13 · FD17) ────────────────────
+// Until FV13 Second Life had a label and no destination: `isShippableToRecycler`
+// kept a second-life item OFF every manifest, and nothing else could take it —
+// so, because AD6 advances a pickup only when EVERY item is covered, a pickup
+// holding one second-life line could never move past `tested` again. A
+// downstream partner now has a KIND, and each destination has a partner.
+
+export type PartnerKindValue = "recycler" | "refurbisher";
+
+export const PARTNER_KIND_LABELS: Record<PartnerKindValue, string> = {
+    recycler: "Recycler",
+    refurbisher: "Refurbisher (second life)",
+};
+
+/**
+ * May this item go on a manifest to a partner of this kind?
+ *
+ * 🔴 THE ROUTING RULE, both halves. Enforced in `createManifest` (and in the
+ * stock query that feeds the builder), never only in the picker — AD7's
+ * posture. A recycler takes Recycling items and UNROUTED ones (every flat-rate
+ * line — they have always gone to a recycler); a refurbisher takes ONLY items
+ * whose verdict is Second Life. An unrouted item is not quietly sent for
+ * refurbishment: that would be a decision nobody made.
+ */
+export function isShippableTo(kind: PartnerKindValue, pathway: string | null | undefined): boolean {
+    if (kind === "refurbisher") return destinationOf(pathway) === "second_life";
+    return isShippableToRecycler(pathway);
+}
+
+/** The partner kind a destination ships to. */
+export function partnerKindFor(destination: RecoveryDestination | null): PartnerKindValue {
+    return destination === "second_life" ? "refurbisher" : "recycler";
+}
+
+/** A refurbisher's reconciliation reports an outcome, not metals. It must say
+ *  something: "12 of 12 packs restored, deployed as BESS at Manesar" is the
+ *  kind of line an EPR auditor will ask for. */
+export const MIN_OUTCOME_NOTE_CHARS = 20;

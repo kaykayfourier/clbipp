@@ -459,6 +459,14 @@ const AGENT_OFFERED = 'PKP-2026-000104'
 // "pending drop-off" state (D5). /dropoff/confirm is meaningless without a
 // selection, so this is what it is given.
 const AGENT_COLLECTED = 'PKP-2026-000105'
+// feedback_logistics (FV10–FV12, 2026-09-27). Pinned in reset-demo.ts's
+// seedLogistics(): the in-progress run for agent@test today (stops 105 + 102,
+// box BX-A001W loaded), and the seeded tag codes. The run number's suffix is
+// the id's first four hex characters, hence 5EED.
+const AGENT_RUN = '5eed0501-0000-4000-8000-000000000501'
+const SEED_BOX = 'BX-A001W' // loaded on AGENT_RUN; PKP-2026-000105's tagged line went in it
+const SEED_TAG_105 = 'TG-DM0001V' // PKP-2026-000105 line 1 (line 2 left untagged, FD13)
+const SEED_TAG_106 = 'TG-DM00026' // PKP-2026-000106 line 1 — in CB-2026-000301, checked in
 
 const AGENT_ROUTES = [
   // A. Entry & day view
@@ -507,6 +515,12 @@ const AGENT_ROUTES = [
   // /dropoff without one. Fetching it bare asserted nothing.
   `/dropoff/confirm?pickups=${AGENT_COLLECTED}`,
   `/dropoff/${AGENT_BATCH}`,
+  // FV10 — the receipt of the collected-but-not-dropped pickup. Its second line
+  // left untagged (FD13), so the tag-binding form renders here: the one route
+  // a fresh seed can render TagLoad on (no accepted `offered` fixture exists).
+  `/job/${AGENT_COLLECTED}/receipt`,
+  // FV11 — the run screen: scan a box, follow the stops.
+  `/run/${AGENT_RUN}`,
   // F. Track, history, profile
   '/pickups',
   `/pickups/${AGENT_ARRIVED}`,
@@ -523,7 +537,17 @@ const AGENT_APP_CONTENT = {
   // assertion on both: it only renders if the agent-scoped Prisma read ran and
   // returned this agent's own rows, so a broken query fails here rather than
   // passing on a layout that rendered an empty list.
-  '/': ['Assigned today', 'Collected today', 'Earned today', AGENT_PICKUP],
+  // 'Collection run' is the FV11 run card — only rendered off a real open run.
+  '/': ['Assigned today', 'Collected today', 'Earned today', AGENT_PICKUP, 'Collection run'],
+  // ── feedback_logistics (FV10–FV12) ─────────────────────────────────────────
+  // Every string below is reachable only through a join the screen had to make:
+  // the box code through run → run_containers → transport_containers, the tag
+  // code through item → item_tags.
+  [`/run/${AGENT_RUN}`]: ['Collection run', SEED_BOX, 'Blue crate 60 L #1', AGENT_COLLECTED, 'Load another box'],
+  [`/job/${AGENT_COLLECTED}/receipt`]: ['Tags', SEED_TAG_105, 'Untagged — hub tags on receipt', 'Bind tag to this line'],
+  // Batch 7b's stub until FV12 — "Not built yet" sat here while every real
+  // drop-off redirected to it. The batch number and a tag prove the read ran.
+  [`/dropoff/${AGENT_BATCH}`]: ['Chain of custody', 'CB-2026-000301', SEED_TAG_106, 'Download custody receipt'],
   [`/job/${AGENT_PICKUP}`]: [
     'Open in Google Maps',
     'Arrived on site',
@@ -675,7 +699,9 @@ const AGENT_APP_CONTENT = {
     'Automotive',
     'cannot be saved without a photo',
   ],
-  [`/job/${AGENT_ARRIVED}/scan`]: ['QR scanning is not in this build'],
+  // FV10 (2026-09-27) rewrote this page's copy: scanning now exists, for tags at
+  // collection and boxes on a run — not for intake, which stays manual.
+  [`/job/${AGENT_ARRIVED}/scan`]: ['Intake is entered by hand from the item list'],
   // The offer roll-up, on the one pickup that has an Offer. 'Offer presented'
   // is the `acceptedAt === null` half of the split `offered` stage (Batch 5b) —
   // it can only render off the real Prisma read, unlike the bare 'Offer' title
@@ -728,7 +754,7 @@ const AGENT_ITEMS_GATE = {
     'Chemistry — read it off the label',
   ],
   // The scan screen inherited the gate too.
-  [`/job/${AGENT_PICKUP}/scan`]: ['QR scanning is not in this build'],
+  [`/job/${AGENT_PICKUP}/scan`]: ['Intake is entered by hand from the item list'],
   // Batch 5a's six screens, gated 2026-08-24. Each string is one that only the
   // real screen renders, so a gate that stopped rejecting would surface here as
   // a leak rather than as a silently-passing redirect.
@@ -835,6 +861,10 @@ const ADMIN_MANIFEST_RECEIVED = '00000000-0000-4000-8000-000000000404'
 // no trace at all — which is the point of the fixture, and why no admin table
 // may be keyed on trace_id.
 const ADMIN_TRACE = 'TRC-2026-1130'
+// feedback_logistics — the seeded run (same id as AGENT_RUN) and the seeded hub
+// batch, whose every line is checked in (FD15).
+const ADMIN_RUN = AGENT_RUN
+const ADMIN_BATCH = '00000000-0000-4000-8000-000000000301'
 
 const ADMIN_ROUTES = [
   // B · Operations
@@ -847,13 +877,23 @@ const ADMIN_ROUTES = [
   // demo. See the note on this key in ADMIN_APP_CONTENT.
   '/pickups?q=PKP-2026-000102',
   `/pickups/${ADMIN_PICKUP}`,
+  // FV11 — collection runs
+  '/runs',
+  '/runs/new',
+  `/runs/${ADMIN_RUN}`,
   '/lifecycle',
+  // FV12 — hub check-in (a lifecycle detail screen)
+  `/custody/${ADMIN_BATCH}`,
   // C · Chain of custody
   '/inventory',
   '/manifests',
   '/manifests/new',
   `/manifests/${ADMIN_MANIFEST}`,
   `/manifests/${ADMIN_MANIFEST_RECEIVED}`,
+  // FV10–FV11 — the physical kit
+  '/containers',
+  '/tags',
+  `/tags?code=${SEED_TAG_105}`,
   // D · Engine
   '/config',
   '/market',
@@ -918,6 +958,14 @@ const ADMIN_APP_CONTENT = {
     'Waiting for an agent',
     'Needs an agent',
     'Agent workload right now',
+    // FV14 — the optional filters and the derived priority column.
+    'Battery type',
+    'Load size',
+    'Priority',
+    // FV11 · FD16 — seed fixture 9. ⚠ A FRESH-SEED fact: dispatching 101 or
+    // 115 in a demo legitimately empties this panel. Reseed first.
+    'Same-day groups',
+    'PKP-2026-000115',
   ],
   [`/dispatch/${ADMIN_REQUESTED}`]: [
     'Dispatch request',
@@ -933,6 +981,9 @@ const ADMIN_APP_CONTENT = {
     'Ravi Kumar',
     'live job',
     'Ranked by availability',
+    // FV15 · FD19 — the off-duty agent is listed, explained, and not hidden.
+    'Mohit Sharma',
+    'Off duty',
   ],
   // 🔴 Trap 28. 'Pickups' alone is the Batch 0 STUB's <h1> and it survived into
   // the real screen, so asserting it proved only that a route existed — the
@@ -961,7 +1012,18 @@ const ADMIN_APP_CONTENT = {
     'Sharma Logistics Pvt Ltd',
     'Ravi Kumar',
     'Chain of custody',
+    // FV11 — 102 is a stop on the seeded run.
+    'Collection run',
   ],
+  // ── feedback_logistics (FV10–FV12) ─────────────────────────────────────────
+  '/runs': ['Collection runs', '5EED', 'On the road'],
+  '/runs/new': ['Plan a collection run', 'Suggested same-day groups', 'PKP-2026-000115', 'Use this group'],
+  [`/runs/${ADMIN_RUN}`]: ['5EED', SEED_BOX, AGENT_COLLECTED, 'Suggested order'],
+  [`/custody/${ADMIN_BATCH}`]: ['Hub check-in', 'CB-2026-000301', SEED_TAG_106, 'Scan a tag', 'Scanned'],
+  '/containers': ['Transport boxes', SEED_BOX, 'Blue crate 60 L #1', 'Register a box'],
+  '/tags': ['Battery tags', '-SEED', 'Issue a sheet'],
+  // The whole chain: tag → line → pickup → box. Each hop is a join.
+  [`/tags?code=${SEED_TAG_105}`]: [AGENT_COLLECTED, SEED_BOX, 'At collection'],
   // Built in Batch 6. Every string below is chosen to survive a DEMO as well as
   // a build, which on this screen is load-bearing: on a FRESH SEED the board has
   // nothing to advance at all (CB-2026-000301 holds no pickup at `collected`,
@@ -988,11 +1050,10 @@ const ADMIN_APP_CONTENT = {
   // The four ManifestStatus stat tiles always render, even at zero — unlike the
   // per-status tables below them, which are omitted when empty.
   '/manifests': ['Dispatch manifests', 'Draft', 'Dispatched', 'Received', 'Reconciled'],
-  // ⚠ Deliberately NOT asserting on the picker. On a fresh seed every tested
-  // item is already on a seeded manifest, so this route renders its "No
-  // shippable stock" empty state and the builder is not in the HTML at all.
-  // Both states carry these two.
-  '/manifests/new': ['New manifest', 'Build a shipment'],
+  // FV13 (2026-09-27): a fresh seed now HAS shippable stock — fixture 10's
+  // second-life line, which only a refurbisher may take — so the builder
+  // renders and its destination step can be asserted.
+  '/manifests/new': ['New manifest', 'Build a shipment', 'Second Life → refurbisher'],
   // …401 is the DISPATCHED li-ion manifest and it is pinned in reset-demo.ts.
   // 'Items on this manifest' is the table heading, which renders at every
   // manifest status; the manifest number proves the row was actually read.
@@ -1086,7 +1147,7 @@ const ADMIN_APP_CONTENT = {
   '/suppliers': ['Suppliers', 'Sharma Logistics Pvt Ltd', 'CPCB/EPR/PROD/2024/0091', 'standard'],
   // 'Ravi Kumar' is the one seeded agent. Only one exists, so the roster is a
   // one-row table until a second is seeded (Batch 3 as-built, note 4).
-  '/agents': ['Agent roster', 'Ravi Kumar'],
+  '/agents': ['Agent roster', 'Ravi Kumar', 'Neha Verma', 'Off duty', 'Mark on'],
   // '&' renders as &amp; — assert the two halves, never the raw ampersand.
   //
   // The CPCB number proves the Recycler table was read, and it is the field
@@ -1095,6 +1156,9 @@ const ADMIN_APP_CONTENT = {
   '/facilities': [
     'Facilities',
     'recyclers',
+    // FV13 — the refurbisher, and its kind.
+    'Evergreen Second-Life Cells Pvt Ltd',
+    'Second life',
     'CLBIPP Hub — Okhla',
     'Meridian Metals Recovery Pvt Ltd',
     'CPCB/EPR/BW/2024/000418',

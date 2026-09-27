@@ -84,6 +84,7 @@ export default async function Page({
       confirmedWeightKg: true,
       confirmedCondition: true,
       agentPhotoUrls: true,
+      weightPhotoUrl: true,
       recordedAt: true,
     },
   })
@@ -257,6 +258,7 @@ export default async function Page({
           defaultChemistry={item.chemistry}
           defaultCondition={item.confirmedCondition ?? item.condition}
           existingPhotoPaths={item.agentPhotoUrls}
+          existingWeightPhotoPath={item.weightPhotoUrl}
         />
       </PagePadding>
     </AppShell>

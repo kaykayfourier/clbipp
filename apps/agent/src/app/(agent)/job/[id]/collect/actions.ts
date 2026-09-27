@@ -46,7 +46,9 @@ export async function confirmCollection(formData: FormData) {
       vendorId: true,
       offer: { select: { acceptedAt: true, estimatedPrice: true } },
       _count: { select: { items: true } },
-      items: { select: { confirmedWeightKg: true, weightKg: true } },
+      items: {
+        select: { confirmedWeightKg: true, weightKg: true, untaggedReason: true, tag: { select: { code: true } } },
+      },
     },
   })
   if (!pickup) return fail('Job not found.')
@@ -57,6 +59,18 @@ export async function confirmCollection(formData: FormData) {
     redirect(`/job/${encodeURIComponent(pickupId)}/receipt`)
   }
   if (!pickup.offer?.acceptedAt) return fail('The vendor has not accepted this offer yet.')
+
+  // 🔴 FV10 · FD13 — every line tagged, or its reason for not being recorded.
+  // The screen disables the button until then; this is the gate that holds
+  // when the screen is bypassed (the form is not the boundary, FD1).
+  const unaccounted = pickup.items.filter((i) => !i.tag && !i.untaggedReason).length
+  if (unaccounted > 0) {
+    return fail(
+      `${unaccounted} line${unaccounted === 1 ? ' has' : 's have'} no tag and no reason. Tag ${unaccounted === 1 ? 'it' : 'them'}, or record why, before collecting.`,
+    )
+  }
+  const tagCodes = pickup.items.map((i) => i.tag?.code).filter((c): c is string => Boolean(c))
+  const untaggedCount = pickup.items.length - tagCodes.length
 
   const signaturePath = String(formData.get('signaturePath') ?? '')
   if (!signaturePath) return fail('A signature is required to confirm collection.')
@@ -135,7 +149,9 @@ export async function confirmCollection(formData: FormData) {
           status: 'collected',
           actorId: user.id,
           actorRole: 'agent',
-          notes: `Collected — signed and confirmed with vendor. Agent fee ₹${(agentFeePaise / 100).toFixed(2)} credited.`,
+          // FV10 — the tags the load left with, on the chain-of-custody record
+          // itself, so the timeline names what the hub will scan.
+          notes: `Collected — signed and confirmed with vendor. Agent fee ₹${(agentFeePaise / 100).toFixed(2)} credited. Tags: ${tagCodes.length > 0 ? tagCodes.join(', ') : 'none'}${untaggedCount > 0 ? ` (${untaggedCount} line${untaggedCount === 1 ? '' : 's'} untagged — reason recorded; the hub tags on receipt)` : ''}.`,
           lat,
           lng,
           photoUrls: photoPaths,

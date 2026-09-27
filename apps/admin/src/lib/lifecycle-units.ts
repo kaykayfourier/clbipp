@@ -2,7 +2,7 @@ import 'server-only'
 
 import { Prisma, prisma } from '@clbipp/database'
 import type { BatteryCategory, BatteryType, ManifestStatus, PickupStatus } from '@clbipp/database'
-import { isShippableToRecycler } from '@clbipp/core/pathway'
+import { destinationOf, partnerKindFor, type PartnerKindValue } from '@clbipp/core/pathway'
 import { LIFECYCLE_STAGES, isLifecycleStage } from '@clbipp/ui'
 import type { LifecycleStage } from '@clbipp/ui'
 
@@ -175,6 +175,8 @@ export interface BuildableItem {
   facilityId: string
   facilityName: string
   handedOffAt: Date
+  /** FV13 · FD17 — the ONLY kind of partner this item may ship to. */
+  partnerKind: PartnerKindValue
 }
 
 /**
@@ -248,21 +250,23 @@ export async function loadManifestBuildStock(): Promise<BuildableItem[]> {
     if (!batch) continue
     for (const item of pickup.items) {
       if (claimed.has(item.id)) continue
-      // 🔴 FV5 · FD4 — THE ROUTING RULE, applied at the one place it bites.
+      // 🔴 FV5 · FD4 → FV13 · FD17 — THE ROUTING RULE.
       //
-      // A manifest is a legal chain-of-custody handover to a recycler, and a
-      // recycler breaks a battery down for materials. A second-life pack on one
-      // is a reusable battery about to be shredded by mistake.
+      // FV5 kept a second-life item OFF this list entirely, which was half the
+      // rule: it stopped a reusable battery being shredded by mistake, but gave
+      // it nowhere to go — and AD6 advances a pickup only when EVERY item is on
+      // a manifest, so a pickup holding one second-life line could never move
+      // past `tested` again. Now every item is listed WITH the one kind of
+      // partner that may take it (a refurbisher for second life, a recycler for
+      // everything else), the builder shows each kind separately, and
+      // `createManifest` enforces `isShippableTo()` — not the picker (AD7's
+      // posture).
       //
-      // Enforced in the STOCK QUERY rather than in the picker so that no route
-      // into manifest building can bypass it — same posture as AD7, which is
-      // enforced in the action rather than only in the dropdown.
-      //
-      // ⚠ An item with NO pathway (every flat-rate line) is shippable and must
-      // stay so: those have always gone to a recycler, and filtering on a
-      // truthy pathway here would silently drop half the stock — the trap
-      // CLAUDE.md flags about `trace_id`-keyed tables, wearing a different hat.
-      if (!isShippableToRecycler(item.pathway)) continue
+      // ⚠ An item with NO pathway (every flat-rate line) goes to a RECYCLER, as
+      // it always has — `destinationOf(null)` is null, and `partnerKindFor(null)`
+      // is 'recycler'. Filtering on a truthy pathway here would silently drop
+      // half the stock (CLAUDE.md's `trace_id` trap, wearing a different hat).
+      const partnerKind = partnerKindFor(destinationOf(item.pathway))
       stock.push({
         itemId: item.id,
         pickupId: pickup.id,
@@ -277,6 +281,7 @@ export async function loadManifestBuildStock(): Promise<BuildableItem[]> {
         facilityId: batch.facilityId,
         facilityName: batch.facility.name,
         handedOffAt: batch.handedOffAt,
+        partnerKind,
       })
     }
   }

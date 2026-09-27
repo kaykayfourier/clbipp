@@ -41,6 +41,7 @@ export default async function NewManifestPage({
         cpcbRegNo: true,
         isActive: true,
         acceptedChemistries: true,
+        kind: true,
       },
     }),
   ])
@@ -68,6 +69,7 @@ export default async function NewManifestPage({
     facilityId: s.facilityId,
     facilityName: s.facilityName,
     handedOffLabel: formatIstDate(s.handedOffAt),
+    partnerKind: s.partnerKind,
   }))
 
   return (
@@ -78,7 +80,8 @@ export default async function NewManifestPage({
             New manifest
           </h1>
           <p className="mt-1 max-w-[620px] text-xs leading-relaxed text-text-secondary">
-            Build a shipment from a facility&rsquo;s tested stock and name a recycler.
+            Build a shipment from a facility&rsquo;s tested stock and name a recycler — or, for
+            second-life batteries, a refurbisher.
           </p>
         </div>
         <Link
@@ -125,6 +128,7 @@ export default async function NewManifestPage({
             isActive: r.isActive,
             acceptedChemistries: r.acceptedChemistries as string[],
             acceptedLabels: r.acceptedChemistries.map((c) => chemistryLabel(c) ?? c),
+            kind: r.kind,
           }))}
         />
       )}

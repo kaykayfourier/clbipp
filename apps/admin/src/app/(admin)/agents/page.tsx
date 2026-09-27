@@ -1,6 +1,6 @@
 import { prisma } from '@clbipp/database'
 
-import { PageHead } from '@/components/console'
+import { Notice, PageHead } from '@/components/console'
 import { formatIstDate } from '@/lib/ist'
 import { LIVE_JOB_STATUSES } from '@/lib/job-load'
 import { AgentsTable, type AgentRow } from './AgentsTable'
@@ -25,7 +25,12 @@ import { AgentsTable, type AgentRow } from './AgentsTable'
 // 🔴 Never import AppShell, PhoneFrame or hideNav (AD11, trap 15).
 export const dynamic = 'force-dynamic'
 
-export default async function AgentsPage() {
+export default async function AgentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
+  const { error } = await searchParams
   const agents = await prisma.profile.findMany({
     where: { role: 'agent' },
     select: {
@@ -35,6 +40,7 @@ export default async function AgentsPage() {
       agentVehicle: true,
       safetyTrainedAt: true,
       agentRating: true,
+      dutyStatus: true,
       _count: { select: { assignedPickups: { where: { status: { in: [...LIVE_JOB_STATUSES] } } } } },
     },
     orderBy: { fullName: 'asc' },
@@ -48,11 +54,16 @@ export default async function AgentsPage() {
     safetyTrainedLabel: a.safetyTrainedAt ? formatIstDate(a.safetyTrainedAt) : null,
     rating: a.agentRating !== null ? Number(a.agentRating) : null,
     liveLoad: a._count.assignedPickups,
+    onDuty: a.dutyStatus === 'on_duty',
   }))
 
   return (
     <>
-      <PageHead title="Agent roster" description="Zone, vehicle, safety training, rating and live job load." />
+      <PageHead
+        title="Agent roster"
+        description="Zone, vehicle, safety training, rating, live job load — and who is on duty. An off-duty agent is shown to dispatch as unavailable and cannot be assigned."
+      />
+      {error ? <Notice tone="error">{error}</Notice> : null}
       <AgentsTable rows={rows} />
     </>
   )

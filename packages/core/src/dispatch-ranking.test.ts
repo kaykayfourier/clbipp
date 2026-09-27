@@ -28,6 +28,7 @@ function agent(over: Partial<AgentSignals> = {}): AgentSignals {
     zone: null,
     vehicle: null,
     safetyTrainedAt: TRAINED,
+    dutyStatus: "on_duty",
     liveJobs: 0,
     jobsOnTargetDay: 0,
     lastLocation: null,
@@ -52,6 +53,29 @@ describe("haversineKm", () => {
 });
 
 describe("availabilityOf", () => {
+  it("🔴 FV15: marks an off-duty agent unavailable, with the reason", () => {
+    const r = availabilityOf(agent({ dutyStatus: "off_duty" }));
+    expect(r).toEqual({ availability: "unavailable", reason: "off_duty" });
+  });
+
+  it("FV15: off duty outranks missing training — the most specific fact wins", () => {
+    const r = availabilityOf(agent({ dutyStatus: "off_duty", safetyTrainedAt: null }));
+    expect(r.reason).toBe("off_duty");
+  });
+
+  it("FV15: an off-duty agent never tops the ranking, however close", () => {
+    const ranked = rankAgents(
+      [
+        agent({ agentId: "off", fullName: "Off Duty", dutyStatus: "off_duty", lastLocation: { ...NEHRU_PLACE, at: NOW } }),
+        agent({ agentId: "on", fullName: "On Duty", lastLocation: { ...SAKET, at: NOW } }),
+      ],
+      NEHRU_PLACE,
+      NOW,
+    );
+    expect(ranked[0].agentId).toBe("on");
+    expect(ranked[1].summary).toBe("Off duty");
+  });
+
   it("marks an untrained agent unavailable", () => {
     // Real in this codebase: requireSafetyChecklist gates every intake screen,
     // so an untrained agent cannot progress a job they are given.

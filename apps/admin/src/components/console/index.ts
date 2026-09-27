@@ -19,6 +19,7 @@ export * from './split-bar'
 export * from './drawer'
 export * from './confirm-dialog'
 export * from './states'
+export * from './blocks'
 // Fixtures are deliberately NOT re-exported. They are sample data for building
 // and reviewing a component in isolation, and a barrel export is exactly how
 // sample data ends up imported into a real screen by accident. Import

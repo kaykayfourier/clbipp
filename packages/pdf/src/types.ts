@@ -34,6 +34,12 @@ export interface CertificateDoc {
   totalWeightKg: number
   materials: MaterialLine[]
   co2AvoidedKg: number | null
+  /**
+   * FV13 · FD17 — mass routed to a refurbisher for a second life. Printed as
+   * its own line, never inside `materials`: a reused battery recovered no
+   * metal. Null or 0 prints nothing (every certificate minted before FV13).
+   */
+  secondLifeKg: number | null
   certifiedAt: Date
   /** Printed for manual verification against the public record. */
   publicToken: string
@@ -57,6 +63,12 @@ export interface ReceiptDoc {
   capturedLat: number | null
   capturedLng: number | null
   publicToken: string
+  /**
+   * FV10 · FD12 — the tag on each collected line, so the vendor's own copy of
+   * the receipt names the labels their batteries left with. `tagCode` null
+   * means the line left untagged (FD13) and the hub tags it on receipt.
+   */
+  lines: Array<{ description: string; tagCode: string | null }>
 }
 
 /** One priced line on the invoice. */
@@ -91,6 +103,14 @@ export interface InvoiceDoc {
   paymentMethod: string | null
 }
 
+/**
+ * The chain-of-custody receipt for one hub drop-off (CustodyBatch).
+ *
+ * FV12 (2026-09-27) rebuilt this shape: it used to carry one weight per pickup
+ * read off the superseded `approxWeightKg` column, and an `itemCount` the
+ * template labelled "Pickups in batch". It now lists every LINE with its tag
+ * and the box it travelled in — the records feedback §4.2 asks for.
+ */
 export type CustodyDoc = {
   batchNo: string
   agentName: string
@@ -99,11 +119,34 @@ export type CustodyDoc = {
   lat: number | null
   lng: number | null
   totalWeightKg: number
-  itemCount: number
   receivingStaffName: string
+  /** The collection runs these pickups were on, if any (FV11). */
+  runNos: string[]
+  /** Every transport box a line in this batch travelled in (FV11). */
+  containers: Array<{ code: string; label: string }>
   pickups: Array<{
     pickupId: string
     vendorName: string
-    weightKg: number | null
+    weightKg: number
+    lines: Array<{
+      description: string
+      weightKg: number
+      tagCode: string | null
+      containerCode: string | null
+      /** FD13 — why this line left untagged, when it did. */
+      untaggedReason: string | null
+    }>
   }>
+}
+
+/** A sheet (or several) of pre-issued battery tags — FV10 · FD12. */
+export type TagLabelsDoc = {
+  issueBatch: string
+  issuedAt: Date
+  codes: string[]
+}
+
+/** Permanent QR labels for reusable transport boxes — FV11 · FD14. */
+export type ContainerLabelsDoc = {
+  containers: Array<{ code: string; label: string; capacityKg: number | null }>
 }

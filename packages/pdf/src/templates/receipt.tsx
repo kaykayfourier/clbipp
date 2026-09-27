@@ -50,6 +50,23 @@ export function ReceiptTemplate({ doc }: { doc: ReceiptDoc }) {
           <Row label="Agreed payout" value={formatPaise(doc.amountPaise)} last />
         )}
 
+        {/* FV10 · FD12. The label each line left with, so the vendor's copy
+            names what the hub will scan. A line with no tag left untagged for
+            a recorded reason (FD13) — the hub tags it on receipt. */}
+        {doc.lines.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>BATTERY TAGS</Text>
+            {doc.lines.map((line, i) => (
+              <Row
+                key={`${line.description}-${i}`}
+                label={line.description}
+                value={line.tagCode ?? 'Tagged at the hub'}
+                last={i === doc.lines.length - 1}
+              />
+            ))}
+          </>
+        )}
+
         <Text style={styles.sectionLabel}>HANDOVER</Text>
         <Row
           label="Collected by"

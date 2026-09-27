@@ -136,6 +136,15 @@ export async function assignPickup(input: {
   // undoable.
   const confirmState = await agentStateAtConfirm(agentId, slot)
   if (!confirmState.exists) return { error: 'That agent does not exist.' }
+  // FV15 · FD19. Off duty is a fact an admin recorded, not a workload
+  // judgement — the selector shows the row disabled, and assigning past it
+  // would hand a job to someone who is not working. Toggle them on /agents
+  // first if that is wrong.
+  if (confirmState.offDuty) {
+    return {
+      error: `${agent.fullName} is marked off duty. Mark them on duty from the agent roster first, or pick another agent.`,
+    }
+  }
   if (!confirmState.safetyTrained) {
     return {
       error: `${agent.fullName} has no safety training on file and cannot start an intake. Pick another agent.`,
@@ -174,6 +183,11 @@ export async function assignPickup(input: {
         // whatever the OLD job was worth. B's Batch 4 computes it at collection,
         // so null is the correct value for a job that has not been done yet.
         agentFeePaise: null,
+        // FV11. A single assignment is a job OUTSIDE any run. A reactivated
+        // pickup can still point at the run it was on before it was cancelled;
+        // leaving that would put it on a stranger's run sheet.
+        collectionRunId: null,
+        runSequence: null,
       },
     })
     if (updated.count === 0) return false

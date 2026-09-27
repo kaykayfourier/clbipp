@@ -22,7 +22,7 @@ export default async function FacilitiesPage() {
       orderBy: { name: 'asc' },
     }),
     prisma.recycler.findMany({
-      select: { id: true, name: true, cpcbRegNo: true, acceptedChemistries: true, capacityKg: true, isActive: true },
+      select: { id: true, name: true, cpcbRegNo: true, acceptedChemistries: true, capacityKg: true, isActive: true, kind: true },
       orderBy: { name: 'asc' },
     }),
     computeFacilityStock(),
@@ -45,6 +45,7 @@ export default async function FacilitiesPage() {
   const recyclerRows: RecyclerRow[] = recyclers.map((r) => ({
     id: r.id,
     name: r.name,
+    kind: r.kind,
     cpcbRegNo: r.cpcbRegNo,
     acceptedChemistries: r.acceptedChemistries,
     capacityKg: r.capacityKg !== null ? Number(r.capacityKg) : null,
@@ -53,7 +54,7 @@ export default async function FacilitiesPage() {
 
   return (
     <>
-      <PageHead title="Facilities & recyclers" description="Hubs we operate, and the CPCB-registered recyclers we ship to." />
+      <PageHead title="Facilities & recyclers" description="Hubs we operate, and the CPCB-registered partners we ship to — recyclers for material recovery, refurbishers for second life." />
       <FacilitiesTables facilities={facilityRows} recyclers={recyclerRows} />
     </>
   )

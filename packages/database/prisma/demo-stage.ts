@@ -88,7 +88,18 @@ async function list() {
       offer: { select: { acceptedAt: true } },
       certificate: { select: { id: true } },
       payment: { select: { status: true } },
-      items: { select: { id: true, chemistry: true, quoteData: true } },
+      items: {
+        select: {
+          id: true,
+          chemistry: true,
+          quoteData: true,
+          // feedback_logistics — what the physical chain says about each line.
+          untaggedReason: true,
+          tag: { select: { code: true } },
+          custodyCheck: { select: { outcome: true } },
+        },
+      },
+      collectionRun: { select: { runNo: true } },
     },
   });
 
@@ -111,6 +122,16 @@ async function list() {
     const notes: string[] = [];
     if (p.status === "collected" && !p.custodyBatchId)
       notes.push("pending drop-off — agent must hand off at the hub");
+    // FV12 · FD15 — the gate on collected → tested.
+    if (p.status === "collected" && p.custodyBatchId) {
+      const received = p.items.filter((i) => i.custodyCheck?.outcome === "received").length;
+      if (received < p.items.length)
+        notes.push(`awaiting hub check-in ${received}/${p.items.length} — /custody/<batch> in the console`);
+    }
+    // FV10 · FD13 — a line that left untagged is tagged at the hub.
+    const untagged = p.items.filter((i) => !i.tag && i.untaggedReason).length;
+    if (untagged > 0) notes.push(`${untagged} line(s) untagged — hub tags on receipt`);
+    if (p.collectionRun) notes.push(`on ${p.collectionRun.runNo}`);
     if (p.status === "requested" && p.agentId)
       notes.push("🔴 stale agent (reactivated) — dispatch clears it");
     if (p.status === "offered" && !p.offer?.acceptedAt)
@@ -252,6 +273,19 @@ async function reset(pickupId: string, dryRun: boolean) {
       await tx.itemException.deleteMany({
         where: { batteryItemId: { in: itemIds } },
       });
+      // The collection receipt. ⚠ Missing until 2026-09-27: `pickupReceipt.
+      // pickupId` is unique, so a reset pickup could never be collected again —
+      // confirmCollection's create hit the constraint and rolled back.
+      await tx.pickupReceipt.deleteMany({ where: { pickupId } });
+      // feedback_logistics — the physical chain. Tags go back to UNUSED (the
+      // code can be scanned onto a line again), hub check-ins are dropped.
+      // ⚠ Wallet rows are NOT touched, same as before: they are a ledger, and
+      // deleting a credit would desync `walletBalancePaise` from it.
+      await tx.custodyItemCheck.deleteMany({ where: { batteryItemId: { in: itemIds } } });
+      await tx.itemTag.updateMany({
+        where: { batteryItemId: { in: itemIds } },
+        data: { batteryItemId: null, containerId: null, boundBy: null, boundAt: null, boundAtHub: false },
+      });
 
       // Every status event except the original `requested` one. Keeping that
       // one means the pickup still has a real booking moment on its timeline
@@ -277,6 +311,12 @@ async function reset(pickupId: string, dryRun: boolean) {
           damageThermal: null,
           damageScore: null,
           pathway: null,
+          // FV2 · FV5 · FV10 — the agent's half grew; reset all of it.
+          weightMethod: null,
+          weightPhotoUrl: null,
+          pathwaySetBy: null,
+          pathwayReason: null,
+          untaggedReason: null,
           unitPricePaise: null,
           linePricePaise: null,
           quoteData: undefined,
@@ -294,6 +334,12 @@ async function reset(pickupId: string, dryRun: boolean) {
           agentFeePaise: null,
           custodyBatchId: null,
           etaMinutes: null,
+          // FV3 · FV11 — the inspection/collection dates and any run membership.
+          inspectedAt: null,
+          collectionScheduledAt: null,
+          collectedAt: null,
+          collectionRunId: null,
+          runSequence: null,
         },
       });
     },

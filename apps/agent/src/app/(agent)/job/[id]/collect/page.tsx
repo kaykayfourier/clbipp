@@ -12,10 +12,12 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
+import { chemistryLabel } from '@clbipp/core/intake'
 import { AppShell, Banner, Button, PagePadding } from '@clbipp/ui'
 
 import { requireSafetyChecklist } from '@/lib/safety-gate'
 import { CollectForm } from './CollectForm'
+import { TagLoad } from './TagLoad'
 import { computeAgentFeePaise } from './agent-fee'
 
 export default async function Page({
@@ -23,10 +25,10 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; ok?: string }>
 }) {
   const { id } = await params
-  const { error } = await searchParams
+  const { error, ok } = await searchParams
 
   const supabase = await createClient()
   const {
@@ -45,6 +47,31 @@ export default async function Page({
       vendor: { select: { fullName: true } },
       offer: { select: { acceptedAt: true, estimatedPrice: true } },
       _count: { select: { items: true } },
+      // FV10–FV11 — the lines to tag, and the boxes loaded on this job's run.
+      items: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          category: true,
+          quantity: true,
+          chemistry: true,
+          weightKg: true,
+          confirmedWeightKg: true,
+          untaggedReason: true,
+          tag: { select: { code: true, container: { select: { code: true } } } },
+        },
+      },
+      collectionRun: {
+        select: {
+          runNo: true,
+          agentId: true,
+          containers: {
+            where: { unloadedAt: null },
+            orderBy: { loadedAt: 'asc' },
+            select: { container: { select: { id: true, code: true, label: true } } },
+          },
+        },
+      },
     },
   })
   if (!pickup) redirect('/')
@@ -95,15 +122,38 @@ export default async function Page({
     )
   }
 
+  const lines = pickup.items.map((i) => ({
+    id: i.id,
+    category: i.category,
+    quantity: i.quantity,
+    chemistryLabel: i.chemistry ? (chemistryLabel(i.chemistry) ?? i.chemistry) : null,
+    weightKg: Number(i.confirmedWeightKg ?? i.weightKg ?? 0),
+    tagCode: i.tag?.code ?? null,
+    boxCode: i.tag?.container?.code ?? null,
+    untaggedReason: i.untaggedReason,
+  }))
+  // 🔴 FD13 — every line tagged OR explained. confirmCollection re-checks.
+  const tagsComplete = lines.length > 0 && lines.every((l) => l.tagCode || l.untaggedReason)
+  const run = pickup.collectionRun && pickup.collectionRun.agentId === user.id ? pickup.collectionRun : null
+
   return (
     <AppShell title="Collect" showBack backHref={`/job/${id}/offer`} hideNav>
       <PagePadding className="flex flex-col gap-4">
         {error && <Banner variant="error">{error}</Banner>}
+        {ok && <Banner variant="success">{ok}</Banner>}
+        <TagLoad
+          pickupId={id}
+          lines={lines}
+          boxes={run ? run.containers.map((c) => c.container) : []}
+          runNo={run?.runNo ?? null}
+          returnTo={`/job/${id}/collect`}
+        />
         <CollectForm
           pickupId={id}
           userId={user.id}
           vendorName={pickup.vendor.fullName}
           agentFeePaise={computeAgentFeePaise(pickup._count.items)}
+          tagsComplete={tagsComplete}
         />
       </PagePadding>
     </AppShell>

@@ -315,8 +315,8 @@ Headlines you need even if you read nothing else:
   wireframe's dark rail is carried as a separate `--console-*` block in
   `apps/admin/src/app/globals.css`. **Build the console kit against the shared
   tokens.**
-- **The admin sidebar is five groups / sixteen items**, not the wireframe's four
-  and twelve — the wireframe's nav predates §0 and omits dispatch, pickups and
+- **The admin sidebar is five groups / nineteen items** (sixteen until
+  2026-09-27 added Runs, Boxes and Tags), not the wireframe's four and twelve — the wireframe's nav predates §0 and omits dispatch, pickups and
   manifests, which are the P0 screens. It lives in one file,
   `apps/admin/src/components/shell/nav.ts`; **adding a screen means adding it
   there**, and no screen derives navigation independently.
@@ -332,7 +332,7 @@ nobody else creates a file A also creates. Each owner only ever *replaces* their
 own stub. **Both are done as of 2026-08-26**, so no lane is waiting on a file to
 exist.
 
-## Post-presentation feedback (FV1–FV8) — THE CURRENT WORK
+## Post-presentation feedback (FV1–FV16) — THE CURRENT WORK
 
 The company reviewed the finished three-app platform and sent
 `docs/CLBIPP_Presentation_Feedback_Changes.docx` — eleven changes, P0–P2. A
@@ -341,15 +341,18 @@ a **pilot with a handful of agents**, and they want the **decision engine
 possibly switched off** for it, with a human step (a call to the office)
 retained.
 
-**Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV8, decisions
-**FD0–FD11**, an as-built section per batch, and **§8, which is the written
-answer to the question the company is most likely to ask next** (off-duty
-availability).
+**Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV16, decisions
+**FD0–FD19**, an as-built section per batch (§10 for FV9–FV16), and §8 (the
+availability gaps: off duty is now built, working hours and a roster are not).
+🔴 **As of 2026-09-27 the company works iteratively — "build something, we
+react"** — so expect the next round to be their reaction to what exists, not a
+specification.
 
 ⚠ The 43 open questions (`docs/CLBIPP_Open_Questions_2026-09-10.html`) were sent
 and **never answered** — the company was undecided about each phase. Nothing is
 blocked on them any more; the five blocking ones were answered in-house as
-FD7–FD11. Don't re-send that document expecting it to gate anything.
+FD7–FD11, and everything the document left open after that as FD12–FD19.
+Don't re-send that document expecting it to gate anything.
 
 ⚠ **Decision-set collision.** This repo now carries four: **D1–D7** (customer),
 **D0–D10** (agent), **AD0–AD12** (admin) and **FD0–FD11** (this set). The same
@@ -362,8 +365,14 @@ letter+number means different things in each. **Quote the decision with its set.
   collection · the dispatch board's filters, sorting and workload · Second Life
   vs Recycling · the agent price override and the call-the-office links.
   **No migration was needed**: every column they use shipped in `feedback_v2`.
-- ⛔ **FV7 (tags, QR containers, same-day grouping) is NOT started, BY DECISION**
-  — FD11, not a blocker. No printer and no labels exist for the pilot.
+- ✅ **FV9–FV16 built (2026-09-27) — the WHOLE feedback document is now done.**
+  The company moved to "build something, we react", so §4 (battery tags, QR
+  transport boxes, same-day runs), §5's second-life *destination*, §3.1's
+  scale-reading photo and §2.1's optional filters were built in one pass, plus
+  §8 Step 1's duty flag. Decisions **FD12–FD19 are OURS and provisional**
+  (§9.2 of the plan); **FD12 reverses FD11** — the office prints tag sheets, the
+  van carries them. One additive migration, `feedback_logistics`. Read §9–§10
+  of `docs/PLAN_FEEDBACK_V2.md` before touching any of it.
 - ✅ **FV8 built (2026-09-23)** — the **ranked agent selector** on
   `/dispatch/[id]`, from `docs/field agent selection.txt` (the company's
   expansion of feedback §2.2). Availability → today's workload → total live
@@ -381,18 +390,14 @@ letter+number means different things in each. **Quote the decision with its set.
   ⚠ `assignPickup` re-reads the agent via `agentStateAtConfirm()` at write time
   (two admins assigning at once); it refuses on the safety gate only — a full
   day is a warning, never a block.
-- 🔴 **EXPECT "why doesn't it show who's off duty today".** The company's notes
-  ask for it and their example UI shows `Ramesh — Unavailable today`; we did
-  **not** build it, because **this database has no duty state, no working hours
-  and no roster** — `Profile` knows an agent's zone, vehicle, rating and safety
-  training and nothing about whether they are working. A screen that says
-  "Available" because nobody recorded otherwise asserts a fact nobody knows.
-  **§8 of `docs/PLAN_FEEDBACK_V2.md` is the written answer and the build path**
-  — a `DutyStatus` enum on `Profile` is a half-day and covers ~80% of it.
-  🔴 Every availability question routes through **`availabilityOf()`** in
-  `@clbipp/core/dispatch-ranking` precisely so that fix is one branch in one
-  function; consumers already render an `unavailable` agent correctly. Don't
-  add a second availability check anywhere.
+- ✅ **"Why doesn't it show who's off duty today" — Step 1 is now BUILT**
+  (FV15, 2026-09-27): `Profile.dutyStatus`, toggled by an admin on `/agents`,
+  shows as **Unavailable · Off duty** and is refused at assignment. Still NOT
+  built, and still the answer if pressed: working hours, time-window conflicts
+  and a roster (§8 Steps 2–4 of `docs/PLAN_FEEDBACK_V2.md`) — the database has
+  none of that data. 🔴 Every availability question still routes through
+  **`availabilityOf()`** in `@clbipp/core/dispatch-ranking`; don't add a second
+  availability check anywhere.
   ⚠ Related gaps, all deliberate and all in §8: conflicts are counted **per day,
   not per time window** (so never "conflicts with the 13:00"), and
   `Profile.agentZone` is **displayed but does not affect ranking**.
@@ -409,6 +414,53 @@ letter+number means different things in each. **Quote the decision with its set.
   admin role gate in both wrong-role directions. The admin run asserts the
   ranked selector's own strings, so it proves the screen renders off real data
   rather than merely that a route exists.
+
+**The rules FV9–FV16 put in place (2026-09-27), which new code must not undo:**
+
+- 🔴 **A run, a box, a tag and a hub check-in are FACTS, not stages.** The nine
+  stages stay locked (FD0). No migration in this round added a `PickupStatus`.
+- 🔴 **Every collected line carries a tag OR a recorded reason** (FD13),
+  enforced in `confirmCollection`, not only by the disabled button. One tag per
+  `BatteryItem` (a line IS the lot). Tags are **pre-issued** rows in
+  `item_tags` — a code nobody issued is refused, never created on the fly.
+- 🔴 **`parseCode()` in `@clbipp/core/tags` is the ONE reader of a scanned or
+  typed code** (normalises case/dash/O-I-L, verifies the check character). The
+  seed RESTATES `checkChar` (database must not import core) — the codes pinned
+  in `tags.test.ts` are what catch drift. Change the algorithm in both or in
+  neither.
+- 🔴 **Hub check-in gates `collected → tested`** (FD15). `advanceCustodyBatch`
+  moves only pickups whose EVERY line has a `received` `custody_item_checks`
+  row; a missing line holds its pickup (AD6's rule, one edge earlier).
+  `pickupCheckState()` in `@clbipp/core/custody-check` is the one reading —
+  the button, the count and the write all use it. A scan writes no audit row;
+  a by-hand line (`custody.reconcile`) needs a reason.
+- 🔴 **A transport box is NOT the `CustodyBatch`** (J3 · FD14). A box is a
+  reusable object on `run_containers`; a custody batch is a hand-off event.
+  They are linked through the items (`item_tags.container_id`), never merged.
+  A box is on at most one open run. A run completes — and its boxes come free —
+  at the drop-off that leaves no stop to visit and nothing in the van, or when
+  the agent ends it with nothing in the van. A mid-run drop-off keeps the run
+  open and the boxes on it.
+- 🔴 **`runStopEligibility()` in `@clbipp/core/run-planning` is the one rule for
+  what may be a run stop** — the builder renders with it and
+  `createCollectionRun` refuses with it. Runs are SUGGESTED, never auto-built,
+  and never assign anyone the dispatcher did not pick (FV8's rule). A run's
+  `requested` stops are assigned by it (with the same `scheduled` event and
+  `pickup.assign` audit row `/dispatch` writes).
+- 🔴 **Second life ships to a REFURBISHER** (FD17): `Recycler.kind`, and
+  `isShippableTo(kind, pathway)` in `@clbipp/core/pathway`, enforced in
+  `createManifest` and `dispatchManifest`. A refurbisher reconciliation records
+  `outcomeNote`, never metals, and the certificate carries `secondLifeKg`
+  BESIDE the materials — never inside them. This closed a real defect: a pickup
+  with a second-life line could never advance past `tested`.
+- ⚠ **Priority and load size are derived on every render** (FD18,
+  `@clbipp/core/dispatch-priority`) — never stored.
+- ⚠ **Off duty is `Profile.dutyStatus`, read ONLY via `availabilityOf()`**
+  (FD19). Assignment and run building refuse an off-duty agent. There are still
+  no working hours and no roster (§8 Steps 2–4).
+- ⚠ **Five new tables are RLS-on, zero policies** (AD3 posture), enabled inside
+  the migration itself because `grants.sql` grants `anon` SELECT on every
+  future table.
 
 **The rules FV1 and FV2 put in place, which new code must not undo:**
 
@@ -721,7 +773,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 361 (core 294, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 420 (core 353, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -764,7 +816,7 @@ cd packages/core && npx vitest run src/booking.test.ts
 npm run db:migrate --workspace=@clbipp/database        # Apply schema changes (LOCAL/new DB)
 npm run reset-demo                                     # Wipe + reseed the demo data
 # Assert the seeded FIXTURES still have the shape the next batch is built
-# against — 27 checks, read-only, non-zero exit. `smoke` proves a route renders
+# against — 38 checks, read-only, non-zero exit. `smoke` proves a route renders
 # and `test` proves pure logic; neither can catch a fixture quietly vanishing.
 # 🔴 Run it after every reseed, and add a check when you add a fixture.
 # ⚠ Dispatching a seeded request from /dispatch legitimately BREAKS two of its
@@ -852,10 +904,10 @@ keeps every lane moving in parallel without anyone touching another's files.
   push.** Pre-push commands, git workflow, shared-database rules, the traps that
   pass review, and the two orderings that actually matter.
 - `docs/PLAN_FEEDBACK_V2.md` — **the current work.** The company's
-  post-presentation feedback mapped onto the three apps: batches FV1–FV8,
-  decisions **FD0–FD11**, as-built notes per batch, the 2026-09-10
-  database-wipe incident and the rules taken from it, and **§8 — the deliberate
-  availability gaps and how to close them when asked.**
+  post-presentation feedback mapped onto the three apps: batches FV1–FV16,
+  decisions **FD0–FD19**, as-built notes per batch (§10: tags, boxes, runs, hub
+  check-in, second life, duty), the 2026-09-10 database-wipe incident and the
+  rules taken from it, and **§8 — the availability gaps still open.**
 - `docs/CLBIPP_Presentation_Feedback_Changes.docx` — the company's feedback
   itself. Eleven changes with their own P0–P2 priorities.
 - `docs/CLBIPP_Open_Questions_2026-09-10.html` — the 43 questions sent back

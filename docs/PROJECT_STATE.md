@@ -1,23 +1,27 @@
 # CLBIPP — Project State
 
-> **2026-09-27 — the feedback round is the current work, and it is DONE.**
+> **2026-09-27 (evening) — the WHOLE feedback document is built (FV1–FV16).**
 > The company reviewed the finished three-app platform and sent eleven changes
-> (`docs/CLBIPP_Presentation_Feedback_Changes.docx`), plus a meeting that added
-> a pilot phase and a possible engine-off mode, plus
-> `docs/field agent selection.txt` expanding §2.2 into a ranked agent selector.
-> Tracked in `docs/PLAN_FEEDBACK_V2.md` as **FV1–FV8**.
+> (`docs/CLBIPP_Presentation_Feedback_Changes.docx`). P0 + P1 shipped by
+> 2026-09-23 (FV1–FV8, live). On 2026-09-27 they moved to an iterative loop —
+> "build something, we react" — so the rest was built: **battery tags** (office
+> prints sticker sheets; agent scans one onto each line at collection), **QR
+> transport boxes** and **same-day collection runs** (the board suggests, a
+> dispatcher builds), **hub check-in** gating `collected → tested`, **second
+> life routed to a refurbisher**, dispatch **type / size / priority** filters,
+> the **scale-reading photo**, and the **off-duty** flag. Tracked as
+> **FV9–FV16** in `docs/PLAN_FEEDBACK_V2.md` §9–§10.
 >
-> ✅ **Every P0 and every P1 is built, pushed and live.** Verified against
-> production 2026-09-23: **102 routes** + `verify-seed` 27/27 + the admin role
-> gate both ways. Only §4 of the feedback (tags, QR transport boxes, same-day
-> grouping) is untouched — **declined for the pilot** (FD11), not blocked.
+> 🔴 **State of FV9–FV16: built and verified locally, NOT pushed.** The one
+> migration (`feedback_logistics`, additive) IS applied to the shared project,
+> and the live apps run fine on it. Pushing is Aamir's call — then run the three
+> production smokes.
 >
 > **Read `docs/PLAN_FEEDBACK_V2.md` — its "STATE AS OF" block is the handover.**
-> Three things matter going in: **§8** is the written answer to the off-duty
-> availability question the company will most likely ask next; **FD7–FD11 are
-> our own provisional calls**, not their answers (they never replied to the 43
-> questions); and **the manual pass has not happened** — everything is verified
-> programmatically, nothing by a human eye.
+> **FD7–FD19 are our own provisional calls**, not the company's answers (they
+> never replied to the 43 questions); FD12 reversed FD11. **The manual pass has
+> not happened** — cameras on real phones, a printed sheet, a USB scanner at the
+> hub — see `docs/MANUAL_TEST_QUEUE.md`.
 >
 > ⚠ **All three apps are live** — `clbipp-customer`, `clbipp-agent`,
 > `clbipp-admin` on `vercel.app`. A push to `main` deploys all three. The admin
@@ -30,7 +34,7 @@
 > decisions, conventions) see `CONTEXT.md`. For how to maintain these files see
 > `HANDOFF_PROTOCOL.md`.
 
-**Last updated:** 2026-09-27 (feedback round FV1–FV8 complete and live; see the block above). Before that, 2026-08-31 — 🎯 **every screen in the Admin console sprint is
+**Last updated:** 2026-09-27 evening (feedback round FV1–FV16 complete; FV9–FV16 local, not yet pushed — see the block above). Before that, 2026-08-31 — 🎯 **every screen in the Admin console sprint is
 built, AND DEPLOYED.** ⚠ Batch 17 (deploy) was listed here as outstanding long after `https://clbipp-admin.vercel.app` was live and serving — corrected 2026-09-23. All three apps deploy off `main`. A's lane finished today with
 Batches 6 and 7 (the lifecycle holes), **Batch 14 (`/exceptions` + `/audit`)**
 and **Batch 11 (`/config` + the engine-config publish path)**; B's and C's

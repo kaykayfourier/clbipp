@@ -194,3 +194,51 @@ describe("buildCertificatePayload — measured recovery (AD5/AD6)", () => {
     );
   });
 });
+
+describe("buildCertificatePayload — second life (FV13 · FD17)", () => {
+  /** 60 kg sent to a refurbisher, 40 kg recycled. */
+  function splitPickup(offerBreakdown: unknown) {
+    const base = pickup(offerBreakdown);
+    return {
+      ...base,
+      items: [
+        { ...base.items[0], pathway: "refurbish" },
+        { ...base.items[1], pathway: "recycle" },
+      ],
+    };
+  }
+
+  it("states the second-life mass separately", async () => {
+    db.pickup.findUniqueOrThrow.mockResolvedValue(splitPickup(null));
+    const out = await buildCertificatePayload("PKP-1");
+    expect(out.secondLifeKg).toBe(60);
+    expect(out.totalWeightKg).toBe(100);
+  });
+
+  it("🔴 scales the estimate to the RECYCLED share — a refurbished pack recovered no metal", async () => {
+    db.pickup.findUniqueOrThrow.mockResolvedValue(splitPickup([{ material: "Nickel", weight_kg: 20 }]));
+    const out = await buildCertificatePayload("PKP-1");
+    // 40 of the 100 kg was broken down, so 40% of the engine's estimate.
+    expect(out.materialSummary).toEqual([{ material: "Nickel", recovered_kg: 8 }]);
+    expect(out.materialSource).toBe("estimated");
+  });
+
+  it("claims no materials at all when the whole pickup went to second life", async () => {
+    const base = splitPickup([{ material: "Nickel", weight_kg: 20 }]);
+    db.pickup.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      items: base.items.map((i) => ({ ...i, pathway: "reuse" })),
+    });
+    const out = await buildCertificatePayload("PKP-1");
+    expect(out.materialSummary).toEqual([]);
+    expect(out.materialSource).toBe("none");
+    expect(out.secondLifeKg).toBe(100);
+  });
+
+  it("is zero for an all-recycling pickup, and changes nothing else", async () => {
+    db.pickup.findUniqueOrThrow.mockResolvedValue(pickup([{ material: "Lead", recovered_kg: 4 }]));
+    const out = await buildCertificatePayload("PKP-1");
+    expect(out.secondLifeKg).toBe(0);
+    expect(out.materialSummary).toEqual([{ material: "Lead", recovered_kg: 4 }]);
+  });
+});

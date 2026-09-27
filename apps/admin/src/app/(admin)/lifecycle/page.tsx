@@ -4,6 +4,8 @@ import { prisma } from '@clbipp/database'
 import { chemistryLabel } from '@clbipp/core/intake'
 import { LIFECYCLE_STAGES, STAGE_LABELS } from '@clbipp/ui'
 
+import { pickupCheckState } from '@clbipp/core/custody-check'
+
 import { formatAge, formatIstDateTime } from '@/lib/ist'
 import {
   loadItemManifestIndex,
@@ -62,13 +64,14 @@ export default async function LifecyclePage({
   searchParams: Promise<{
     error?: string
     advanced?: string
+    held?: string
     certified?: string
     already?: string
     overrode?: string
     to?: string
   }>
 }) {
-  const { error, advanced, certified, already, overrode, to } = await searchParams
+  const { error, advanced, held, certified, already, overrode, to } = await searchParams
 
   const [batches, staged, itemIndex] = await Promise.all([
     prisma.custodyBatch.findMany({
@@ -86,6 +89,8 @@ export default async function LifecyclePage({
             id: true,
             status: true,
             vendor: { select: { fullName: true, companyName: true } },
+            // FV12 · FD15 — the hub check-in, per line.
+            items: { select: { id: true, custodyCheck: { select: { outcome: true } } } },
           },
         },
       },
@@ -115,10 +120,23 @@ export default async function LifecyclePage({
   const pendingDropOff = collected.filter((p) => p.custodyBatchId === null)
 
   const advanceableBatches = batches
-    .map((b) => ({
-      ...b,
-      waiting: b.pickups.filter((p) => p.status === 'collected'),
-    }))
+    .map((b) => {
+      const waiting = b.pickups.filter((p) => p.status === 'collected')
+      const states = waiting.map((p) =>
+        pickupCheckState(
+          p.id,
+          p.items.map((i) => ({ itemId: i.id, outcome: i.custodyCheck?.outcome ?? null })),
+        ),
+      )
+      return {
+        ...b,
+        waiting,
+        readyIds: new Set(states.filter((s) => s.ready).map((s) => s.pickupId)),
+        linesTotal: states.reduce((n, s) => n + s.total, 0),
+        linesReceived: states.reduce((n, s) => n + s.received, 0),
+        linesMissing: states.reduce((n, s) => n + s.missing, 0),
+      }
+    })
     .filter((b) => b.waiting.length > 0)
 
   // ── tested ─────────────────────────────────────────────────────────────────
@@ -156,6 +174,7 @@ export default async function LifecyclePage({
         <Banner tone="success">
           Advanced {advanced} pickup{advanced === '1' ? '' : 's'} to tested. They are now shippable
           from <span className="font-mono text-[11px]">/manifests/new</span>.
+          {held ? ` ${held} held back — not every line was checked in at the hub.` : ''}
         </Banner>
       ) : null}
 
@@ -202,8 +221,8 @@ export default async function LifecyclePage({
       {/* ── collected → tested ─────────────────────────────────────────────── */}
       <Section
         stage="collected → tested"
-        unit="Unit: one custody batch"
-        blurb="Everything one agent handed in at one hub, tested as one load. Advancing writes a status event per pickup, all attributed to you — there is no hub-staff app, so this is an admin recording it on the hub's behalf."
+        unit="Unit: one custody batch — gated on the hub's check-in"
+        blurb="Everything one agent handed in at one hub, tested as one load — once the hub has checked every line in (FV12). A pickup with an unchecked or missing line is held. Advancing writes a status event per pickup, all attributed to you — there is no hub-staff app, so this is an admin recording it on the hub's behalf."
       >
         {advanceableBatches.length === 0 ? (
           <Empty>
@@ -224,17 +243,27 @@ export default async function LifecyclePage({
                       {formatIstDateTime(b.handedOffAt)} ({formatAge(b.handedOffAt, now)} ago)
                     </div>
                   </div>
-                  {/* POST, not a link — a GET would let a prefetcher advance
-                      the lifecycle (the customer app shipped exactly that bug). */}
-                  <form action={advanceCustodyBatchAction}>
-                    <input type="hidden" name="batchId" value={b.id} />
-                    <button
-                      type="submit"
-                      className="inline-flex items-center rounded-lg bg-primary-black px-3 py-1.5 text-xs font-bold text-primary-green transition-opacity hover:opacity-90"
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/custody/${b.id}`}
+                      className="inline-flex items-center rounded-lg border border-console-line px-3 py-1.5 text-xs font-bold text-text-primary hover:bg-background"
                     >
-                      Mark {b.waiting.length} tested
-                    </button>
-                  </form>
+                      Check in {b.linesReceived}/{b.linesTotal}
+                      {b.linesMissing > 0 ? ` · ${b.linesMissing} missing` : ''}
+                    </Link>
+                    {/* POST, not a link — a GET would let a prefetcher advance
+                        the lifecycle (the customer app shipped exactly that bug). */}
+                    <form action={advanceCustodyBatchAction}>
+                      <input type="hidden" name="batchId" value={b.id} />
+                      <button
+                        type="submit"
+                        disabled={b.readyIds.size === 0}
+                        className="inline-flex items-center rounded-lg bg-primary-black px-3 py-1.5 text-xs font-bold text-primary-green transition-opacity hover:opacity-90 disabled:opacity-40"
+                      >
+                        Mark {b.readyIds.size} tested
+                      </button>
+                    </form>
+                  </div>
                 </div>
                 <ul className="mt-3 flex flex-col gap-1 border-t border-console-line pt-3">
                   {b.waiting.map((p) => (
@@ -244,6 +273,9 @@ export default async function LifecyclePage({
                       </span>
                       <span className="text-text-secondary">
                         {p.vendor.companyName || p.vendor.fullName}
+                      </span>
+                      <span className={b.readyIds.has(p.id) ? 'text-success-text' : 'text-warning-text'}>
+                        {b.readyIds.has(p.id) ? '· checked in' : '· awaiting check-in'}
                       </span>
                     </li>
                   ))}

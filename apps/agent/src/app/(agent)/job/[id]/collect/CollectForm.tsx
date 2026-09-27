@@ -126,11 +126,14 @@ export function CollectForm({
   userId,
   vendorName,
   agentFeePaise,
+  tagsComplete,
 }: {
   pickupId: string
   userId: string
   vendorName: string
   agentFeePaise: number
+  /** FV10 · FD13 — every line tagged or explained. The action re-checks. */
+  tagsComplete: boolean
 }) {
   const [signaturePath, setSignaturePath] = useState<string | null>(null)
   const [photos, setPhotos] = useState<string[]>([])
@@ -170,7 +173,7 @@ export function CollectForm({
     if (landed.length > 0) setPhotos((prev) => [...prev, ...landed])
   }
 
-  const ready = signaturePath !== null && contactConfirmed
+  const ready = signaturePath !== null && contactConfirmed && tagsComplete
 
   return (
     <form action={confirmCollection} className="flex flex-col gap-4">
@@ -261,7 +264,9 @@ export function CollectForm({
       </Button>
       {!ready && (
         <p className="text-center text-[11px] text-text-secondary">
-          Get the signature and confirm with the vendor to continue.
+          {tagsComplete
+            ? 'Get the signature and confirm with the vendor to continue.'
+            : 'Tag every line above (or record why one has no tag), then get the signature.'}
         </p>
       )}
     </form>

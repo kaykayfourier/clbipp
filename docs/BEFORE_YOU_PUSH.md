@@ -62,6 +62,12 @@ All three of us point at **one Supabase project**. The two apps are separated by
 - **Announce before `npm run reset-demo`.** It wipes the data the other two are
   mid-test on.
 - **`reset-demo` is not recovery.** It restores rows — not grants, not policies.
+- ⚠ **`reset-demo` takes 10+ minutes against remote Supabase** (hundreds of
+  sequential round trips and photo uploads) — let it finish. Wrapped in a
+  `timeout 600` on 2026-09-27 it was killed half-way (exit 143) and left the
+  shared project with pickups but no tags, runs, exceptions or audit rows —
+  which reads as a broken app, not a killed seed. If that happens, just run it
+  again: it wipes first.
 - **Missing grants don't look like an outage.** The app *half*-works: Prisma
   pages render, Supabase-client pages render **empty with a 200**, API routes
   401, and `/onboarding` lets an onboarded session through — because the auth

@@ -16,6 +16,7 @@
     "@clbipp/decision-engine": "*",
     "@clbipp/pdf": "*",
     "@clbipp/ui": "*",
+    "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "next": "16.2.6",
     "react": "19.2.4",

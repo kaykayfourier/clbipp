@@ -28,6 +28,7 @@ export type AgentAvailability = "available" | "busy" | "unavailable";
  * rather than vanish: "That tells the admin why Ahmed isn't being recommended."
  */
 export type UnavailabilityReason =
+    | "off_duty"
     | "not_safety_trained"
     | "at_capacity"
     | "schedule_conflict"
@@ -51,6 +52,12 @@ export type AgentSignals = {
     vehicle: string | null;
     /** Null when the agent has never completed safety training. */
     safetyTrainedAt: Date | null;
+    /**
+     * FV15 · FD19 — `Profile.dutyStatus`, set by an admin on /agents. The one
+     * duty fact this database holds: no working hours, no roster (§8 of
+     * docs/PLAN_FEEDBACK_V2.md, Steps 2–4, still unbuilt).
+     */
+    dutyStatus: "on_duty" | "off_duty";
     /** Jobs in this agent's hands right now, from LIVE_JOB_STATUSES. */
     liveJobs: number;
     /** Of those, the ones scheduled for the day being dispatched. */
@@ -97,24 +104,29 @@ export function haversineKm(
 /**
  * Availability for one agent on the target day.
  *
- * ⚠ WHAT WE CAN HONESTLY DERIVE, AND NOTHING MORE. The notes describe off-duty
- * agents and working-hours windows; this codebase has no shift model, no
- * working hours and no duty roster, and inventing one here would be a screen
- * asserting a fact nobody recorded.
+ * ⚠ WHAT WE CAN HONESTLY DERIVE, AND NOTHING MORE. Two facts genuinely make an
+ * agent unable to take a job, and they are checked in this order:
  *
- * So `unavailable` means the one thing we genuinely know: an agent with no
- * `safetyTrainedAt` cannot legally start an intake — `requireSafetyChecklist`
- * gates every intake screen in the agent app — so assigning them a pickup gives
- * them a job they cannot progress. That is "otherwise cannot take the
- * assignment" in the notes' own words.
+ *   1. OFF DUTY (FV15 · FD19) — an admin recorded it on /agents. Checked first
+ *      because it is the most specific thing anyone told us: an off-duty agent
+ *      is off duty whatever their training says.
+ *   2. NO SAFETY TRAINING — `requireSafetyChecklist` gates every intake screen
+ *      in the agent app, so the job would sit undoable.
  *
- * Shift management is on the notes' later-enhancements list. When it lands,
- * this function is where it goes.
+ * There are still no working hours and no roster, and inventing either here
+ * would be a screen asserting a fact nobody recorded. `dutyStatus` is a
+ * standing flag, not a per-date one: it answers "is this person working at
+ * the moment", which is what a dispatcher assigning today's work is asking.
+ * §8 of docs/PLAN_FEEDBACK_V2.md is the path to per-day availability, and it
+ * lands in this function.
  */
 export function availabilityOf(agent: AgentSignals): {
     availability: AgentAvailability;
     reason: UnavailabilityReason;
 } {
+    if (agent.dutyStatus === "off_duty") {
+        return { availability: "unavailable", reason: "off_duty" };
+    }
     if (agent.safetyTrainedAt === null) {
         return { availability: "unavailable", reason: "not_safety_trained" };
     }
@@ -143,6 +155,7 @@ export const AVAILABILITY_LABELS: Record<AgentAvailability, string> = {
 };
 
 export const REASON_LABELS: Record<NonNullable<UnavailabilityReason>, string> = {
+    off_duty: "Off duty",
     not_safety_trained: "No safety training on file",
     at_capacity: "Already has a full day",
     schedule_conflict: "Another job that day",

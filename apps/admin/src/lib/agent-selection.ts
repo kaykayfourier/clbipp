@@ -85,6 +85,7 @@ export async function rankedAgentsFor(pickup: {
       agentZone: true,
       agentVehicle: true,
       safetyTrainedAt: true,
+      dutyStatus: true,
     },
     orderBy: { fullName: 'asc' },
   })
@@ -129,6 +130,8 @@ export async function rankedAgentsFor(pickup: {
     zone: a.agentZone,
     vehicle: a.agentVehicle,
     safetyTrainedAt: a.safetyTrainedAt,
+    // FV15 · FD19 — read ONLY through availabilityOf(); never re-checked here.
+    dutyStatus: a.dutyStatus,
     liveJobs: live.get(a.id) ?? 0,
     jobsOnTargetDay: onDay.get(a.id) ?? 0,
     lastLocation: locations.get(a.id) ?? null,
@@ -156,13 +159,20 @@ export async function rankedAgentsFor(pickup: {
 export async function agentStateAtConfirm(
   agentId: string,
   targetDay: Date,
-): Promise<{ exists: boolean; safetyTrained: boolean; liveJobs: number; jobsOnTargetDay: number }> {
+): Promise<{
+  exists: boolean
+  safetyTrained: boolean
+  /** FV15 · FD19. Re-read at the write, like everything else here. */
+  offDuty: boolean
+  liveJobs: number
+  jobsOnTargetDay: number
+}> {
   const { start, end } = dayBounds(targetDay)
 
   const [agent, liveJobs, jobsOnTargetDay] = await Promise.all([
     prisma.profile.findFirst({
       where: { id: agentId, role: 'agent' },
-      select: { id: true, safetyTrainedAt: true },
+      select: { id: true, safetyTrainedAt: true, dutyStatus: true },
     }),
     prisma.pickup.count({ where: { agentId, status: { in: [...LIVE_JOB_STATUSES] } } }),
     prisma.pickup.count({
@@ -180,6 +190,7 @@ export async function agentStateAtConfirm(
   return {
     exists: agent !== null,
     safetyTrained: agent?.safetyTrainedAt !== null && agent?.safetyTrainedAt !== undefined,
+    offDuty: agent?.dutyStatus === 'off_duty',
     liveJobs,
     jobsOnTargetDay,
   }

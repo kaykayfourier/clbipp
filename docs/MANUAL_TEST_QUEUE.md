@@ -700,8 +700,60 @@ grants, then run all three smokes before working through this list.**
 
 ### FV8 — expect this question from the company
 
-Not a test; a briefing note. When they ask **"why doesn't it show who's off
-duty today"**, the answer is that nothing in the system records duty state —
-not that it was missed. §8 of `docs/PLAN_FEEDBACK_V2.md` has the full answer and
-the build path (a `DutyStatus` enum on `Profile` is roughly half a day and
-covers most of it). Worth reading before the meeting rather than during it.
+~~Not a test; a briefing note.~~ **Answered by FV15 (2026-09-27)** — an admin
+can now mark an agent off duty on `/agents`, and dispatch shows them
+**Unavailable · Off duty**. Working hours and a per-day roster are still NOT
+built (§8 Steps 2–4 of `docs/PLAN_FEEDBACK_V2.md`).
+
+## FV9–FV16 — tags, boxes, runs, hub check-in, second life, duty (2026-09-27)
+
+Everything below was driven through the real HTTP path by a harness (see §10 of
+`docs/PLAN_FEEDBACK_V2.md`). What is left here is what a script cannot judge:
+cameras, paper, and whether it reads right.
+
+**Physical kit — print it first**
+- [ ] `/tags` → Issue 24 → download the sheet → print on A4 **sticker stock**
+      (63.5 × 33.9 mm, 3 × 8). The dashed guides should line up with the labels.
+      If they drift, the printer is scaling — print at "actual size".
+- [ ] `/containers` → **Print all labels** → stick one on a real box.
+- [ ] Scan a printed tag with a **phone's own camera app** — it should read the
+      bare code (`TG-…`), nothing else.
+
+**Agent app on a real phone (camera cannot be tested on a laptop fetch)**
+- [ ] Android Chrome: **Scan box** on `/run/<id>` opens the rear camera,
+      reads the box label, loads it — native `BarcodeDetector` path.
+- [ ] iPhone Safari (Add to Home Screen too): same — this is the `jsqr`
+      fallback path; confirm it reads within a couple of seconds.
+- [ ] Deny camera permission → the scanner says so and typing still works.
+- [ ] 🔴 Over plain `http://<laptop-ip>:3001` the camera is blocked (not a
+      secure context). Expected; the message says so. Test on HTTPS or
+      `localhost`.
+- [ ] Collect a job: each line's **Scan tag** binds; **Confirm collection**
+      stays disabled until every line is tagged or explained.
+- [ ] "No tag available?" on one line → reason → collect → the receipt shows
+      that line as untagged and still offers to tag it in the van.
+- [ ] Item confirm: pick **Digital scale** → the "Photo of the scale reading"
+      card appears; pick **Estimated** → it disappears. Enter a weight far from
+      the declaration → the card's wording turns amber.
+
+**Hub desk (admin)**
+- [ ] `/custody/<batch>` with a **USB barcode scanner** plugged in: scanning a
+      printed tag checks the line in with no mouse click (the field keeps focus
+      after each redirect).
+- [ ] A tag from a different load is refused with where it belongs.
+
+**Dispatch and runs — does it read sensibly to a dispatcher?**
+- [ ] `/dispatch` shows **Same-day groups** for PKP-…101 + …115 (fresh seed).
+      "Plan a run" pre-ticks both on `/runs/new`.
+- [ ] The ranked selector on `/runs/new` lists **Mohit Sharma — Off duty**,
+      disabled-looking, with the reason.
+- [ ] The run sheet's stop order is plausible for Delhi traffic. (It is
+      straight-line nearest-neighbour from the hub — a suggestion, and the
+      screen says so.)
+- [ ] Priority / load size / battery type filters feel useful, not noisy.
+
+**Second life**
+- [ ] `/manifests/new` → **Second Life → refurbisher** tab → PKP-…116 → the
+      only partner offered is Evergreen. Dispatch → confirm → reconcile with an
+      outcome note → certify → the vendor's certificate PDF shows a **SECOND
+      LIFE** line and no materials table.
