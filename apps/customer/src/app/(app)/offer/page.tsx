@@ -133,15 +133,24 @@ export default async function OfferPage({ searchParams }: PageProps) {
 
           {/* FV6 · M2 — the human step, on the screen where a vendor is most
               likely to want one: a price they weren't expecting, and otherwise
-              only Accept or Decline to choose between. Rendered only when a
-              number is configured; a dead `tel:` link is worse than none, the
-              same rule the agent app's vendor-call button follows. */}
-          {officePhone && (
+              only Accept or Decline to choose between. Always shown so the
+              step is visible; with no number configured it renders disabled
+              and says so, because a live `tel:` link to nowhere is worse. */}
+          {officePhone ? (
             <a href={`tel:${officePhone.replace(/\s+/g, "")}`} className="block">
               <Button variant="ghost" fullWidth>
                 Talk to us about this offer
               </Button>
             </a>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <Button variant="ghost" fullWidth disabled>
+                Talk to us about this offer
+              </Button>
+              <p className="text-center text-[11px] text-text-secondary">
+                Office line not connected yet
+              </p>
+            </div>
           )}
         </div>
 

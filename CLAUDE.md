@@ -521,9 +521,10 @@ letter+number means different things in each. **Quote the decision with its set.
   split a request across two custody chains and force a per-item notion of
   "collected" that AD5 and AD6 deliberately refuse.
 - ⚠ `NEXT_PUBLIC_OFFICE_PHONE` drives the "call the office" / "talk to us"
-  buttons in the agent and customer apps. **Unset → they do not render**, which
-  is deliberate: a dead `tel:` link is worse than no link, and the company has
-  not given us a number.
+  buttons in the agent and customer apps. **Unset → they render DISABLED with
+  "Office line not connected yet"** (changed 2026-09-29 so the step is visible in
+  a demo) — never as a live `tel:` link to nowhere. The company has not given us
+  a number; setting the env var in Vercel is the whole switch-on.
 
 ## The Field Agent app — built, and still live code
 

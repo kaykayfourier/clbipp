@@ -259,12 +259,22 @@ export default async function Page({
         {/* FV6 · M2. The office, one tap away, on the screen where an agent is
             most likely to need it — standing in front of a vendor who disagrees
             with a number. */}
-        {officePhone && (
+        {/* FV6 — always shown so the human step is visible; with no number
+            configured it renders disabled and says so (a live `tel:` link to
+            nowhere is worse than a visibly unconnected one). */}
+        {officePhone ? (
           <a href={`tel:${officePhone.replace(/\s+/g, '')}`}>
             <Button variant="secondary" fullWidth>
               Call the office
             </Button>
           </a>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <Button variant="secondary" fullWidth disabled>
+              Call the office
+            </Button>
+            <p className="text-center text-[11px] text-text-secondary">Office line not connected yet</p>
+          </div>
         )}
 
         <p className="text-[11px] leading-relaxed text-text-secondary">
