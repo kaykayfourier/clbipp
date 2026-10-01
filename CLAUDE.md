@@ -895,6 +895,10 @@ keeps every lane moving in parallel without anyone touching another's files.
   discussing distribution with the company. Companion:
   `docs/ANDROID_TWA_BUILD.md`, the runbook that turns a deployed app into a
   signed Play Store package (~half a day, post-deploy).
+- `docs/FEEDBACK_DEMO_WALKTHROUGH.md` — **the short version for presenting the
+  feedback round**: one run across the three apps that shows all 14 changes,
+  each tagged to the company's priority. Use it to present; use the runbook below
+  to rehearse.
 - `docs/DEMO_RUNBOOK.md` — **the click path for showing this to the company.**
   Two scripts: a ~12-min relay (what you present) and a ~30-min full walk (what
   you rehearse), plus pre-flight, per-beat expected numbers, a what-goes-wrong
