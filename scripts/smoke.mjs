@@ -177,9 +177,9 @@ const EXPORT_EMPTY = '/api/exports/compliance?year=1999'
 // streaming.
 const APP_REJECTS = {
   // scheduled — before the offer stage
-  '/offer?id=PKP-2026-000102': ['Estimated Offer', 'Why this price?'],
+  '/offer?id=PKP-2026-000102': ['Our offer', 'About this offer'],
   // collected — past it
-  '/offer?id=PKP-2026-000105': ['Estimated Offer', 'Why this price?'],
+  '/offer?id=PKP-2026-000105': ['Our offer', 'About this offer'],
   // Batch 8: nothing is collected at `requested`, so there is no receipt to
   // show. The screen must render its empty state, not receipt fields.
   '/receipt/PKP-2026-000101': ['Receipt number', 'Agreed payout'],
@@ -216,7 +216,7 @@ const APP_REJECTS = {
 // Batch 6.5 bug), the pickup lands on `collected`, the guard turns this away,
 // and the run fails here.
 const OFFER_SURVIVED_GET = {
-  '/offer?id=PKP-2026-000104': ['Estimated Offer', 'Why this price?'],
+  '/offer?id=PKP-2026-000104': ['Our offer', 'About this offer'],
 }
 
 // Content that must appear on a logged-in route. A redirect returns no body, so
@@ -234,8 +234,8 @@ const APP_CONTENT = {
   // half is sufficient alone: this one would still pass if the row were deleted
   // outright, and that one would still pass if the screen 307'd away.
   '/submitted?id=PKP-2026-000101': ['Your price', "After the agent's inspection"],
-  '/offer?id=PKP-2026-000104': ['Estimated Offer', 'Why this price?'],
-  '/offer-breakdown?id=PKP-2026-000104': ['Estimated Value', 'Why this valuation?'],
+  '/offer?id=PKP-2026-000104': ['Our offer', 'About this offer'],
+  '/offer-breakdown?id=PKP-2026-000104': ['About this offer', 'You are paid this amount after our agent collects'],
   // Batch 7B. `token=` on the img src is the part worth asserting: it only
   // appears if createSignedUrl actually minted a URL for a stored object, so it
   // proves the private-bucket read path end to end rather than just proving the
@@ -507,6 +507,10 @@ const AGENT_ROUTES = [
   `/job/${AGENT_PICKUP}/offer`,
   // ...and 104, which is `offered` and has a checklist, is the render half.
   `/job/${AGENT_OFFERED}/offer`,
+  // Feedback round 2: job detail follows the job's state, and intake CLOSES
+  // once the offer is presented. 104's item list must not render.
+  `/job/${AGENT_OFFERED}`,
+  `/job/${AGENT_OFFERED}/items`,
   // E. Collect & hand off
   `/job/${AGENT_ARRIVED}/collect`,
   `/job/${AGENT_ARRIVED}/receipt`,
@@ -708,6 +712,7 @@ const AGENT_APP_CONTENT = {
   // this used to assert, which was the AppShell heading and would have passed
   // on an empty screen.
   [`/job/${AGENT_OFFERED}/offer`]: ['Offer presented', '₹'],
+  [`/job/${AGENT_OFFERED}`]: ['View offer', 'Declared load'],
   // Batch 7a. The vendor name and the running totals come from the batch read;
   // the agent-attested wording is the honesty requirement in step 5 of the
   // task sheet, asserted so it cannot quietly disappear.
@@ -759,13 +764,19 @@ const AGENT_ITEMS_GATE = {
   // real screen renders, so a gate that stopped rejecting would surface here as
   // a leak rather than as a silently-passing redirect.
   [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/damage`]: ['Leakage', 'Thermal'],
-  [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/computing`]: ['Computing'],
+  [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/computing`]: ['Calculating price'],
   [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result`]: ['Back to items'],
   [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/breakdown`]: ['Revenue'],
   [`/job/${AGENT_PICKUP}/items/${AGENT_ITEM}/result/why`]: ['Audit footer', 'Market snapshot'],
   // 🔴 The offer screen is a money surface: if the gate ever stopped rejecting,
   // the thing that leaks is a total in ₹ on a job with no safety checklist.
-  [`/job/${AGENT_PICKUP}/offer`]: ['Present offer to vendor', 'Total offer'],
+  [`/job/${AGENT_PICKUP}/offer`]: ['Present offer to vendor', 'Recommended total'],
+  // 🔴 Feedback round 2 — the intake LOCK. 104 is `offered`: its items are what
+  // the vendor was priced on, so the list must not render (it redirects to the
+  // offer). Same strings as the 103 admit half above.
+  [`/job/${AGENT_OFFERED}/items`]: ['Lines on this job', 'kg weighed'],
+  // ...and job detail must not send an offered job back into intake.
+  [`/job/${AGENT_OFFERED}`]: ['Continue intake', 'Continue to intake'],
 }
 
 // 🔴 Batch 8 — the strings that must NOT be on these screens.
@@ -892,8 +903,12 @@ const ADMIN_ROUTES = [
   `/manifests/${ADMIN_MANIFEST_RECEIVED}`,
   // FV10–FV11 — the physical kit
   '/containers',
+  // Feedback round 2 — a box's contents, by printed code, and the tag lookup
+  // that now leads there instead of dead-ending at "see Boxes".
+  `/containers/${SEED_BOX}`,
   '/tags',
   `/tags?code=${SEED_TAG_105}`,
+  `/tags?code=${SEED_BOX}`,
   // D · Engine
   '/config',
   '/market',
@@ -1022,6 +1037,9 @@ const ADMIN_APP_CONTENT = {
   [`/custody/${ADMIN_BATCH}`]: ['Hub check-in', 'CB-2026-000301', SEED_TAG_106, 'Scan a tag', 'Scanned'],
   '/containers': ['Transport boxes', SEED_BOX, 'Blue crate 60 L #1', 'Register a box'],
   '/tags': ['Battery tags', '-SEED', 'Issue a sheet'],
+  // 105 is collected and not handed in, so its tagged line is still in the box.
+  [`/containers/${SEED_BOX}`]: [`Box ${SEED_BOX}`, 'In this box now', SEED_TAG_105, AGENT_COLLECTED],
+  [`/tags?code=${SEED_BOX}`]: ['is a transport box', 'See what is in it'],
   // The whole chain: tag → line → pickup → box. Each hop is a join.
   [`/tags?code=${SEED_TAG_105}`]: [AGENT_COLLECTED, SEED_BOX, 'At collection'],
   // Built in Batch 6. Every string below is chosen to survive a DEMO as well as

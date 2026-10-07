@@ -757,3 +757,39 @@ cameras, paper, and whether it reads right.
       only partner offered is Evergreen. Dispatch → confirm → reconcile with an
       outcome note → certify → the vendor's certificate PDF shows a **SECOND
       LIFE** line and no materials table.
+
+## Round 2 — the team's own review (2026-10-07)
+
+All of these are POSTs or browser confirms, which `smoke` cannot press. Reseed
+first; the pickups named are seed fixtures.
+
+1. **Agreed price, vendor sees none of it.** As `agent@test`, finish intake on
+   `103` (every line confirmed and priced), then on the offer screen type an
+   agreed price different from the recommended total **without** a note → it is
+   refused and asks for one. Add "Agreed with the office" and present.
+   ✅ Lands on the offer screen ("Offer presented"). As `business@test`, `/offer`
+   shows **Our offer** and a one-line "Based on our on-site inspection…" — no
+   engine figure, no "adjusted", no "estimated", no ±8%. ✅ Admin
+   `/pickups/PKP-2026-000103` shows Offered, **Engine recommended** and the note.
+2. **Intake is locked.** After step 1, open `/job/PKP-2026-000103/items` by URL →
+   ✅ redirected to the offer screen. Job detail's button reads **View offer**.
+3. **Overflow refused politely.** On a lithium line's damage screen enter
+   capacity `100000` → ✅ "Capacity per pack must be … at most 1000 kWh", no
+   database text anywhere. On `/market`, type Li `145000` → ✅ refused as a
+   >10× move.
+4. **Decline.** As `business@test` on `104` press **Decline**, cancel the browser
+   prompt (nothing happens), press again and confirm → ✅ the pickup shows
+   cancelled; the admin timeline says "Vendor declined the offer"; rebook works.
+5. **Hand a collection to another agent.** Accept `104` as the vendor. As admin,
+   `/dispatch/PKP-2026-000104` → **Who collects** → pick Neha (`agent2@test`) →
+   ✅ "Neha Verma will collect this load"; `/pickups/…104` shows **Inspected by**
+   Ravi. As `agent2@test` the job is on the day view and **Collect** works end to
+   end. Mohit (`agent3@test`) is off duty and refused.
+6. **Box contents.** `/containers/BX-A001W` → ✅ `105`'s tagged line under **In
+   this box now**. `/tags?code=BX-A001W` links there.
+7. **Confirmations.** On a manifest, **Dispatch**, **Confirm received** and
+   **Reconcile** each ask first; cancelling the prompt changes nothing.
+8. **Second-life certificate.** Walk `116` (`docs/USER_GUIDE.md` §8). ✅ The
+   vendor's certificate page and admin `/compliance` both show 180 kg second
+   life and no metals; the header reads "Second life".
+9. **Read every screen once on a phone** for text that spills out of its box.

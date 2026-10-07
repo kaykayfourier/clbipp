@@ -1167,3 +1167,18 @@ do-it-and-note-it; recorded here so the record is honest.
 
 **Decisions FD12–FD19 are ours and provisional**, same standing as FD7–FD11 —
 §9.2 of `docs/PLAN_FEEDBACK_V2.md`. FD12 reverses FD11 (no tagging).
+
+## 2026-10-07 — Round 2 (the team's own review of FV1–FV16), Aamir + Claude, all lanes
+
+Eighteen points from Aamir's own walk-through, fixed before anything went to the
+company. As-built record: §11 of `docs/PLAN_FEEDBACK_V2.md`. Lanes crossed under
+do-it-and-note-it:
+
+| Area | Nominal owner | Actually done by | Notes |
+|---|---|---|---|
+| `offer_price_record` migration (2 nullable `offers` columns) | B | Aamir | Additive; generated schema-to-schema, applied with `db execute`. |
+| `@clbipp/core`: `resolveOfferPrice`, `vendorOfferRationale`, `MAX_PAISE`, `parseBmsReadings`, `perPackWeightKg`, `ENGINE_CONFIG_MAX`, `validateMarketOverride`, run-planning `reassigns` | B | Aamir | All unit-tested. 🔴 `perPackWeightKg` moves prices (multi-unit lithium lines). |
+| Agent offer, intake lock, server-side quote, job routing | A/C (Batch 5a was Ali's) | Aamir | `/api/quote` deleted. |
+| Vendor offer copy, Decline, certificate second-life | A (customer app) | Aamir | |
+| Admin: collector reassignment, box page, compliance, market bounds | A + B + C | Aamir | `pickup.assign_collector` added to `@clbipp/core/audit` and to `verify-seed`'s restated list. |
+| On-screen text cut across all three apps | A + C | Aamir | Text only; no feature removed. Explanations moved to `docs/USER_GUIDE.md`. |

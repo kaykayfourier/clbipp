@@ -987,3 +987,52 @@ time (straight-line nearest-neighbour only, and the screens say so) · a
 refurb-partner *directory* editor (partners come from the seed, like recyclers)
 · voiding a damaged tag · per-unit tracking inside a line (one tag per line is
 FD12) · agent self-service duty toggling · an offline queue for scans.
+
+## §11 Round 2 — the team's own review, as built (2026-10-07, Aamir + Claude)
+
+Aamir went through FV1–FV16 before anything was shown to the company and sent
+eighteen points back. Three constraints came with the answers: the **decision
+engine is recommendation-only** for the pilot (the price is agreed on a call to
+the office and the vendor must never see the engine's figure); **inspector vs
+collector** and **must every load go in a box** are to be confirmed with the
+company, not assumed; and the apps should be **less text-heavy without losing a
+single feature**.
+
+### What changed
+
+| Point | Change | Where |
+|---|---|---|
+| Vendor saw "adjusted from ₹X" | `rationale` is vendor-safe text from `vendorOfferRationale()`; the engine total and the agent's note go to new internal columns `offers.recommended_price_paise` / `price_note` (migration `offer_price_record`, additive, applied with `db execute`). `material_breakdown` no longer carries per-line ₹. Admin `/pickups/[id]` shows offered vs engine-recommended vs note. | `presentOffer`, `@clbipp/core` `offer.ts` |
+| Call-based pricing | The agent offer screen leads with "Call the office" and an **Agreed price** field (blank = offer the recommendation; a different price needs a note). `resolveOfferPrice()` validates it server-side. | agent `/job/[id]/offer` |
+| False vendor copy | "Estimated — final value confirmed after processing" and "±8%" removed: the payout IS the offer, raised at collection. Wizard step "Your indicative quote" → "Review and submit". Invoice PDF callout corrected. | customer `/offer`, `/offer-breakdown`, `book/copy.ts`, `invoice.tsx` |
+| Decline did nothing | **Decline** confirms, then cancels with the note "Vendor declined the offer" (`declineOffer`, sharing `stopPickup` with `cancelPickup`). Rebook works as for any cancel. | customer `handover/actions.ts` |
+| Agent sent back to intake | Job detail's button comes from `jobPrimaryAction()` (View offer / Collect / Collection on … / Drop off / Track). Present and schedule land on the offer screen. 🔴 **Intake locks after the offer**: `requireIntakeOpen()` on every item screen, `intakeClosedMessage()` in every item write (confirm, damage, quote, escalate) and the safety submit. | agent `lib/safety-gate.ts`, `lib/job-nav.ts` |
+| "Integer limit" error | `MAX_PAISE` / `isStorablePaise()` guard every engine/rate-card price write; `parseBmsReadings()` bounds capacity/age/cycles/distance; `ENGINE_CONFIG_MAX` bounds `/config`; `validateMarketOverride()` bounds `/market` (×10 move limit). Raw database messages replaced with plain ones. | `@clbipp/core` |
+| Client-trusted price | The engine runs in the `computeItemQuote` server action from the stored readings; `/api/quote` deleted. | agent `items/[itemId]/actions.ts` |
+| 🔴 Price defect found | The engine was given the line's TOTAL weight and the result multiplied by quantity again. Now `perPackWeightKg()`. **Price-moving** for every lithium line with quantity > 1 (lower, correct). Capacity is labelled "per pack". | as above |
+| 116's certificate | Second-life kg now shows on the vendor certificate page and admin `/compliance`, not only the PDF. 116 is seeded at `tested` on purpose — the walk to its certificate is in `docs/USER_GUIDE.md` §8. | |
+| Box ↔ pickup | `/containers/[id]` (id or printed code): in the box now, carried before, trips. Box codes in `/tags` and on `/pickups/[id]` link to it. | admin |
+| Inspector ≠ collector | **An option, pending the company.** `assignCollector` on `/dispatch/[id]` ("Who collects", ranked selector) for an accepted, uncollected pickup; runs can take such a stop (`runStopEligibility` → `reassigns`). Status stays `offered`; event + `pickup.assign_collector` audit row; the fee is earned by whoever collects. The inspector is read from the first agent `offered` event (`lib/inspector.ts`). Unused unless an admin chooses it. | admin, `@clbipp/core` |
+| Text overflow | `DetailRow` (shared) lets long values wrap; certificate number wraps. | `packages/ui` |
+| Too much text | On-screen prose cut across all three apps (decision codes, emoji and dev terms removed from rendered text); irreversible manifest/lifecycle steps ask for confirmation (`ConfirmSubmit`). Explanations moved to `docs/USER_GUIDE.md`. | all apps |
+
+### Still open — for the company
+
+1. Should collectors be a separate kind of agent (vans, boxes)? Who earns the fee
+   when two agents share a job? Should the collector repeat the safety checklist?
+2. Must every collection go into a box, or only run collections (today)?
+3. Should reconciling a manifest require the recycler's own report (upload) and
+   the weight the recycler received?
+
+### Known gaps left as they are
+
+- After a collection is reassigned, the inspecting agent no longer sees that job
+  in their app (lists are keyed on `Pickup.agentId`); their readings and the
+  timeline keep the record.
+- A vendor's own API token can still read `offers.recommended_price_paise` and
+  the per-line prices on `battery_items` (no screen shows them). Hiding them from
+  the token too is a column-grant change in `supabase/grants.sql` — same posture
+  as `pickups.indicative_quote_paise` today.
+- The seed was not shrunk: smoke, `verify-seed` and the runbook depend on each
+  fixture. The seed map in `docs/USER_GUIDE.md` §8 is the answer to "which
+  pickup shows what".

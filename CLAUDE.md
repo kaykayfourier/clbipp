@@ -273,7 +273,11 @@ Headlines you need even if you read nothing else:
   (`damage.ts`, `sohGating.ts`), not `Config` parameters — a screen cannot move
   them. The seeded `EngineConfig` is byte-identical to `DEFAULT_CONFIG`, guarded
   by a drift test, 🔴 **so no price moves**.
-- ✅ **The quote route no longer trusts the client** (AD9, Batch 11). It calls
+- ✅ **The lithium quote no longer trusts the client** (AD9, Batch 11; round 2).
+  Since 2026-10-07 the engine runs inside the **`computeItemQuote` server action**
+  (`apps/agent/.../items/[itemId]/actions.ts`) from the readings stored on the
+  item — the old `/api/quote` route, whose output the browser handed back to be
+  saved, is deleted. It calls
   `getActiveConfig()` from **`@clbipp/core/engine-config`** — which lives in
   `packages/core`, not `apps/admin/src/lib`, precisely because the *agent* app is
   its most important caller. 🔴 **`supplier_id` is derived server-side from
@@ -283,7 +287,11 @@ Headlines you need even if you read nothing else:
   ⚠ `getActiveConfig()` **throws** when no row is active rather than falling back
   to `DEFAULT_CONFIG` — a silent fallback is invisible exactly when it matters
   (an agent standing in front of a vendor, reading a placeholder-priced number
-  aloud). A retryable 503 beats a wrong price.
+  aloud). A refusal beats a wrong price.
+  🔴 **The engine prices ONE pack** (round 2, price-moving): `weight_kg` is
+  `perPackWeightKg(line weight, quantity)` and the line is unit × quantity.
+  Passing the line's total weight priced every multi-unit line `quantity` times
+  too high.
 - 🔴 **`Profile.marginTier` was an INERT lever until Batch 11.** `/suppliers`
   wrote it and the engine read `Config.supplier_margin_overrides`, but nothing
   built the map between them — an admin could set a vendor's tier and change
@@ -340,6 +348,20 @@ follow-up meeting added two things the document does not say: the first phase is
 a **pilot with a handful of agents**, and they want the **decision engine
 possibly switched off** for it, with a human step (a call to the office)
 retained.
+
+**Round 2 (2026-10-07) — the team's own review of FV1–FV16, before showing the
+company.** As built, in one place (details in §11 of `docs/PLAN_FEEDBACK_V2.md`):
+the vendor never sees the engine's price (agreed-by-phone pricing, internal
+`Offer.recommendedPricePaise`/`priceNote`); intake locks after the offer and job
+detail routes by state (`jobPrimaryAction`); the quote runs server-side and
+prices one pack (🔴 price-moving for multi-unit lithium lines); every typed
+number is bounded and `isStorablePaise`/`MAX_PAISE` (`@clbipp/core/format`)
+guard the int4 money columns; raw database errors no longer reach screens;
+**Decline** records a decline; an admin can hand an accepted collection to a
+different agent (`pickup.assign_collector`, also via runs) — an OPTION pending
+the company; `/containers/[id]` shows what is in a box; certificates show
+second-life kg on screen; on-screen text was cut and moved into
+**`docs/USER_GUIDE.md`** (the explanations now live there, not on screens).
 
 **Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV16, decisions
 **FD0–FD19**, an as-built section per batch (§10 for FV9–FV16), and §8 (the
@@ -510,13 +532,18 @@ letter+number means different things in each. **Quote the decision with its set.
   "the engine's FLAG was wrong" and advances nothing; `setItemPathway` says
   "the engine's VERDICT was wrong" and changes where the battery physically
   goes. Both need a typed reason; they are different verbs on purpose.
-- 🔴 **The agent price override is NOT a second pricing path** (FV6 · FD10).
-  The engine still runs and every item is still priced and stored; the override
-  changes only the TOTAL, and the engine's figure is named in `Offer.rationale`
-  beside it — which is what preserves the pilot's whole comparison (what we
-  would have paid vs what we did). ⚠ **Never back-fill per-item prices from an
-  override**: spreading a commercial decision about a load across individual
-  batteries invents numbers nobody calculated.
+- 🔴 **The agreed price is NOT a second pricing path** (FV6 · FD10, round 2).
+  The engine is **recommendation-only for the pilot**: the agent calls the
+  office, types the agreed price (blank = offer the recommendation) and a note
+  when it differs. The engine still runs and every item is still priced and
+  stored; only the TOTAL changes. The recommendation and the note live on
+  **`Offer.recommendedPricePaise` / `Offer.priceNote` — internal, never on a
+  vendor screen.** 🔴 **`Offer.rationale` is vendor-facing** (it is printed on
+  `/offer`): write it with `vendorOfferRationale()`, never put a price or
+  "adjusted" in it — that leaked the engine's figure to vendors until
+  2026-10-07. ⚠ **Never back-fill per-item prices from an agreed total**:
+  spreading a commercial decision about a load across individual batteries
+  invents numbers nobody calculated.
 - ⚠ **No partial collection** (FD8). One pickup, one collection event. It would
   split a request across two custody chains and force a per-item notion of
   "collected" that AD5 and AD6 deliberately refuse.
@@ -552,17 +579,18 @@ Headlines you need even if you read nothing else:
   there is no nearby-jobs feed.
 - **A mandatory safety checklist gates intake** (W1). All three HR documents
   require it; the wireframe omitted it entirely. It is enforced by
-  `requireSafetyChecklist` in `apps/agent/src/lib/safety-gate.ts`, called
-  server-side from **every** intake screen — `/items`, `/items/[itemId]` and
-  `/scan` today. **Any new screen downstream of intake adds the same two lines**;
-  `/damage`, `/computing`, `/result*` and `/collect` are still stubs and still
-  ungated. ⚠ The Batch 8 screens (`/pickups*`, `/history`, `/profile`) are
+  `requireSafetyChecklist` in `apps/agent/src/lib/safety-gate.ts`. 🔴 **Intake
+  CLOSES once the offer is presented** (round 2): every item screen calls
+  `requireIntakeOpen()` (checklist passed AND status `arrived`, else redirect to
+  where the job is), and every item write refuses with `intakeClosedMessage()`.
+  A new intake screen or action adds the same call. `/offer` and `/collect` keep
+  `requireSafetyChecklist` only. ⚠ The Batch 8 screens (`/pickups*`, `/history`, `/profile`) are
   **watch-only and deliberately ungated** — they are downstream of nothing and
   gating a read of finished work would be wrong.
 - **The D1 chemistry branch has one home:** `isLithium` / `LI_ION_CHEMISTRIES` in
   `packages/core/src/intake.ts`. Never re-list the li-ion chemistries in a screen
-  or an API route — `apps/agent/.../api/quote/route.ts` had a second copy and it
-  was removed in Batch 3.
+  or an action — the old quote route had a second copy and it was removed in
+  Batch 3.
 - **A `BatteryItem` has two halves and neither overwrites the other.**
   `category` / `quantity` / `weightKg` / `condition` / `photoUrls` are the
   customer's declaration; `chemistry` / `confirmedWeightKg` /
@@ -774,7 +802,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 420 (core 353, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 438 (core 371, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -890,6 +918,12 @@ keeps every lane moving in parallel without anyone touching another's files.
 
 ## Key docs (read when relevant — don't load all of these by default)
 
+- `docs/USER_GUIDE.md` — **how to use the three apps**, for the pilot team and
+  testers: the whole journey, each app step by step, where every price comes
+  from, tags/boxes/runs, the open questions for the company, and a seed map of
+  which demo pickup shows what. 🔴 Screens are kept short on purpose (round 2);
+  explanations belong here, not in UI copy — update this file when a flow
+  changes rather than adding a paragraph to a screen.
 - `docs/NATIVE_APP_HANDOVER.md` — **why these are PWAs and not store apps, what
   a native rebuild would reuse, and the honest iOS answer.** Read before
   discussing distribution with the company. Companion:
