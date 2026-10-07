@@ -44,7 +44,7 @@ import {
   SectionLabel,
 } from '@clbipp/ui'
 
-import { requireSafetyChecklist } from '@/lib/safety-gate'
+import { requireIntakeOpen } from '@/lib/safety-gate'
 import { itemNextHref, itemNextLabel } from '@/lib/job-nav'
 
 import { ItemConfirmForm } from './ItemConfirmForm'
@@ -67,7 +67,7 @@ export default async function Page({
   if (!user) redirect('/login')
 
   // 🔴 THE GATE — checklist + pickup ownership, in one call. See the note above.
-  await requireSafetyChecklist(id, user.id)
+  await requireIntakeOpen(id, user.id)
 
   // 🔴 Scoped to the pickup, not just the item id. See the note above.
   const item = await prisma.batteryItem.findFirst({
@@ -175,8 +175,7 @@ export default async function Page({
           )}
 
           <p className="text-[11px] leading-relaxed text-text-secondary">
-            Recorded by the customer at booking. Nothing you enter below changes
-            it — the two records are kept side by side on purpose.
+            From the customer&rsquo;s booking.
           </p>
         </div>
 

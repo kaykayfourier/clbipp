@@ -1,7 +1,8 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
 import { prisma } from '@clbipp/database'
 import { isLithium } from '@clbipp/core/intake'
+import { isStorablePaise } from '@clbipp/core/format'
 import { getQuote, type BookingLineItem } from '@clbipp/core'
 
 // ─── Shared result-tab data loading (Batch 5a) ───────────────────────────────
@@ -122,6 +123,13 @@ export async function loadResultData(
     const quote = await getQuote([lineItem])
     const linePricePaise = quote.totalPaise
     const unitPricePaise = item.quantity > 0 ? Math.round(linePricePaise / item.quantity) : linePricePaise
+    if (!isStorablePaise(linePricePaise) || !isStorablePaise(unitPricePaise)) {
+      redirect(
+        `/job/${encodeURIComponent(item.pickupId)}/items/${encodeURIComponent(item.id)}?error=${encodeURIComponent(
+          'This line comes out too large to record. Check the weight and quantity.',
+        )}`,
+      )
+    }
 
     await prisma.batteryItem.update({
       where: { id: item.id },

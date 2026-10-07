@@ -3,26 +3,26 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
+import { prisma, type RecoveryPathway } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { createAdminClient } from '@clbipp/auth/admin'
-import { photoPathsBelongTo } from '@clbipp/core/intake'
+import { getMarketData } from '@clbipp/core'
+import { getActiveConfig } from '@clbipp/core/engine-config'
+import { MAX_PAISE } from '@clbipp/core/format'
+import { isLithium, parseBmsReadings, perPackWeightKg, photoPathsBelongTo } from '@clbipp/core/intake'
+import {
+  computeQuote,
+  EngineValidationError,
+  StaleMarketDataError,
+  type QuoteInput,
+} from '@clbipp/decision-engine'
+import { intakeClosedMessage } from '@/lib/safety-gate'
 
-// ─── The damage rubric submit (D1 · Batch 5a) ────────────────────────────────
-// Copies the four-point shape of ../../actions.ts (the app's reference
-// service-role action) and the two-part ownership check ../actions.ts adds for
-// items: pickup is this agent's, AND the item belongs to that pickup.
-//
-// This action does NOT call the engine. It only records what the agent found
-// on site — the three raw damage scores and the BMS quick-entry workaround
-// (see BatteryItem.quoteData in schema.prisma) — and redirects to /computing,
-// which calls POST /api/quote from the browser. Two reasons the engine call
-// doesn't happen here:
-//   1. /api/quote already exists (Batch 4) and is the one place that builds
-//      MarketData and maps engine errors to HTTP status. Duplicating that here
-//      would be a second pricing path — exactly what the task sheet forbids.
-//   2. The wireframe's own computing screen is a ~1.5s loader that calls the
-//      API "in background" — that needs to happen client-side, after this
-//      redirect, not inside this action.
+// ─── Damage rubric + the lithium price (D1 · Batch 5a, feedback round 2) ─────
+// submitDamageRubric records what the agent found on site; computeItemQuote
+// then runs the engine ON THE SERVER from what was stored, and writes the price.
+// The browser used to run /api/quote and hand the result back to be saved, so
+// the server stored whatever price it was sent.
 
 /** Engine Chemistry from the DB's BatteryType. See DamageRubricForm's note on
  * why NMC622 is the assumed variant — the schema doesn't distinguish 622 from
@@ -61,6 +61,8 @@ export async function submitDamageRubric(formData: FormData) {
     .single()
   if (pickupError || !pickup) return fail('Job not found.')
   if (pickup.agent_id !== user.id) return fail('This job is not assigned to you.')
+  const closed = intakeClosedMessage(pickup.status)
+  if (closed) return fail(closed)
 
   const { data: item, error: itemError } = await admin
     .from('battery_items')
@@ -81,17 +83,16 @@ export async function submitDamageRubric(formData: FormData) {
   // the same formula from the same three inputs at compute time.
   const damageScore = 0.4 * visual + 0.35 * leakage + 0.25 * thermal
 
-  // ── BMS quick-entry (workaround) ──────────────────────────────────────────
-  const sohPct = Number(formData.get('sohPct'))
-  const capacityKwh = Number(formData.get('capacityKwh'))
-  const ageYears = Number(formData.get('ageYears'))
-  const cycleCount = Number(formData.get('cycleCount'))
-  if (!Number.isFinite(sohPct) || sohPct < 0 || sohPct > 100) return fail('State of health must be 0–100%.')
-  if (!Number.isFinite(capacityKwh) || capacityKwh <= 0) return fail('Capacity must be greater than 0.')
-  if (!Number.isFinite(ageYears) || ageYears < 0) return fail('Age must be 0 or more.')
-  if (!Number.isFinite(cycleCount) || cycleCount < 0) return fail('Cycle count must be 0 or more.')
-
-  const distanceKm = Number(formData.get('distanceKm') ?? 0)
+  // ── BMS quick-entry (workaround). Bounded, so a typo cannot overflow a price.
+  const bms = parseBmsReadings({
+    sohPct: formData.get('sohPct'),
+    capacityKwh: formData.get('capacityKwh'),
+    ageYears: formData.get('ageYears'),
+    cycleCount: formData.get('cycleCount'),
+    distanceKm: formData.get('distanceKm'),
+  })
+  if (bms.error !== null) return fail(bms.error)
+  const { sohPct, capacityKwh, ageYears, cycleCount, distanceKm } = bms.value
 
   // ── Photos ─────────────────────────────────────────────────────────────────
   const photoPaths = formData
@@ -102,15 +103,18 @@ export async function submitDamageRubric(formData: FormData) {
     return fail('Those photos were not uploaded by you.')
   }
 
-  // ── The QuoteInput draft. `weight_kg` comes off the item's CONFIRMED weight
-  // (Batch 3), never the customer's declared one — the agent's own scale
-  // reading is what the engine should price against. ──
+  // ── The QuoteInput draft. Weight is ONE pack's share of the agent's confirmed
+  // line weight: the engine prices a pack and the line is unit × quantity.
+  // (computeItemQuote re-derives it from the item at compute time.) ──
   const { data: itemFull } = await admin
     .from('battery_items')
     .select('confirmed_weight_kg, weight_kg')
     .eq('id', itemId)
     .single()
-  const weightKg = Number(itemFull?.confirmed_weight_kg ?? itemFull?.weight_kg ?? 0)
+  const weightKg = perPackWeightKg(
+    Number(itemFull?.confirmed_weight_kg ?? itemFull?.weight_kg ?? 0),
+    item.quantity,
+  )
 
   const quoteInputDraft = {
     battery: {
@@ -149,7 +153,7 @@ export async function submitDamageRubric(formData: FormData) {
 
   if (writeError) {
     console.error('[submitDamageRubric] update failed:', writeError)
-    return fail(writeError.message)
+    return fail('Could not save the readings. Try again.')
   }
 
   revalidatePath(damagePath)
@@ -158,21 +162,19 @@ export async function submitDamageRubric(formData: FormData) {
   redirect(`/job/${encodeURIComponent(pickupId)}/items/${encodeURIComponent(itemId)}/computing`)
 }
 
-// ─── saveQuoteResult ──────────────────────────────────────────────────────────
-// Called by the /computing screen once POST /api/quote returns. Persists the
-// engine's QuoteOutput onto the item (see the quoteData workaround note again)
-// and the columns the schema always intended for this: pathway, traceId,
-// unitPricePaise, linePricePaise.
-export async function saveQuoteResult(
-  pickupId: string,
-  itemId: string,
-  output: {
-    trace_id: string
-    decision: { pathway: string | null }
-    economics: { net_value: number }
-    pricing?: { p_recommended: number }
-  },
-): Promise<{ error: string | null }> {
+// ─── computeItemQuote ─────────────────────────────────────────────────────────
+// Runs the decision engine for one lithium item from the readings stored by
+// submitDamageRubric, and writes pathway, traceId, unit/line price and the full
+// engine output. Everything comes from the database and the session; nothing
+// about the price is taken from the browser.
+//
+// The vendor's margin tier is selected by Pickup.vendorId (AD9): never a field
+// a client could name.
+type StoredInput = Pick<QuoteInput, 'battery' | 'damage' | 'distance_km'> & {
+  inflow_type?: QuoteInput['inflow_type']
+}
+
+export async function computeItemQuote(pickupId: string, itemId: string): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -180,60 +182,89 @@ export async function saveQuoteResult(
   } = await supabase.auth.getUser()
   if (userError || !user) return { error: 'Not authenticated.' }
 
-  const admin = createAdminClient()
+  // Ownership in the query itself: this agent's pickup, and this item on it.
+  const item = await prisma.batteryItem.findFirst({
+    where: { id: itemId, pickupId, pickup: { agentId: user.id } },
+    select: {
+      id: true,
+      quantity: true,
+      chemistry: true,
+      weightKg: true,
+      confirmedWeightKg: true,
+      quoteData: true,
+      pickup: { select: { status: true, vendorId: true } },
+    },
+  })
+  if (!item) return { error: 'Item not found on this job.' }
+  const closed = intakeClosedMessage(item.pickup.status)
+  if (closed) return { error: closed }
+  if (!isLithium(item.chemistry)) return { error: 'Only lithium items are priced by the engine.' }
 
-  const { data: pickup, error: pickupError } = await admin
-    .from('pickups')
-    .select('id, agent_id')
-    .eq('id', pickupId)
-    .single()
-  if (pickupError || !pickup) return { error: 'Job not found.' }
-  if (pickup.agent_id !== user.id) return { error: 'This job is not assigned to you.' }
+  const stored = (item.quoteData as { input?: StoredInput } | null)?.input
+  if (!stored?.battery || !stored.damage) return { error: 'Fill in the damage readings first.' }
 
-  const { data: item, error: itemError } = await admin
-    .from('battery_items')
-    .select('id, pickup_id, quantity, quote_data')
-    .eq('id', itemId)
-    .single()
-  if (itemError || !item || item.pickup_id !== pickupId) return { error: 'Item not found on this job.' }
+  const lineWeightKg = Number(item.confirmedWeightKg ?? item.weightKg ?? 0)
+  const input: StoredInput = {
+    ...stored,
+    battery: { ...stored.battery, weight_kg: perPackWeightKg(lineWeightKg, item.quantity) },
+  }
+  const traceId = `${pickupId}-${itemId}`
 
-  // Engine pathway names are UPPERCASE (REUSE/REFURBISH/RECYCLE); the schema's
-  // RecoveryPathway enum is lowercase and also has `dispose`, which the engine
-  // never returns. HOLD (pathway: null) stays null here too — nothing to sell
-  // yet, so nothing to price.
-  const pathway = output.decision.pathway ? output.decision.pathway.toLowerCase() : null
+  let output: ReturnType<typeof computeQuote>
+  try {
+    const [marketData, config] = await Promise.all([getMarketData(), getActiveConfig()])
+    output = computeQuote(
+      {
+        trace_id: traceId,
+        battery: input.battery,
+        damage: input.damage,
+        distance_km: input.distance_km,
+        inflow_type: input.inflow_type ?? 'external',
+        supplier_id: item.pickup.vendorId,
+      },
+      config,
+      marketData,
+    )
+  } catch (err: unknown) {
+    console.error('[computeItemQuote] engine failed:', err)
+    if (err instanceof EngineValidationError) {
+      return { error: 'The engine could not use these readings. Check them on the damage screen.' }
+    }
+    if (err instanceof StaleMarketDataError) {
+      return { error: 'Metal prices are out of date. Ask the office to update them, then try again.' }
+    }
+    return { error: 'The price could not be worked out right now. Call the office.' }
+  }
 
-  // rupeesToPaise (packages/core/src/documents.ts, Batch 4) is the repo's one
-  // rupee→paise converter — round half-up at the paise level, never a float
-  // round-trip. Falls back to net_value when there's no pricing band (internal
-  // stock, or HOLD), matching D8's "recovered value" reading for that case.
+  // Falls back to net value when there is no pricing band (HOLD, or internal
+  // stock), which can be negative; HOLD lines are left out of the offer total.
   const priceRupees = output.pricing?.p_recommended ?? output.economics.net_value
   const unitPricePaise = Math.round(priceRupees * 100)
   const linePricePaise = unitPricePaise * item.quantity
+  const fits = (paise: number) => Number.isSafeInteger(paise) && Math.abs(paise) <= MAX_PAISE
+  if (!fits(unitPricePaise) || !fits(linePricePaise)) {
+    return { error: 'This price is too large to record. Check the readings. Capacity is per pack.' }
+  }
 
-  const existingQuoteData =
-    typeof item.quote_data === 'object' && item.quote_data !== null ? item.quote_data : {}
-
-  const { error: writeError } = await admin
-    .from('battery_items')
-    .update({
-      pathway,
-      trace_id: output.trace_id,
-      unit_price_paise: unitPricePaise,
-      line_price_paise: linePricePaise,
-      quote_data: { ...existingQuoteData, output },
-      updated_at: new Date().toISOString(),
+  try {
+    await prisma.batteryItem.update({
+      where: { id: item.id },
+      data: {
+        // Engine pathway names are UPPERCASE; the enum is lowercase. HOLD is null.
+        pathway: output.decision.pathway ? (output.decision.pathway.toLowerCase() as RecoveryPathway) : null,
+        traceId: output.trace_id,
+        unitPricePaise,
+        linePricePaise,
+        // A plain JSON copy, the same shape the result screens and /trace read.
+        quoteData: JSON.parse(JSON.stringify({ input, output })),
+      },
     })
-    .eq('id', itemId)
-    .eq('pickup_id', pickupId)
-
-  if (writeError) {
-    console.error('[saveQuoteResult] update failed:', writeError)
-    return { error: writeError.message }
+  } catch (err: unknown) {
+    console.error('[computeItemQuote] write failed:', err)
+    return { error: 'Could not save the price. Try again.' }
   }
 
   revalidatePath(`/job/${pickupId}/items/${itemId}/result`)
   revalidatePath(`/job/${pickupId}/items`)
-
   return { error: null }
 }

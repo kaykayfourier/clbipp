@@ -166,8 +166,7 @@ export default async function Page({
         )}
 
         <p className="text-[11px] leading-relaxed text-text-secondary">
-          This job now waits for the hub drop-off — you&rsquo;ll see it in your pending
-          drop-off list until then.
+          Next: drop it off at the hub.
         </p>
 
         <Link href="/">

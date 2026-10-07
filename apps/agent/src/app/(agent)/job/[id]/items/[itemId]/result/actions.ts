@@ -7,6 +7,7 @@ import { createClient } from '@clbipp/auth/server'
 import { classifyEscalation } from '@clbipp/core/exception-classify'
 
 import type { LithiumOutput } from './data'
+import { intakeClosedMessage } from '@/lib/safety-gate'
 
 // ─── escalateToAdmin (HOLD branch, Batch 5a · producer added 2026-08-31) ─────
 // The wireframe's "Escalate to admin" button went nowhere (plan §2, section D
@@ -80,6 +81,8 @@ export async function escalateToAdmin(
     select: { id: true, quoteData: true, pickup: { select: { status: true } } },
   })
   if (!item) return { error: 'This item is not on a job assigned to you.' }
+  const closed = intakeClosedMessage(item.pickup.status)
+  if (closed) return { error: closed }
 
   const output = (item.quoteData as { output?: LithiumOutput } | null)?.output
   if (!output) {

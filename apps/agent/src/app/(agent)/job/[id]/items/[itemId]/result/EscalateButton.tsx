@@ -22,7 +22,7 @@ export function EscalateButton({
   if (done) {
     return (
       <p className="rounded-[10px] border border-border px-4 py-3 text-center text-xs leading-relaxed text-text-secondary">
-        Escalated. Recorded on this pickup&rsquo;s timeline for admin to review.
+        Sent to admin.
       </p>
     )
   }

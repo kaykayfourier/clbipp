@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@clbipp/auth/server'
 import { createAdminClient } from '@clbipp/auth/admin'
 import { parseIntakeSubmission, photoPathsBelongTo } from '@clbipp/core/intake'
+import { intakeClosedMessage } from '@/lib/safety-gate'
 
 // ─── Per-item intake confirmation (W3/D1 · Batch 3) ──────────────────────────
 // Copies the four-point shape of ../actions.ts — the reference service-role
@@ -76,7 +77,9 @@ export async function confirmItem(formData: FormData) {
 
   // 🔴 The ownership check, standing in for a policy. See note 3 in ../actions.ts.
   if (pickup.agent_id !== user.id) return fail('This job is not assigned to you.')
-  if (pickup.status === 'cancelled') return fail('This pickup was cancelled.')
+  // Intake closes once the offer is presented: the vendor was priced on these items.
+  const closed = intakeClosedMessage(pickup.status)
+  if (closed) return fail(closed)
 
   const { data: item, error: itemError } = await admin
     .from('battery_items')
@@ -176,7 +179,7 @@ export async function confirmItem(formData: FormData) {
 
   if (writeError) {
     console.error('[confirmItem] update failed:', writeError)
-    return fail(writeError.message)
+    return fail('Could not save this line. Try again.')
   }
 
   revalidatePath(itemPath)

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 
 import { removeFile, uploadFile } from '@clbipp/auth/storage'
+import { BMS_LIMITS } from '@clbipp/core/intake'
 import { Banner, Button, Card, CardContent, SectionLabel } from '@clbipp/ui'
 
 import { submitDamageRubric } from './actions'
@@ -238,12 +239,8 @@ export function DamageRubricForm({
           See the note on BatteryItem.quoteData. Four fields, plainly labelled
           as manual for now — not dressed up as an Entroview read. */}
       <div className="flex flex-col gap-2">
-        <SectionLabel>Battery specs — manual entry</SectionLabel>
-        <Banner variant="info">
-          No Entroview connection yet — enter what the BMS or label shows. Other
-          diagnostic readings (cell imbalance, temperature history) aren&rsquo;t
-          captured on this build and are treated as no anomaly detected.
-        </Banner>
+        <SectionLabel>Battery specs, for one pack</SectionLabel>
+        <Banner variant="info">Enter what the BMS or the label shows for one pack.</Banner>
         <Card variant="elevated">
           <CardContent className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1">
@@ -262,11 +259,12 @@ export function DamageRubricForm({
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-bold text-text-secondary">Capacity (kWh)</span>
+              <span className="text-[11px] font-bold text-text-secondary">Capacity per pack (kWh)</span>
               <input
                 type="number"
                 name="capacityKwh"
                 min="0.01"
+                max={BMS_LIMITS.maxCapacityKwh}
                 step="0.01"
                 inputMode="decimal"
                 value={bms.capacityKwh}
@@ -281,6 +279,7 @@ export function DamageRubricForm({
                 type="number"
                 name="ageYears"
                 min="0"
+                max={BMS_LIMITS.maxAgeYears}
                 step="0.5"
                 inputMode="decimal"
                 value={bms.ageYears}
@@ -295,6 +294,7 @@ export function DamageRubricForm({
                 type="number"
                 name="cycleCount"
                 min="0"
+                max={BMS_LIMITS.maxCycleCount}
                 step="1"
                 inputMode="numeric"
                 value={bms.cycleCount}
@@ -309,7 +309,7 @@ export function DamageRubricForm({
 
       {/* ── The three-test rubric ────────────────────────────────────────── */}
       <div className="flex flex-col gap-3">
-        <SectionLabel>Engine Layer 1 · Physical damage</SectionLabel>
+        <SectionLabel>Physical damage</SectionLabel>
 
         <Segmented test="visual" label="Visual integrity" weight={WEIGHTS.visual} value={visual} onChange={setVisual} />
         <PhotoSlot
@@ -351,14 +351,14 @@ export function DamageRubricForm({
         <CardContent className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-text-secondary">
-              Weighted damage score
+              Damage score
             </p>
             {forcedRecycle && (
-              <p className="mt-0.5 text-[11px] font-semibold text-error">&gt;2.5 — Recycle forced</p>
+              <p className="mt-0.5 text-[11px] font-semibold text-error">&gt;2.5 — Recycle only</p>
             )}
             {refurbishOnly && (
               <p className="mt-0.5 text-[11px] font-semibold text-warning-text">
-                1.6–2.5 — Reuse locked out
+                1.6–2.5 — No reuse
               </p>
             )}
           </div>
@@ -374,8 +374,7 @@ export function DamageRubricForm({
 
       {forcedRecycle && (
         <Banner variant="warning">
-          Damage score forces <b>Recycle</b>. Reuse and Refurbish are locked for
-          this pack — the engine will only price the recycle pathway.
+          Too damaged to reuse. <b>Recycle</b> only.
         </Banner>
       )}
 

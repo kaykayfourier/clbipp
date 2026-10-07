@@ -10,7 +10,7 @@ import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
 import { AppShell, Card, CardContent, PagePadding } from '@clbipp/ui'
 
-import { requireSafetyChecklist } from '@/lib/safety-gate'
+import { requireIntakeOpen } from '@/lib/safety-gate'
 import { loadResultData } from '../data'
 import { SubNav } from '../page'
 
@@ -33,7 +33,7 @@ export default async function Page({
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  await requireSafetyChecklist(id, user.id)
+  await requireIntakeOpen(id, user.id)
 
   const data = await loadResultData(id, itemId, user.id)
   if (data.kind === 'simple') redirect(`/job/${id}/items/${itemId}/result`)
@@ -48,7 +48,7 @@ export default async function Page({
         <Card variant="elevated">
           <CardContent className="flex flex-col gap-2">
             <p className="text-xs font-bold uppercase tracking-widest text-text-secondary">
-              Plain-English rationale
+              Reason
             </p>
             <p className="text-sm leading-relaxed text-text-secondary">{output.decision.rationale}</p>
           </CardContent>
@@ -57,11 +57,11 @@ export default async function Page({
         <Card variant="elevated">
           <CardContent className="flex flex-col gap-2">
             <p className="text-xs font-bold uppercase tracking-widest text-text-secondary">
-              Alternative pathways
+              Other options
             </p>
             {output.alternatives.length === 0 ? (
               <p className="text-xs text-text-secondary">
-                No other pathway was eligible after the gating layers.
+                No other options.
               </p>
             ) : (
               <div className="flex flex-col divide-y divide-border">
@@ -110,7 +110,7 @@ export default async function Page({
                 <span className="text-text-primary">USD/INR {output.audit.fx_rate_usd_inr}</span>
               </div>
               <div className="flex justify-between py-1.5">
-                <span className="text-text-secondary">trace_id</span>
+                <span className="text-text-secondary">Trace ID</span>
                 <span className="text-text-primary">{output.trace_id}</span>
               </div>
             </div>

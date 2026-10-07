@@ -62,7 +62,7 @@ function CheckItem({
         <span className="mt-0.5 block text-xs leading-relaxed text-text-secondary">{help}</span>
         {outstanding && (
           <span className="mt-1 block text-[11px] font-semibold uppercase tracking-wider text-error">
-            Outstanding
+            Not ticked
           </span>
         )}
       </span>
@@ -147,8 +147,7 @@ export function SafetyChecklistForm({
 
           {!lithiumPresent && (
             <p className="text-[11px] leading-relaxed text-text-secondary">
-              Answering No removes the lithium-specific items only. Everything
-              below stays required on every job.
+              No hides the lithium items only.
             </p>
           )}
         </CardContent>
@@ -185,8 +184,7 @@ export function SafetyChecklistForm({
       </Button>
 
       <p className="text-[11px] leading-relaxed text-text-secondary">
-        Recorded against your name and this job. Intake stays locked until every
-        item above is confirmed.
+        Saved under your name. Tick every item to continue.
       </p>
     </form>
   )

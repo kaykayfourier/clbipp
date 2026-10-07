@@ -2,6 +2,8 @@ import { notFound, redirect } from 'next/navigation'
 
 import { prisma } from '@clbipp/database'
 
+import { jobHref } from './job-nav'
+
 // ─── 🔴 THE INTAKE GATE (W1 · Batch 2) ───────────────────────────────────────
 //
 // The mandatory safety checklist is only mandatory because of this function.
@@ -61,4 +63,31 @@ export async function requireSafetyChecklist(pickupId: string, userId: string): 
   if (pickup.safetyChecklist?.passed !== true) {
     redirect(`/job/${encodeURIComponent(pickupId)}/safety`)
   }
+}
+
+/**
+ * Require that INTAKE is still open: a passing checklist AND the pickup still at
+ * `arrived`.
+ *
+ * Once the offer is presented the items are what the vendor was priced on, so
+ * every item screen closes and sends the agent to wherever the job now is.
+ * Before this, an agent could change a weight after the vendor had accepted.
+ * The item actions refuse the same way; this is the screen half.
+ */
+export async function requireIntakeOpen(pickupId: string, userId: string): Promise<void> {
+  const pickup = await prisma.pickup.findUnique({
+    where: { id: pickupId },
+    select: { agentId: true, status: true, custodyBatchId: true },
+  })
+  if (!pickup || pickup.agentId !== userId) notFound()
+  if (pickup.status !== 'arrived') redirect(jobHref(pickup.status, pickup.custodyBatchId, pickupId))
+  await requireSafetyChecklist(pickupId, userId)
+}
+
+/** The same rule for a server action, as a message instead of a redirect. */
+export function intakeClosedMessage(status: string): string | null {
+  if (status === 'arrived') return null
+  if (status === 'cancelled') return 'This pickup was cancelled.'
+  if (status === 'requested' || status === 'scheduled') return 'Tap Arrived on the job screen first.'
+  return 'The offer has been presented, so the items can no longer be changed.'
 }

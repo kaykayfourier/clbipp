@@ -67,6 +67,10 @@ export async function submitSafetyChecklist(formData: FormData) {
   if (pickup.status === 'cancelled') {
     redirect(`${safetyPath}?error=${encodeURIComponent('This pickup was cancelled.')}`)
   }
+  // The checklist gates intake, which closes once the offer is presented.
+  if (pickup.status !== 'scheduled' && pickup.status !== 'arrived') {
+    redirect(`${safetyPath}?error=${encodeURIComponent('Intake for this job is finished.')}`)
+  }
 
   // ── What the agent ticked ──────────────────────────────────────────────────
   // Only the catalogue's own keys are read, so nothing else on the form can
@@ -133,7 +137,7 @@ export async function submitSafetyChecklist(formData: FormData) {
 
   if (writeError) {
     console.error('[submitSafetyChecklist] upsert failed:', writeError)
-    redirect(`${safetyPath}?error=${encodeURIComponent(writeError.message)}`)
+    redirect(`${safetyPath}?error=${encodeURIComponent('Could not save the checklist. Try again.')}`)
   }
 
   // Job detail renders the completed banner from this row, and the day view's

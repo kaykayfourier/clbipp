@@ -11,7 +11,7 @@ import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
 import { AppShell, Card, CardContent, PagePadding } from '@clbipp/ui'
 
-import { requireSafetyChecklist } from '@/lib/safety-gate'
+import { requireIntakeOpen } from '@/lib/safety-gate'
 import { loadResultData } from '../data'
 import { SubNav } from '../page'
 
@@ -34,7 +34,7 @@ export default async function Page({
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  await requireSafetyChecklist(id, user.id)
+  await requireIntakeOpen(id, user.id)
 
   const data = await loadResultData(id, itemId, user.id)
   // Nothing to break down for a rate-card price — back to the verdict, which

@@ -148,6 +148,31 @@ const isNonNegative = (n: unknown): n is number =>
   typeof n === "number" && Number.isFinite(n) && n >= 0
 
 /**
+ * Upper bounds for the numbers /config lets an admin type, in the engine's own
+ * units (₹, ₹/kg, ₹/kWh, ₹/km, years, cycles, SoH points). Each is roughly 50–100×
+ * the shipped default: far above any real setting, low enough that a stray
+ * extra zero cannot push a quote past what a money column can store.
+ */
+export const ENGINE_CONFIG_MAX = {
+  flat_repackaging_fee: 100_000,
+  cell_replacement_rate: 100_000,
+  soh_restoration_delta: 100,
+  logistics_rate_per_km: 1_000,
+  hurdle_rate: 1_000_000,
+  /** A per-kg cost rate (component mode). */
+  cost_rate_per_kg: 10_000,
+  /** A cost entered as one amount (lump_sum mode). */
+  cost_lump_sum: 1_000_000,
+  cycle_cap: 100_000,
+  age_cap: 100,
+  second_life_rate_per_kWh: 100_000,
+  refurb_pack_rate_per_kWh: 100_000,
+  chemistry_mult: 10,
+} as const
+
+const withinMax = (n: number, max: number): boolean => n <= max
+
+/**
  * Every rule from docs/ADMIN_TASKS.md Batch 11 step 6, checked against a
  * candidate config. Returns a list of human-readable problems; empty means
  * publishable.
@@ -211,6 +236,8 @@ export function validateEngineConfig(config: Config): string[] {
   ] as const) {
     if (!isNonNegative(config[key])) {
       errors.push(`${key} must be zero or greater.`)
+    } else if (!withinMax(config[key], ENGINE_CONFIG_MAX[key])) {
+      errors.push(`${key} must be at most ${ENGINE_CONFIG_MAX[key].toLocaleString("en-IN")}.`)
     }
   }
 
@@ -222,8 +249,11 @@ export function validateEngineConfig(config: Config): string[] {
       continue
     }
     const value = cost.mode === "lump_sum" ? cost.amount : cost.rate
+    const max = cost.mode === "lump_sum" ? ENGINE_CONFIG_MAX.cost_lump_sum : ENGINE_CONFIG_MAX.cost_rate_per_kg
     if (!isNonNegative(value)) {
       errors.push(`${key} must be zero or greater.`)
+    } else if (!withinMax(value, max)) {
+      errors.push(`${key} must be at most ${max.toLocaleString("en-IN")}.`)
     }
   }
 
@@ -232,6 +262,8 @@ export function validateEngineConfig(config: Config): string[] {
     const value = config[key]
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
       errors.push(`${key} must be greater than zero.`)
+    } else if (!withinMax(value, ENGINE_CONFIG_MAX[key])) {
+      errors.push(`${key} must be at most ${ENGINE_CONFIG_MAX[key].toLocaleString("en-IN")}.`)
     }
   }
 
@@ -242,8 +274,11 @@ export function validateEngineConfig(config: Config): string[] {
       "refurb_pack_rate_per_kWh",
       "chemistry_mult",
     ] as const) {
-      if (!isNonNegative(config[key]?.[chem])) {
+      const value = config[key]?.[chem]
+      if (!isNonNegative(value)) {
         errors.push(`${key}.${chem} must be zero or greater.`)
+      } else if (!withinMax(value, ENGINE_CONFIG_MAX[key])) {
+        errors.push(`${key}.${chem} must be at most ${ENGINE_CONFIG_MAX[key].toLocaleString("en-IN")}.`)
       }
     }
 

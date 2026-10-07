@@ -18,9 +18,8 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
 import { prisma } from '@clbipp/database'
+import { MARKET_METALS, validateMarketOverride, type MarketMetal } from '@clbipp/core/market'
 import { requireAdmin } from '@/lib/admin-identity'
-
-const METALS = ['Li', 'Co', 'Ni', 'Mn', 'Cu', 'Al'] as const
 
 export async function overrideMarketPrices(formData: FormData) {
   const fail = (message: string): never =>
@@ -34,21 +33,12 @@ export async function overrideMarketPrices(formData: FormData) {
   const note = String(formData.get('note') ?? '').trim()
   if (!note) return fail('A reason is required for a market override.')
 
-  const prices: Record<string, number> = {}
-  for (const metal of METALS) {
-    const raw = Number(formData.get(metal))
-    if (!Number.isFinite(raw) || raw <= 0) {
-      return fail(`${metal} price must be a positive number.`)
-    }
-    prices[metal] = raw
-  }
-
+  const prices = {} as Record<MarketMetal, number>
+  for (const metal of MARKET_METALS) prices[metal] = Number(formData.get(metal))
   const fxRate = Number(formData.get('fxRateUsdInr'))
-  if (!Number.isFinite(fxRate) || fxRate <= 0) {
-    return fail('FX rate must be a positive number.')
-  }
 
-  // The row the override replaces — captured for the audit's `before`.
+  // The row the override replaces — captured for the audit's `before`, and the
+  // baseline the typo guard compares against.
   const previous = await prisma.marketPrices.findFirst({
     orderBy: { updatedAt: 'desc' },
     select: {
@@ -56,6 +46,22 @@ export async function overrideMarketPrices(formData: FormData) {
       Mn: true, Cu: true, Al: true, fxRateUsdInr: true,
     },
   })
+
+  const problem = validateMarketOverride(
+    prices,
+    fxRate,
+    previous
+      ? {
+          Li: Number(previous.Li),
+          Co: Number(previous.Co),
+          Ni: Number(previous.Ni),
+          Mn: Number(previous.Mn),
+          Cu: Number(previous.Cu),
+          Al: Number(previous.Al),
+        }
+      : null,
+  )
+  if (problem) return fail(problem)
 
   try {
     await prisma.$transaction(async (tx) => {

@@ -26,10 +26,9 @@ import {
   PagePadding,
   SectionLabel,
   StatusBadge,
-  isStageBefore,
 } from '@clbipp/ui'
 
-import { mapsHref, toCoord } from '@/lib/job-nav'
+import { jobPrimaryAction, mapsHref, toCoord } from '@/lib/job-nav'
 
 import { markArrivedAndContinue } from './actions'
 
@@ -75,6 +74,9 @@ export default async function Page({
       notes: true,
       scheduledSlot: true,
       agentFeePaise: true,
+      custodyBatchId: true,
+      collectionScheduledAt: true,
+      offer: { select: { acceptedAt: true } },
       vendor: { select: { fullName: true, phone: true, companyName: true } },
       address: {
         select: { line1: true, line2: true, city: true, state: true, pincode: true, lat: true, lng: true },
@@ -115,7 +117,14 @@ export default async function Page({
   const { urls } = await createSignedUrls('pickup-photos', photoPaths)
   const photoUrl = new Map(urls.map((u) => [u.path, u.url]))
 
-  const notYetArrived = isStageBefore(pickup.status, 'arrived')
+  const action = jobPrimaryAction({
+    id: pickup.id,
+    status: pickup.status,
+    custodyBatchId: pickup.custodyBatchId,
+    checklistPassed: pickup.safetyChecklist?.passed === true,
+    offerAcceptedAt: pickup.offer?.acceptedAt ?? null,
+    collectionScheduledAt: pickup.collectionScheduledAt,
+  })
   const totalUnits = pickup.items.reduce((sum, item) => sum + item.quantity, 0)
   const totalWeightKg = pickup.items.reduce((sum, item) => sum + Number(item.weightKg ?? 0), 0)
 
@@ -200,8 +209,7 @@ export default async function Page({
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-text-secondary">
-              Paid on collection. Separate from the battery&rsquo;s purchase price
-              shown to the vendor, which the pricing engine sets after assessment.
+              Paid on collection. Not the battery price.
             </p>
           </CardContent>
         </Card>
@@ -236,10 +244,7 @@ export default async function Page({
             </CardContent>
           </Card>
 
-          <p className="text-[11px] leading-relaxed text-text-secondary">
-            Declared by the customer at booking. You confirm chemistry, weight and
-            condition per item during intake.
-          </p>
+          <p className="text-[11px] text-text-secondary">As declared by the customer.</p>
 
           {photoPaths.length > 0 && (
             <div className="grid grid-cols-3 gap-2">
@@ -260,31 +265,24 @@ export default async function Page({
           )}
         </div>
 
-        {/* ── The one action ────────────────────────────────────────────────
-            A POST, not a <Link>: this advances the lifecycle, and a GET that
-            mutates gets fired by link prefetchers and crawlers (the customer
-            app's Batch 12 lesson). Once past `scheduled` it becomes a plain
-            link onward to the safety checklist, which is the mandatory gate in
-            front of intake (W1 / Batch 2). */}
-        {notYetArrived ? (
+        {/* ── The one action, from the job's state (jobPrimaryAction). Arrived is
+            a POST, not a link: it advances the lifecycle, and a GET that
+            mutates gets fired by link prefetchers. */}
+        {action.kind === 'arrive' ? (
           <form action={markArrivedAndContinue}>
             <input type="hidden" name="pickupId" value={pickup.id} />
             <Button type="submit" variant="primary" fullWidth>
               Arrived on site
             </Button>
           </form>
-        ) : (
-          <Link href={`/job/${pickup.id}/safety`}>
+        ) : action.kind === 'link' ? (
+          <Link href={action.href}>
             <Button variant="primary" fullWidth>
-              {pickup.safetyChecklist?.passed
-                ? 'Continue to intake'
-                : 'Continue to safety checklist'}
+              {action.label}
             </Button>
           </Link>
-        )}
-
-        {pickup.safetyChecklist?.passed && (
-          <Banner variant="success">Safety checklist completed for this job.</Banner>
+        ) : (
+          <Banner variant="info">{action.note}</Banner>
         )}
       </PagePadding>
     </AppShell>

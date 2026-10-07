@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { MAX_FILE_BYTES, uploadFile } from '@clbipp/auth/storage'
+import { formatPaise } from '@clbipp/core/format'
 import { Banner, Button, Card, CardContent, SectionLabel } from '@clbipp/ui'
 
 import { confirmCollection } from './actions'
@@ -237,8 +238,8 @@ export function CollectForm({
                 className="mt-0.5 h-5 w-5 shrink-0 accent-primary-green"
               />
               <span className="text-sm text-text-primary">
-                I confirmed with {vendorName} that everything on the offer is being
-                collected, and handed them their receipt.
+                I confirmed with {vendorName} that all items are collected, and
+                gave them the receipt.
               </span>
             </label>
           </CardContent>
@@ -254,7 +255,7 @@ export function CollectForm({
         <CardContent className="flex items-center justify-between">
           <span className="text-sm font-semibold text-text-primary">Your fee for this job</span>
           <span className="font-serif text-lg font-semibold text-primary-green">
-            ₹{(agentFeePaise / 100).toFixed(2)}
+            {formatPaise(agentFeePaise)}
           </span>
         </CardContent>
       </Card>
@@ -265,8 +266,8 @@ export function CollectForm({
       {!ready && (
         <p className="text-center text-[11px] text-text-secondary">
           {tagsComplete
-            ? 'Get the signature and confirm with the vendor to continue.'
-            : 'Tag every line above (or record why one has no tag), then get the signature.'}
+            ? 'Tick the box and get the signature.'
+            : 'Tag every line (or give a reason), then get the signature.'}
         </p>
       )}
     </form>

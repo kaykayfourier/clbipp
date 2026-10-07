@@ -59,6 +59,49 @@ export function jobHref(
   return `/pickups/${id}`
 }
 
+/** The one main action on job detail. */
+export type JobAction =
+  | { kind: 'arrive' }
+  | { kind: 'link'; href: string; label: string }
+  | { kind: 'none'; note: string }
+
+/**
+ * Job detail's main button, from the job's real state.
+ *
+ * It used to read "Continue to intake" for every status past `scheduled`, so an
+ * agent coming back to an offered or collected job was sent to intake — which
+ * is closed once an offer exists.
+ */
+export function jobPrimaryAction(job: {
+  id: string
+  status: PickupStatus
+  custodyBatchId: string | null
+  checklistPassed: boolean
+  offerAcceptedAt: Date | null
+  collectionScheduledAt: Date | null
+}): JobAction {
+  const base = `/job/${encodeURIComponent(job.id)}`
+  if (job.status === 'cancelled') return { kind: 'none', note: 'This pickup was cancelled.' }
+  if (isStageBefore(job.status, 'arrived')) return { kind: 'arrive' }
+  if (job.status === 'arrived') {
+    return job.checklistPassed
+      ? { kind: 'link', href: `${base}/items`, label: 'Continue intake' }
+      : { kind: 'link', href: `${base}/safety`, label: 'Start safety checklist' }
+  }
+  if (job.status === 'offered') {
+    if (!job.offerAcceptedAt) return { kind: 'link', href: `${base}/offer`, label: 'View offer' }
+    if (job.collectionScheduledAt) {
+      const when = job.collectionScheduledAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+      return { kind: 'link', href: `${base}/offer`, label: `Collection on ${when}` }
+    }
+    return { kind: 'link', href: `${base}/collect`, label: 'Collect' }
+  }
+  if (job.status === 'collected' && job.custodyBatchId === null) {
+    return { kind: 'link', href: '/dropoff', label: 'Drop off at the hub' }
+  }
+  return { kind: 'link', href: `/pickups/${encodeURIComponent(job.id)}`, label: 'Track this pickup' }
+}
+
 /**
  * True while the job still needs something from the agent.
  *
@@ -101,6 +144,7 @@ export function jobNextStep(
   status: PickupStatus,
   custodyBatchId: string | null,
   collectionScheduledAt: Date | null = null,
+  offerAcceptedAt: Date | null | undefined = undefined,
 ): string {
   if (status === 'scheduled') return 'Head over and tap Arrived'
   if (status === 'arrived') return 'Resume — safety checklist, then intake'
@@ -112,7 +156,10 @@ export function jobNextStep(
       const when = collectionScheduledAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
       return `Collection booked for ${when}`
     }
-    return 'Awaiting the vendor’s decision — or collect if accepted'
+    // Callers that pass the acceptance get one clear line; older callers keep
+    // the hedged one.
+    if (offerAcceptedAt === undefined) return 'Awaiting the vendor’s decision — or collect if accepted'
+    return offerAcceptedAt ? 'Accepted — collect today' : 'Waiting for the vendor'
   }
   if (status === 'collected' && custodyBatchId === null) return 'Pending drop-off at the hub'
   if (status === 'cancelled') return 'Cancelled'

@@ -50,12 +50,11 @@ export function TagLoad({
     <div className="flex flex-col gap-2">
       <SectionLabel>{`Tag the load — ${done} of ${lines.length} lines done`}</SectionLabel>
       <p className="px-1 text-[11px] leading-relaxed text-text-secondary">
-        One tag from your sheet on every line — on the battery, or on the bag or crate holding a lot of small
-        cells.{' '}
+        One tag per line — on the battery, or on its bag or crate.{' '}
         {runNo
           ? boxes.length > 0
             ? `Loading into ${boxes.map((b) => b.code).join(', ')} on ${runNo}.`
-            : `This job is on ${runNo} — scan a box on the run screen to record which box it goes in.`
+            : `On ${runNo}. Scan a box on the run screen first.`
           : ''}
       </p>
 
@@ -98,7 +97,7 @@ export function TagLoad({
               <>
                 {line.untaggedReason ? (
                   <p className="rounded-[10px] bg-background px-3 py-2 text-[11px] text-text-secondary">
-                    {`No tag: “${line.untaggedReason}”. The hub tags it on receipt — or scan one now if you have it.`}
+                    {`No tag: “${line.untaggedReason}”. The hub will tag it, or scan one now.`}
                   </p>
                 ) : null}
                 <form action={bindItemTagAction} className="flex flex-col gap-2">

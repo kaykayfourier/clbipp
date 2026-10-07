@@ -30,7 +30,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@clbipp/auth/server'
 import { AppShell, Banner, Button, PagePadding } from '@clbipp/ui'
 
-import { requireSafetyChecklist } from '@/lib/safety-gate'
+import { requireIntakeOpen } from '@/lib/safety-gate'
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -43,15 +43,14 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!user) redirect('/login')
 
   // 🔴 THE GATE. Keep this. See the note at the top of the file.
-  await requireSafetyChecklist(id, user.id)
+  await requireIntakeOpen(id, user.id)
 
   return (
     <AppShell title="Scan" showBack backHref={`/job/${id}/items`} hideNav>
       <PagePadding className="flex flex-col gap-4">
         <Banner variant="info">
-          Intake is entered by hand from the item list — that is the primary path,
-          not a fallback. QR scanning is used later: you scan a tag onto each line
-          when you collect, and scan a box to start a collection run.
+          Intake is entered by hand from the item list. You scan tags when you
+          collect, and a box to start a run.
         </Banner>
         <Link href={`/job/${id}/items`}>
           <Button variant="primary" fullWidth>

@@ -15,7 +15,7 @@ import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
 import { AppShell, Banner, Button, Card, CardContent, PagePadding } from '@clbipp/ui'
 
-import { requireSafetyChecklist } from '@/lib/safety-gate'
+import { requireIntakeOpen } from '@/lib/safety-gate'
 import { loadResultData } from './data'
 import { EscalateButton } from './EscalateButton'
 
@@ -38,7 +38,7 @@ export default async function Page({
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  await requireSafetyChecklist(id, user.id)
+  await requireIntakeOpen(id, user.id)
 
   const data = await loadResultData(id, itemId, user.id)
 
@@ -50,7 +50,7 @@ export default async function Page({
           <Card variant="elevated">
             <CardContent className="flex flex-col items-center gap-1 py-6 text-center">
               <span className="text-[11px] font-bold uppercase tracking-widest text-text-secondary">
-                Priced off the rate card
+                Fixed rate
               </span>
               <span className="font-serif text-3xl font-semibold text-text-primary">
                 {formatPaise(data.linePricePaise)}
@@ -61,8 +61,7 @@ export default async function Page({
             </CardContent>
           </Card>
           <p className="text-[11px] leading-relaxed text-text-secondary">
-            Not lithium — no damage rubric and no pathway decision. Weight and
-            condition price this line directly (D1).
+            Not lithium. Priced by weight and condition.
           </p>
           <Link href={`/job/${id}/items`}>
             <Button variant="primary" fullWidth>
@@ -78,7 +77,7 @@ export default async function Page({
   const { output } = data
   const isHold = output.decision.flags.includes('HOLD')
   const isReview = output.decision.flags.includes('REVIEW')
-  const pathwayLabel = output.decision.pathway ? PATHWAY_LABEL[output.decision.pathway] : 'HOLD'
+  const pathwayLabel = output.decision.pathway ? PATHWAY_LABEL[output.decision.pathway] : 'On hold'
 
   return (
     <AppShell title={`${output.trace_id} · Verdict`} showBack backHref={`/job/${id}/items/${itemId}`} hideNav>
@@ -88,7 +87,7 @@ export default async function Page({
         <Card variant="elevated">
           <CardContent className="flex flex-col items-center gap-1 py-6 text-center">
             <span className="text-[11px] font-bold uppercase tracking-widest text-text-secondary">
-              {isHold ? 'No profitable pathway' : 'Selected pathway'}
+              {isHold ? 'Not profitable' : 'Best option'}
             </span>
             <span className="font-serif text-2xl font-semibold text-text-primary">{pathwayLabel}</span>
             {!isHold && (
@@ -108,19 +107,19 @@ export default async function Page({
           <Card variant="elevated">
             <CardContent className="grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-text-secondary">P min</p>
+                <p className="text-[10px] uppercase tracking-widest text-text-secondary">Lowest</p>
                 <p className="text-sm font-bold text-text-primary">
                   {formatPaise(Math.round(output.pricing.p_min * 100))}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-text-secondary">P recommended</p>
+                <p className="text-[10px] uppercase tracking-widest text-text-secondary">Recommended</p>
                 <p className="text-sm font-bold text-text-primary">
                   {formatPaise(Math.round(output.pricing.p_recommended * 100))}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-text-secondary">P max</p>
+                <p className="text-[10px] uppercase tracking-widest text-text-secondary">Highest</p>
                 <p className="text-sm font-bold text-text-primary">
                   {formatPaise(Math.round(output.pricing.p_max * 100))}
                 </p>
@@ -132,9 +131,8 @@ export default async function Page({
         {isHold && (
           <>
             <Banner variant="error">
-              Every eligible pathway returns a negative net value at current
-              market rates. Do not present an offer for this line — escalate to
-              admin.
+              Not profitable at today&rsquo;s prices. Do not offer this line.
+              Escalate to admin.
             </Banner>
             <EscalateButton pickupId={id} itemId={itemId} traceId={output.trace_id} />
           </>
@@ -142,8 +140,7 @@ export default async function Page({
 
         {isReview && !isHold && (
           <Banner variant="warning">
-            <b>REVIEW</b> — net value clears the floor but sits below the hurdle
-            rate. Confirm with admin before presenting this line in the offer.
+            <b>Low margin.</b> Ask admin before you offer this line.
           </Banner>
         )}
 

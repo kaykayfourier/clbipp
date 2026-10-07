@@ -10,6 +10,7 @@ import { computeDamageScore, DEFAULT_CONFIG, type Config } from "@clbipp/decisio
 
 import {
   EDITABLE_CHEMISTRIES,
+  ENGINE_CONFIG_MAX,
   MARGIN_TIER_KEYS,
   METALS,
   TIER3_REFERENCE,
@@ -170,5 +171,41 @@ describe("tier 3 — the literals a screen cannot move (AD8)", () => {
     expect(computeDamageScore({ visual: 1, leakage: 0, thermal: 0 })).toBeCloseTo(visual, 10)
     expect(computeDamageScore({ visual: 0, leakage: 1, thermal: 0 })).toBeCloseTo(leakage, 10)
     expect(computeDamageScore({ visual: 0, leakage: 0, thermal: 1 })).toBeCloseTo(thermal, 10)
+  })
+})
+
+describe("validateEngineConfig upper bounds", () => {
+  it("refuses a stray extra zero on every kind of number", () => {
+    const flat = draft()
+    flat.logistics_rate_per_km = ENGINE_CONFIG_MAX.logistics_rate_per_km + 1
+    expect(validateEngineConfig(flat).join(" ")).toMatch(/logistics_rate_per_km must be at most/)
+
+    const cost = draft()
+    cost.processing = { mode: "component", rate: ENGINE_CONFIG_MAX.cost_rate_per_kg * 10 }
+    expect(validateEngineConfig(cost).join(" ")).toMatch(/processing must be at most/)
+
+    const lump = draft()
+    lump.hydromet = { mode: "lump_sum", amount: ENGINE_CONFIG_MAX.cost_lump_sum + 1 }
+    expect(validateEngineConfig(lump).join(" ")).toMatch(/hydromet must be at most/)
+
+    const cap = draft()
+    cap.age_cap = 1_000
+    expect(validateEngineConfig(cap).join(" ")).toMatch(/age_cap must be at most/)
+
+    const rate = draft()
+    rate.second_life_rate_per_kWh = { ...rate.second_life_rate_per_kWh, LFP: 6_000_000 }
+    expect(validateEngineConfig(rate).join(" ")).toMatch(/second_life_rate_per_kWh\.LFP must be at most/)
+  })
+
+  it("leaves the shipped defaults well inside every bound", () => {
+    // If a default is ever raised past its bound, /config can no longer publish
+    // the seeded row. Each max is meant to sit an order of magnitude above it.
+    expect(DEFAULT_CONFIG.hurdle_rate * 10).toBeLessThanOrEqual(ENGINE_CONFIG_MAX.hurdle_rate)
+    expect(DEFAULT_CONFIG.cycle_cap * 10).toBeLessThanOrEqual(ENGINE_CONFIG_MAX.cycle_cap)
+    for (const chem of EDITABLE_CHEMISTRIES) {
+      expect(DEFAULT_CONFIG.second_life_rate_per_kWh[chem] * 10).toBeLessThanOrEqual(
+        ENGINE_CONFIG_MAX.second_life_rate_per_kWh,
+      )
+    }
   })
 })

@@ -73,7 +73,7 @@ export async function markArrived(pickupId: string): Promise<{ error: string | n
 
   if (updateError) {
     console.error('[markArrived] status update failed:', updateError)
-    return { error: updateError.message }
+    return { error: 'Could not update the job. Try again.' }
   }
 
   // The audit event — the same write that fires the realtime ping on the
@@ -194,7 +194,10 @@ export async function scheduleCollection(
     .eq('id', pickupId)
     .eq('status', 'offered') // guards the same race markArrived guards against
 
-  if (writeError) return { error: writeError.message }
+  if (writeError) {
+    console.error('[scheduleCollection] update failed:', writeError)
+    return { error: 'Could not book the date. Try again.' }
+  }
 
   const shown = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
   const { error: eventError } = await admin.from('status_events').insert({
@@ -210,6 +213,7 @@ export async function scheduleCollection(
   if (eventError) console.error('[scheduleCollection] status_events insert failed:', eventError)
 
   revalidatePath(`/job/${pickupId}`)
+  revalidatePath(`/job/${pickupId}/offer`)
   revalidatePath('/')
   return { error: null }
 }
@@ -219,9 +223,10 @@ export async function scheduleCollectionAndReturn(formData: FormData) {
   const date = String(formData.get('collectionDate') ?? '')
   if (!pickupId) redirect('/')
 
+  // Back to the offer screen either way: the date form lives there, and it is
+  // the screen that shows the booked date.
+  const offerPath = `/job/${encodeURIComponent(pickupId)}/offer`
   const result = await scheduleCollection(pickupId, date)
-  if (result.error) {
-    redirect(`/job/${encodeURIComponent(pickupId)}?error=${encodeURIComponent(result.error)}`)
-  }
-  redirect(`/job/${encodeURIComponent(pickupId)}`)
+  if (result.error) redirect(`${offerPath}?error=${encodeURIComponent(result.error)}`)
+  redirect(offerPath)
 }

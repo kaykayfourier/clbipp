@@ -10,7 +10,7 @@ vi.mock("@clbipp/database", () => ({
 }))
 
 import { prisma } from "@clbipp/database"
-import { getMarketData } from "./market"
+import { getMarketData, validateMarketOverride } from "./market"
 
 const mockRow = {
   id: "abcd1234-0000-0000-0000-000000000000",
@@ -74,5 +74,22 @@ describe("getMarketData", () => {
     // nothing else in the codebase says it.
     const result = await getMarketData()
     expect(result.fx_rate_usd_inr).toBe(84.75)
+  })
+})
+describe("validateMarketOverride", () => {
+  const seed = { Li: 1450, Co: 2600, Ni: 1550, Mn: 180, Cu: 780, Al: 240 }
+
+  it("accepts an ordinary update", () => {
+    expect(validateMarketOverride({ ...seed, Co: 2800 }, 83.2, seed)).toBeNull()
+    expect(validateMarketOverride(seed, 83.2, null)).toBeNull()
+  })
+
+  it("refuses an extra zero, a collapse and nonsense", () => {
+    expect(validateMarketOverride({ ...seed, Li: 145000 }, 83.2, seed)).toMatch(/Li moves/)
+    expect(validateMarketOverride({ ...seed, Ni: 15 }, 83.2, seed)).toMatch(/Ni moves/)
+    expect(validateMarketOverride({ ...seed, Cu: 0 }, 83.2, seed)).toMatch(/Cu price must be a positive/)
+    expect(validateMarketOverride({ ...seed, Al: 5_000_000 }, 83.2, null)).toMatch(/at most/)
+    expect(validateMarketOverride(seed, 0, seed)).toMatch(/FX rate/)
+    expect(validateMarketOverride(seed, 8320, seed)).toMatch(/FX rate/)
   })
 })

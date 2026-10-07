@@ -509,3 +509,77 @@ export function photoPathsBelongTo(paths: readonly string[], userId: string): bo
   if (!userId) return false
   return paths.every((p) => p.startsWith(`${userId}/`))
 }
+
+// ─── BMS readings for the lithium price ──────────────────────────────────────
+// What the agent types on the damage screen. Every bound is a typo guard, not a
+// business rule: set well above any real pack so a genuine reading never trips
+// it, and low enough that an extra digit cannot push a price past what a money
+// column can store.
+
+export const BMS_LIMITS = {
+  /** Per pack. The biggest EV and storage packs are a few hundred kWh. */
+  maxCapacityKwh: 1_000,
+  maxAgeYears: 50,
+  maxCycleCount: 20_000,
+  /** Collection distance. Delhi NCR runs are tens of km. */
+  maxDistanceKm: 1_000,
+} as const
+
+export type BmsReadings = {
+  sohPct: number
+  capacityKwh: number
+  ageYears: number
+  cycleCount: number
+  distanceKm: number
+}
+
+/** Parse the damage screen's readings. A blank distance means 0 km. */
+export function parseBmsReadings(input: {
+  sohPct: unknown
+  capacityKwh: unknown
+  ageYears: unknown
+  cycleCount: unknown
+  distanceKm: unknown
+}): { value: BmsReadings; error: null } | { value: null; error: string } {
+  const num = (v: unknown): number => (typeof v === 'string' && v.trim() === '' ? Number.NaN : Number(v))
+  const sohPct = num(input.sohPct)
+  const capacityKwh = num(input.capacityKwh)
+  const ageYears = num(input.ageYears)
+  const cycleCount = num(input.cycleCount)
+  const rawDistance = input.distanceKm
+  const distanceKm =
+    rawDistance === null || rawDistance === undefined || (typeof rawDistance === 'string' && rawDistance.trim() === '')
+      ? 0
+      : Number(rawDistance)
+
+  if (!Number.isFinite(sohPct) || sohPct < 0 || sohPct > 100) {
+    return { value: null, error: 'State of health must be between 0 and 100%.' }
+  }
+  if (!Number.isFinite(capacityKwh) || capacityKwh <= 0 || capacityKwh > BMS_LIMITS.maxCapacityKwh) {
+    return { value: null, error: `Capacity per pack must be more than 0 and at most ${BMS_LIMITS.maxCapacityKwh} kWh.` }
+  }
+  if (!Number.isFinite(ageYears) || ageYears < 0 || ageYears > BMS_LIMITS.maxAgeYears) {
+    return { value: null, error: `Age must be between 0 and ${BMS_LIMITS.maxAgeYears} years.` }
+  }
+  if (!Number.isInteger(cycleCount) || cycleCount < 0 || cycleCount > BMS_LIMITS.maxCycleCount) {
+    return { value: null, error: `Cycle count must be a whole number up to ${BMS_LIMITS.maxCycleCount}.` }
+  }
+  if (!Number.isFinite(distanceKm) || distanceKm < 0 || distanceKm > BMS_LIMITS.maxDistanceKm) {
+    return { value: null, error: `Distance must be between 0 and ${BMS_LIMITS.maxDistanceKm} km.` }
+  }
+  return { value: { sohPct, capacityKwh, ageYears, cycleCount, distanceKm }, error: null }
+}
+
+/**
+ * The weight of ONE pack on a line, which is what the engine prices.
+ *
+ * A line's weight is the whole line's (30 laptop packs weighing 14.5 kg in
+ * total), while the engine prices a single pack and the caller multiplies by
+ * quantity. Passing the line total priced every multi-unit line `quantity`
+ * times too high.
+ */
+export function perPackWeightKg(lineWeightKg: number, quantity: number): number {
+  if (!Number.isFinite(lineWeightKg) || lineWeightKg <= 0) return 0
+  const units = Number.isInteger(quantity) && quantity > 0 ? quantity : 1
+  return Math.round((lineWeightKg / units) * 1000) / 1000
+}

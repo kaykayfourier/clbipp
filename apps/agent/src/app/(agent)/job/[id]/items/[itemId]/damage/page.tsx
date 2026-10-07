@@ -13,7 +13,7 @@ import { createClient } from '@clbipp/auth/server'
 import { isLithium } from '@clbipp/core/intake'
 import { AppShell, Banner, PagePadding } from '@clbipp/ui'
 
-import { requireSafetyChecklist } from '@/lib/safety-gate'
+import { requireIntakeOpen } from '@/lib/safety-gate'
 import { itemNextHref } from '@/lib/job-nav'
 
 import { DamageRubricForm } from '../DamageRubricForm'
@@ -46,7 +46,7 @@ export default async function Page({
   if (!user) redirect('/login')
 
   // 🔴 THE GATE. See items/page.tsx for the full note.
-  await requireSafetyChecklist(id, user.id)
+  await requireIntakeOpen(id, user.id)
 
   const item = await prisma.batteryItem.findFirst({
     where: { id: itemId, pickupId: id },
@@ -86,7 +86,7 @@ export default async function Page({
   }
 
   return (
-    <AppShell title="Damage rubric" showBack backHref={`/job/${id}/items/${item.id}`} hideNav>
+    <AppShell title="Damage check" showBack backHref={`/job/${id}/items/${item.id}`} hideNav>
       <PagePadding className="flex flex-col gap-4">
         {error && <Banner variant="error">{error}</Banner>}
         <DamageRubricForm pickupId={id} itemId={item.id} userId={user.id} distanceKm={distanceKm} />

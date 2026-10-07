@@ -17,6 +17,9 @@ import {
   weightDivergence,
   photoPathsBelongTo,
   requiresPhotoEvidence,
+  parseBmsReadings,
+  perPackWeightKg,
+  BMS_LIMITS,
   type IntakeTotalsItemLike,
 } from './intake'
 
@@ -346,5 +349,49 @@ describe('weightDivergence', () => {
     // Exactly 20% of 100 kg is 20 kg, and 20 >= max(20, 5).
     expect(weightDivergence(100, 120)?.material).toBe(true)
     expect(weightDivergence(100, 119)?.material).toBe(false)
+  })
+})
+
+describe('parseBmsReadings', () => {
+  const ok = { sohPct: '82', capacityKwh: '60', ageYears: '4', cycleCount: '900', distanceKm: '12' }
+
+  it('accepts realistic readings and treats a blank distance as 0 km', () => {
+    expect(parseBmsReadings(ok)).toEqual({
+      value: { sohPct: 82, capacityKwh: 60, ageYears: 4, cycleCount: 900, distanceKm: 12 },
+      error: null,
+    })
+    expect(parseBmsReadings({ ...ok, distanceKm: '' }).value?.distanceKm).toBe(0)
+    expect(parseBmsReadings({ ...ok, distanceKm: null }).value?.distanceKm).toBe(0)
+  })
+
+  it('refuses blanks rather than reading them as zero', () => {
+    expect(parseBmsReadings({ ...ok, capacityKwh: '' }).error).toMatch(/Capacity/)
+    expect(parseBmsReadings({ ...ok, sohPct: ' ' }).error).toMatch(/health/)
+  })
+
+  // The tester's overflow: an inflated reading must stop here, with a sentence,
+  // never reach the engine and come back as a database error.
+  it('refuses readings past the typo guards', () => {
+    expect(parseBmsReadings({ ...ok, capacityKwh: String(BMS_LIMITS.maxCapacityKwh + 1) }).error).toMatch(/Capacity/)
+    expect(parseBmsReadings({ ...ok, ageYears: '51' }).error).toMatch(/Age/)
+    expect(parseBmsReadings({ ...ok, cycleCount: '20001' }).error).toMatch(/Cycle/)
+    expect(parseBmsReadings({ ...ok, cycleCount: '12.5' }).error).toMatch(/Cycle/)
+    expect(parseBmsReadings({ ...ok, distanceKm: '1001' }).error).toMatch(/Distance/)
+    expect(parseBmsReadings({ ...ok, sohPct: '101' }).error).toMatch(/health/)
+    expect(parseBmsReadings({ ...ok, capacityKwh: 'abc' }).error).toMatch(/Capacity/)
+  })
+})
+
+describe('perPackWeightKg', () => {
+  it('divides the line weight across its packs', () => {
+    expect(perPackWeightKg(14.5, 30)).toBeCloseTo(0.483, 3)
+    expect(perPackWeightKg(180, 2)).toBe(90)
+    expect(perPackWeightKg(196, 1)).toBe(196)
+  })
+
+  it('never divides by a nonsense quantity', () => {
+    expect(perPackWeightKg(50, 0)).toBe(50)
+    expect(perPackWeightKg(50, -3)).toBe(50)
+    expect(perPackWeightKg(0, 4)).toBe(0)
   })
 })

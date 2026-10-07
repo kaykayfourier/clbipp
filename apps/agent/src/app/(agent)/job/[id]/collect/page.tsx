@@ -81,8 +81,7 @@ export default async function Page({
       <AppShell title="Collect" showBack backHref={`/job/${id}`} hideNav>
         <PagePadding className="flex flex-col gap-4">
           <Banner variant="error">
-            This pickup was cancelled — the vendor declined the offer. Nothing
-            to collect.
+            Pickup cancelled. Nothing to collect.
           </Banner>
           <Link href="/">
             <Button variant="primary" fullWidth>
@@ -109,8 +108,7 @@ export default async function Page({
         <PagePadding className="flex flex-col gap-4">
           <Banner variant="info">
             Waiting on {pickup.vendor.fullName} to accept the offer
-            {pickup.offer ? ` (${formatPaise(pickup.offer.estimatedPrice)})` : ''} before you
-            can collect.
+            {pickup.offer ? ` (${formatPaise(pickup.offer.estimatedPrice)})` : ''}.
           </Banner>
           <Link href={`/job/${id}/offer`}>
             <Button variant="primary" fullWidth>

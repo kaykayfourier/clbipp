@@ -31,6 +31,7 @@ import {
 import { AppShell, Banner, Button, Card, CardContent, PagePadding } from '@clbipp/ui'
 
 import { SafetyChecklistForm } from './SafetyChecklistForm'
+import { jobHref } from '@/lib/job-nav'
 
 const CATEGORY_LABELS: Record<string, string> = {
   portable: 'Portable',
@@ -52,9 +53,9 @@ function lithiumGuessReason(categories: string[], likely: boolean): string {
     .join(', ')
 
   if (!likely) {
-    return `The customer declared ${listed || 'no items'} only, which is usually lead-acid — so this starts at No. Change it if you can see lithium packs.`
+    return `Declared: ${listed || 'no items'}. Usually lead-acid, so set to No. Change it if you see lithium.`
   }
-  return `The customer declared ${listed || 'no items'}, which can include lithium — so this starts at Yes. Chemistry is not confirmed until you assess each item.`
+  return `Declared: ${listed || 'no items'}. May include lithium, so set to Yes.`
 }
 
 export default async function Page({
@@ -80,6 +81,7 @@ export default async function Page({
       id: true,
       agentId: true,
       status: true,
+      custodyBatchId: true,
       vendor: { select: { fullName: true, companyName: true } },
       items: { select: { category: true, condition: true } },
       safetyChecklist: { select: { items: true, passed: true, completedAt: true } },
@@ -92,6 +94,11 @@ export default async function Page({
   // yours" message, so the screen doesn't confirm a pickup id exists to an
   // agent with no business knowing. Same call as job detail makes.
   if (!pickup || pickup.agentId !== user.id) notFound()
+
+  // The checklist belongs to intake. Past it, send the agent to where the job is.
+  if (pickup.status !== 'scheduled' && pickup.status !== 'arrived') {
+    redirect(jobHref(pickup.status, pickup.custodyBatchId, pickup.id))
+  }
 
   const categories = pickup.items.map((item) => item.category)
   const conditions = pickup.items.map((item) => item.condition)
@@ -121,9 +128,8 @@ export default async function Page({
 
         {missing.length > 0 && (
           <Banner variant="error">
-            {missing.length} item{missing.length === 1 ? '' : 's'} still outstanding:{' '}
-            {labelsFor(missing).join(' · ')}. Intake stays locked until every item is
-            confirmed.
+            {missing.length} item{missing.length === 1 ? '' : 's'} not ticked:{' '}
+            {labelsFor(missing).join(' · ')}.
           </Banner>
         )}
 
@@ -153,8 +159,7 @@ export default async function Page({
                   {pickup.vendor.companyName ?? pickup.vendor.fullName}
                 </p>
                 <p className="text-xs leading-relaxed text-text-secondary">
-                  Every required item was confirmed for this job. Intake is
-                  unlocked.
+                  All items confirmed.
                 </p>
               </CardContent>
             </Card>
@@ -185,7 +190,7 @@ export default async function Page({
           // ── The checklist ─────────────────────────────────────────────────
           <>
             <Banner variant="warning">
-              Complete this before handling any battery. Required on every pickup.
+              Do this before you touch any battery.
             </Banner>
 
             <SafetyChecklistForm

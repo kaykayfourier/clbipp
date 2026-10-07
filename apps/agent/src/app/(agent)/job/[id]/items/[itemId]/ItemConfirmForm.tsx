@@ -163,7 +163,7 @@ export function ItemConfirmForm({
     const room = MAX_PHOTOS - totalPhotos
     const files = picked.slice(0, Math.max(0, room))
     const errors: string[] =
-      picked.length > files.length ? [`Up to ${MAX_PHOTOS} photos per line — the extras were skipped.`] : []
+      picked.length > files.length ? [`Up to ${MAX_PHOTOS} photos per line. Extras skipped.`] : []
 
     if (files.length === 0) {
       setPhotoErrors(errors)
@@ -274,8 +274,8 @@ export function ItemConfirmForm({
         {chemistry && (
           <p className="text-[11px] leading-relaxed text-text-secondary">
             {isLithium(chemistry)
-              ? 'Lithium — this line goes through the damage rubric and the pricing engine.'
-              : 'Not lithium — this line is priced straight off the rate card. No rubric.'}
+              ? 'Lithium: damage check next, then price.'
+              : 'Not lithium: fixed rate. No damage check.'}
           </p>
         )}
       </div>
@@ -305,8 +305,8 @@ export function ItemConfirmForm({
             />
             <p className="text-[11px] leading-relaxed text-text-secondary">
               {declaredWeightKg === null
-                ? 'The customer gave no weight for this line.'
-                : `Customer declared ${declaredWeightKg.toFixed(1)} kg. A difference is fine — record what the scale says.`}
+                ? 'No weight declared.'
+                : `Customer declared ${declaredWeightKg.toFixed(1)} kg. Enter what the scale says.`}
             </p>
 
             {/* 🔴 FV2 · FD3. Shown LIVE, as the agent types, and worded as a
@@ -317,8 +317,7 @@ export function ItemConfirmForm({
               <p className="rounded-[8px] bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
                 That is {Math.abs(divergence.deltaKg).toFixed(1)} kg{' '}
                 {divergence.deltaKg > 0 ? 'more' : 'less'} than the customer declared (
-                {(Math.abs(divergence.fraction) * 100).toFixed(0)}%). Worth a second look at the
-                scale — then record what it says either way.
+                {(Math.abs(divergence.fraction) * 100).toFixed(0)}%). Check the scale again.
               </p>
             )}
           </CardContent>
@@ -378,8 +377,8 @@ export function ItemConfirmForm({
               </p>
               <p className={`text-[11px] leading-relaxed ${divergence?.material ? 'text-warning-text' : 'text-text-secondary'}`}>
                 {divergence?.material
-                  ? 'This weight differs from what the vendor declared. A photo with the reading legible is what settles it if anyone asks.'
-                  : 'The battery with the reading legible in the same frame. Makes the number checkable by someone who was not here.'}
+                  ? 'Weight differs from declared. A clear photo helps.'
+                  : 'Battery and reading in one photo.'}
               </p>
               {scaleError ? <p className="text-[11px] font-semibold text-error">{scaleError}</p> : null}
               {scalePhoto ? (
@@ -481,8 +480,8 @@ export function ItemConfirmForm({
         {photoMissing && (
           <Banner variant={photoUrgent ? 'error' : 'warning'}>
             {photoUrgent
-              ? `A ${condition} line cannot be saved without a photo. Show the damage, leakage or terminals — this is the evidence the price rests on.`
-              : 'At least one photo is needed to save this line. An overall shot of the battery or lot is enough; add the label and any damage if you can see them.'}
+              ? `A ${condition} line cannot be saved without a photo. Show the damage.`
+              : 'At least one photo is needed to save this line.'}
           </Banner>
         )}
 
@@ -586,10 +585,9 @@ export function ItemConfirmForm({
             />
 
             <p className="text-[11px] leading-relaxed text-text-secondary">
-              Up to {MAX_PHOTOS} photos, {MAX_FILE_MB} MB each. Photos belong to this
-              line only — never reuse one from another line. Use{' '}
-              <span className="font-semibold">Choose existing</span> if the camera
-              won&rsquo;t open.
+              Up to {MAX_PHOTOS} photos, {MAX_FILE_MB} MB each. This line only.
+              Camera not opening? Use{' '}
+              <span className="font-semibold">Choose existing</span>.
             </p>
           </CardContent>
         </Card>
@@ -604,8 +602,7 @@ export function ItemConfirmForm({
       </Button>
 
       <p className="text-[11px] leading-relaxed text-text-secondary">
-        Recorded against your name and this job. The customer&rsquo;s declaration
-        above is never overwritten.
+        Saved under your name.
       </p>
     </form>
   )

@@ -20,9 +20,10 @@
 // asked for, and they must survive the next one:
 //
 //     const { data: { user } } = await createClient().auth.getUser()
-//     await requireSafetyChecklist(id, user.id)
+//     await requireIntakeOpen(id, user.id)
 //
-// `requireSafetyChecklist` enforces BOTH the passing-checklist requirement and
+// `requireIntakeOpen` enforces the passing-checklist requirement, intake still
+// being open (status `arrived`), and
 // this agent's ownership of the pickup, and it throws rather than returning a
 // boolean — so once it has run, the pickup is this agent's and no separate
 // ownership check is needed on this screen.
@@ -60,7 +61,7 @@ import {
   SectionLabel,
 } from '@clbipp/ui'
 
-import { requireSafetyChecklist } from '@/lib/safety-gate'
+import { requireIntakeOpen } from '@/lib/safety-gate'
 import { itemNextHref, itemNextLabel } from '@/lib/job-nav'
 
 const STATE_BADGE: Record<ItemConfirmationState, { label: string; variant: 'success' | 'warning' | 'default' }> = {
@@ -87,7 +88,7 @@ export default async function Page({
   if (!user) redirect('/login')
 
   // 🔴 THE GATE. Keep this. See the note at the top of the file.
-  await requireSafetyChecklist(id, user.id)
+  await requireIntakeOpen(id, user.id)
 
   const pickup = await prisma.pickup.findUnique({
     where: { id },
@@ -130,9 +131,9 @@ export default async function Page({
       <PagePadding className="flex flex-col gap-4">
         {confirmed && (
           <Banner variant="success">
-            Item recorded.{' '}
+            Item saved.{' '}
             {totals.allConfirmed
-              ? 'Every line on this job is confirmed.'
+              ? 'All lines confirmed.'
               : `${totals.lines - totals.confirmedLines} still to go.`}
           </Banner>
         )}
@@ -159,8 +160,7 @@ export default async function Page({
               <span className="font-semibold text-text-primary">
                 {totals.weighedKg.toFixed(1)} kg weighed
               </span>{' '}
-              against {totals.declaredKg.toFixed(1)} kg declared by{' '}
-              {pickup.vendor.companyName ?? pickup.vendor.fullName}.
+              · {totals.declaredKg.toFixed(1)} kg declared
             </p>
           </CardContent>
         </Card>
@@ -169,8 +169,7 @@ export default async function Page({
 
         {items.length === 0 ? (
           <Banner variant="error">
-            This job has no battery lines on it. Nothing can be assessed — raise it
-            with the office before collecting anything.
+            No battery lines on this job. Call the office before collecting.
           </Banner>
         ) : (
           <div className="flex flex-col gap-3">
@@ -263,7 +262,7 @@ export default async function Page({
         ) : (
           <p className="rounded-[10px] border border-border px-4 py-3 text-center text-xs leading-relaxed text-text-secondary">
             Quote unlocks once all {totals.lines} line{totals.lines === 1 ? '' : 's'} are
-            confirmed — the vendor gets one offer for the whole job.
+            confirmed.
           </p>
         )}
       </PagePadding>
