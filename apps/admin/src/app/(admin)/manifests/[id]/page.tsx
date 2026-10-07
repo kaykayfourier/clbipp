@@ -18,6 +18,7 @@ import {
   dispatchManifestAction,
   reconcileManifestAction,
 } from '../actions'
+import { ConfirmSubmit } from '@/components/console'
 
 // C04 · Manifest detail — Batch 6 (dispatch) + Batch 7 (confirm, reconcile),
 // owner A — Aamir. All four manifest states are now driven from this one page.
@@ -211,28 +212,23 @@ export default async function ManifestDetail({
       {error ? <Banner tone="error">{error}</Banner> : null}
       {created ? (
         <Banner tone="success">
-          Draft created. Nothing has left the building yet — dispatch it below when the load
-          actually goes.
+          Draft created. Dispatch it when the load leaves.
         </Banner>
       ) : null}
       {dispatched ? (
         <Banner tone="success">
-          {manifest.manifestNo} is dispatched. No pickup advanced: {' '}
-          <span className="font-mono text-[11px]">tested → processed</span> happens when the
-          recycler confirms receipt, and only for pickups whose every item is covered.
+          {manifest.manifestNo} is dispatched.
         </Banner>
       ) : null}
 
       {confirmed ? (
         <Banner tone="success">
           {manifest.manifestNo} is received. {advanced ?? '0'} pickup
-          {advanced === '1' ? '' : 's'} advanced <span className="font-mono text-[11px]">tested →
-          processed</span>
+          {advanced === '1' ? '' : 's'} moved to processed
           {Number(held ?? '0') > 0 ? (
             <>
               {' '}
-              — and {held} held back by AD6, because not every one of their items is on a confirmed
-              manifest yet. That is the rule working, not a failure.
+              — {held} held, some of their items are on another manifest.
             </>
           ) : (
             '.'
@@ -241,11 +237,9 @@ export default async function ManifestDetail({
       ) : null}
       {reconciled ? (
         <Banner tone="success">
-          {manifest.manifestNo} is reconciled and its recovery figures are recorded.{' '}
-          {advanced ?? '0'} pickup{advanced === '1' ? '' : 's'} advanced{' '}
-          <span className="font-mono text-[11px]">processed → recovered</span>
-          {Number(held ?? '0') > 0 ? <> — {held} held back by AD6.</> : '.'} Anything that reached
-          recovered can now be certified from the lifecycle board.
+          {manifest.manifestNo} is reconciled.{' '}
+          {advanced ?? '0'} pickup{advanced === '1' ? '' : 's'} moved to recovered
+          {Number(held ?? '0') > 0 ? <> — {held} held.</> : '.'}
         </Banner>
       ) : null}
 
@@ -266,25 +260,34 @@ export default async function ManifestDetail({
             // shipment. Same rule as the dispatch board and the lifecycle board.
             <form action={dispatchManifestAction}>
               <input type="hidden" name="manifestId" value={manifest.id} />
-              <button
-                type="submit"
-                disabled={!canDispatch}
-                className="inline-flex items-center rounded-lg bg-primary-black px-4 py-2 text-xs font-bold text-primary-green transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Dispatch to {manifest.recycler.name}
-              </button>
+              {canDispatch ? (
+                <ConfirmSubmit
+                  message={`Dispatch ${manifest.manifestNo} to ${manifest.recycler.name}? This can't be undone.`}
+                  className="inline-flex items-center rounded-lg bg-primary-black px-4 py-2 text-xs font-bold text-primary-green transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Dispatch to {manifest.recycler.name}
+                </ConfirmSubmit>
+              ) : (
+                <button
+                  type="submit"
+                  disabled
+                  className="inline-flex items-center rounded-lg bg-primary-black px-4 py-2 text-xs font-bold text-primary-green transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Dispatch to {manifest.recycler.name}
+                </button>
+              )}
             </form>
           ) : null}
 
           {isDispatched ? (
             <form action={confirmManifestReceivedAction}>
               <input type="hidden" name="manifestId" value={manifest.id} />
-              <button
-                type="submit"
+              <ConfirmSubmit
+                message={`Confirm ${manifest.recycler.name} received ${manifest.manifestNo}? This can't be undone.`}
                 className="inline-flex items-center rounded-lg bg-primary-black px-4 py-2 text-xs font-bold text-primary-green transition-opacity hover:opacity-90"
               >
                 Confirm {manifest.recycler.name} received it
-              </button>
+              </ConfirmSubmit>
             </form>
           ) : null}
         </div>
@@ -350,7 +353,7 @@ export default async function ManifestDetail({
                     ),
                   ),
                 ].join(', ')}
-                . AD7: a manifest may only name a recycler that accepts every chemistry on it.
+                .
               </li>
             ) : null}
           </ul>
@@ -359,8 +362,7 @@ export default async function ManifestDetail({
 
       {missing.length > 0 ? (
         <Banner tone="error">
-          {missing.length} item id on this manifest no longer resolves to a battery item. The
-          snapshot is intact; the underlying rows are not.
+          {missing.length} item on this manifest no longer exists.
         </Banner>
       ) : null}
 
@@ -456,10 +458,8 @@ export default async function ManifestDetail({
             Reconcile — the second-life outcome
           </h2>
           <p className="max-w-[680px] text-xs leading-relaxed text-text-secondary">
-            A refurbisher restores batteries for further use; it recovers no metal, so there are no
-            material figures to enter and none will reach a certificate. Record what{' '}
-            {manifest.recycler.name} reported instead — units restored, units that turned out
-            unrecoverable, and where they went.
+            What {manifest.recycler.name} reported: units restored, units unrecoverable, and where
+            they went.
           </p>
           <form action={reconcileManifestAction} className="rounded-xl border border-console-line bg-surface p-4">
             <input type="hidden" name="manifestId" value={manifest.id} />
@@ -470,12 +470,12 @@ export default async function ManifestDetail({
               placeholder="e.g. 12 of 12 packs restored and deployed as BESS at the Manesar depot."
               className="w-full rounded-lg border border-console-line bg-background px-2.5 py-2 text-xs text-text-primary"
             />
-            <button
-              type="submit"
+            <ConfirmSubmit
+              message={`Reconcile ${manifest.manifestNo} with this outcome? This can't be undone.`}
               className="mt-3 inline-flex items-center rounded-lg bg-primary-black px-4 py-2 text-xs font-bold text-primary-green transition-opacity hover:opacity-90"
             >
               Reconcile {manifest.manifestNo}
-            </button>
+            </ConfirmSubmit>
           </form>
         </section>
       ) : null}
@@ -499,11 +499,8 @@ export default async function ManifestDetail({
             Reconcile — what actually came back
           </h2>
           <p className="max-w-[680px] text-xs leading-relaxed text-text-secondary">
-            🔴 These are the only MEASURED recovery figures the platform holds. Everything upstream
-            — the offer&rsquo;s material breakdown, the engine&rsquo;s yields — is an estimate made
-            before a battery was opened, and a certificate minted from this load will quote these
-            numbers in preference to that estimate. Enter kilograms for the whole shipment; a
-            per-pickup certificate takes its share pro-rated by mass.
+            Kilograms recovered from the whole shipment. These go on the vendors&rsquo;
+            certificates.
           </p>
           {/* Plain server-action form, never useActionState (trap 26) — that is
               what keeps it verifiable without a browser. */}
@@ -536,16 +533,14 @@ export default async function ManifestDetail({
               ))}
             </div>
             <p className="mt-3 text-[11px] leading-relaxed text-text-secondary">
-              Shipped weight was {shippedKg.toFixed(1)} kg. Recovered mass may not exceed it — the
-              action rejects the submission if it does, because a fat-fingered figure here lands on
-              a vendor&rsquo;s EPR certificate and on a CPCB return.
+              Shipped weight: {shippedKg.toFixed(1)} kg. The total can&rsquo;t exceed it.
             </p>
-            <button
-              type="submit"
+            <ConfirmSubmit
+              message={`Reconcile ${manifest.manifestNo} with these figures? They go on the vendors' certificates and can't be undone.`}
               className="mt-3 inline-flex items-center rounded-lg bg-primary-black px-4 py-2 text-xs font-bold text-primary-green transition-opacity hover:opacity-90"
             >
               Reconcile {manifest.manifestNo}
-            </button>
+            </ConfirmSubmit>
           </form>
         </section>
       ) : null}
@@ -558,10 +553,8 @@ export default async function ManifestDetail({
           </h2>
           {recovery.length === 0 ? (
             <div className="rounded-xl border border-warning-border bg-warning-bg px-4 py-3 text-xs leading-relaxed text-warning-text">
-              This manifest is reconciled but carries no recovery figures — it predates the
-              <span className="font-mono text-[11px]"> recovery_data </span> column (a back-filled
-              seed row). Certificates from this load fall back to the offer&rsquo;s estimate and say
-              so.
+              No recovery figures recorded. Certificates from this load use the offer&rsquo;s
+              estimate.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-console-line bg-surface">
@@ -623,10 +616,8 @@ export default async function ManifestDetail({
             {pickups.length === 1 ? '' : 's'}
           </h2>
           <p className="max-w-[680px] text-xs leading-relaxed text-text-secondary">
-            🔴 AD6 — a pickup advances only when EVERY one of its items sits on a manifest at or
-            past <span className="font-mono text-[11px]">{previewFloor}</span>. Chemistry
-            segregation sends one pickup&rsquo;s load to two recyclers, so a pickup here can be
-            half-shipped. {heldCount > 0 ? `${heldCount} will be held back.` : 'None are held back.'}
+            A pickup moves only when all its items are covered.{' '}
+            {heldCount > 0 ? `${heldCount} will be held.` : 'None held.'}
           </p>
           <div className="overflow-x-auto rounded-xl border border-console-line bg-surface">
             <table className="w-full min-w-[720px] border-collapse text-sm">
@@ -671,7 +662,7 @@ export default async function ManifestDetail({
                         </span>
                       ) : (
                         <span className="rounded-full bg-warning-bg px-2 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.08em] text-warning-text">
-                          Held (AD6)
+                          Held
                         </span>
                       )}
                     </Td>
@@ -708,12 +699,10 @@ export default async function ManifestDetail({
             </table>
           </div>
           <p className="text-xs leading-relaxed text-text-secondary">
-            A held pickup is not stuck — it advances the moment its other manifest reaches the same
-            state.{' '}
+            Held pickups move once their other manifest catches up.{' '}
             <Link href="/lifecycle" className="font-bold underline underline-offset-2">
               Lifecycle control
-            </Link>{' '}
-            shows every pickup&rsquo;s coverage across all manifests.
+            </Link>
           </p>
         </section>
       ) : null}

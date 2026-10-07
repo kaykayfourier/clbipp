@@ -88,7 +88,7 @@ export function FacilitiesTables({ facilities, recyclers }: { facilities: readon
       </div>
       <div className="flex flex-col gap-2">
         <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.09em] text-text-secondary">
-          CPCB-registered partners — recyclers, and refurbishers for second life
+          Partners — recyclers and refurbishers
         </h2>
         <DataTable
           columns={recyclerColumns}

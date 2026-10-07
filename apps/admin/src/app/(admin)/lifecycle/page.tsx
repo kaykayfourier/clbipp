@@ -18,6 +18,7 @@ import {
   certifyPickupAction,
   overrideLifecycleAction,
 } from './actions'
+import { ConfirmSubmit } from '@/components/console'
 
 // B06 · Lifecycle control — Batch 6, owner A — Aamir.
 //
@@ -164,17 +165,15 @@ export default async function LifecyclePage({
           Lifecycle control
         </h1>
         <p className="mt-1 max-w-[620px] text-xs leading-relaxed text-text-secondary">
-          Stage advances, by the unit each stage actually belongs to (AD5). A hub batch is tested
-          as one load; a manifest is confirmed as one shipment; a pickup is certified on its own.
+          Move pickups from the hub to their certificate.
         </p>
       </div>
 
       {error ? <Banner tone="error">{error}</Banner> : null}
       {advanced ? (
         <Banner tone="success">
-          Advanced {advanced} pickup{advanced === '1' ? '' : 's'} to tested. They are now shippable
-          from <span className="font-mono text-[11px]">/manifests/new</span>.
-          {held ? ` ${held} held back — not every line was checked in at the hub.` : ''}
+          Advanced {advanced} pickup{advanced === '1' ? '' : 's'} to tested.
+          {held ? ` ${held} held — not every line was checked in.` : ''}
         </Banner>
       ) : null}
 
@@ -182,22 +181,19 @@ export default async function LifecyclePage({
         <Banner tone="success">
           {already ? (
             <>
-              <span className="font-mono text-[11px]">{certified}</span> was already certified — one
-              certificate, not two. Certification is idempotent by design.
+              <span className="font-mono text-[11px]">{certified}</span> was already certified.
             </>
           ) : (
             <>
-              <span className="font-mono text-[11px]">{certified}</span> is certified. Its EPR
-              certificate now exists and the vendor can download it from their own compliance
-              screen. 🎯 That is the journey, end to end.
+              <span className="font-mono text-[11px]">{certified}</span> is certified. The vendor
+              can now download the certificate.
             </>
           )}
         </Banner>
       ) : null}
       {overrode ? (
         <Banner tone="success">
-          Override applied: <span className="font-mono text-[11px]">{overrode}</span> → {to}. The
-          reason is on the audit trail; nothing else about this pickup was changed.
+          Override applied: <span className="font-mono text-[11px]">{overrode}</span> → {to}.
         </Banner>
       ) : null}
 
@@ -221,14 +217,11 @@ export default async function LifecyclePage({
       {/* ── collected → tested ─────────────────────────────────────────────── */}
       <Section
         stage="collected → tested"
-        unit="Unit: one custody batch — gated on the hub's check-in"
-        blurb="Everything one agent handed in at one hub, tested as one load — once the hub has checked every line in (FV12). A pickup with an unchecked or missing line is held. Advancing writes a status event per pickup, all attributed to you — there is no hub-staff app, so this is an admin recording it on the hub's behalf."
+        unit="Unit: one custody batch"
+        blurb="A pickup is held until every line is checked in at the hub."
       >
         {advanceableBatches.length === 0 ? (
-          <Empty>
-            No hub batch is waiting. A batch appears here the moment an agent completes a drop-off
-            in the field agent app.
-          </Empty>
+          <Empty>No hub batch waiting.</Empty>
         ) : (
           <div className="flex flex-col gap-3">
             {advanceableBatches.map((b) => (
@@ -255,13 +248,22 @@ export default async function LifecyclePage({
                         the lifecycle (the customer app shipped exactly that bug). */}
                     <form action={advanceCustodyBatchAction}>
                       <input type="hidden" name="batchId" value={b.id} />
-                      <button
-                        type="submit"
-                        disabled={b.readyIds.size === 0}
-                        className="inline-flex items-center rounded-lg bg-primary-black px-3 py-1.5 text-xs font-bold text-primary-green transition-opacity hover:opacity-90 disabled:opacity-40"
-                      >
-                        Mark {b.readyIds.size} tested
-                      </button>
+                      {b.readyIds.size === 0 ? (
+                        <button
+                          type="submit"
+                          disabled
+                          className="inline-flex items-center rounded-lg bg-primary-black px-3 py-1.5 text-xs font-bold text-primary-green transition-opacity hover:opacity-90 disabled:opacity-40"
+                        >
+                          Mark {b.readyIds.size} tested
+                        </button>
+                      ) : (
+                        <ConfirmSubmit
+                          message={`Mark ${b.readyIds.size} pickup${b.readyIds.size === 1 ? '' : 's'} in ${b.batchNo} as tested? This can't be undone.`}
+                          className="inline-flex items-center rounded-lg bg-primary-black px-3 py-1.5 text-xs font-bold text-primary-green transition-opacity hover:opacity-90 disabled:opacity-40"
+                        >
+                          Mark {b.readyIds.size} tested
+                        </ConfirmSubmit>
+                      )}
                     </form>
                   </div>
                 </div>
@@ -292,9 +294,7 @@ export default async function LifecyclePage({
               yet handed in
             </div>
             <p className="mt-1 max-w-[560px] text-xs leading-relaxed text-warning-text">
-              These are with the agent, not at a hub — the derived &ldquo;pending drop-off&rdquo;
-              state (D5), not a tenth lifecycle stage. There is nothing to advance until the agent
-              completes a drop-off; that is the agent app&rsquo;s write, not this console&rsquo;s.
+              Still with the agent. Nothing to do until they drop off at a hub.
             </p>
             <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
               {pendingDropOff.map((p) => (
@@ -310,8 +310,8 @@ export default async function LifecyclePage({
       {/* ── tested → processed ─────────────────────────────────────────────── */}
       <Section
         stage="tested → processed"
-        unit="Unit: one dispatch manifest, on confirmation"
-        blurb="A pickup advances only when EVERY one of its items is on a confirmed manifest (AD6). Chemistry segregation splits one pickup across two recyclers, so a pickup can be half-shipped — the column below says which half."
+        unit="Unit: one manifest, on confirmation"
+        blurb="A pickup moves on only when all its items are on a confirmed manifest."
         action={
           <Link
             href="/manifests/new"
@@ -322,7 +322,7 @@ export default async function LifecyclePage({
         }
       >
         {tested.length === 0 ? (
-          <Empty>Nothing is sitting at tested. Advance a hub batch above to fill this.</Empty>
+          <Empty>Nothing at tested.</Empty>
         ) : (
           <CoverageTable rows={tested} floorLabel="confirmed" now={now} />
         )}
@@ -331,17 +331,15 @@ export default async function LifecyclePage({
       {/* ── processed → recovered ──────────────────────────────────────────── */}
       <Section
         stage="processed → recovered"
-        unit="Unit: the same manifest, on reconciliation"
-        blurb="Recovered mass per metal is captured when the manifest is reconciled. Same AD6 rule: every item has to be on a reconciled manifest."
+        unit="Unit: one manifest, on reconciliation"
       >
         {processed.length === 0 ? (
-          <Empty>Nothing is sitting at processed.</Empty>
+          <Empty>Nothing at processed.</Empty>
         ) : (
           <CoverageTable rows={processed} floorLabel="reconciled" now={now} />
         )}
         <FootNote>
-          Reconciling happens on the manifest, not here — open the manifest each pickup is waiting
-          on (linked in the column above) and record what came back.{' '}
+          Reconcile on the manifest page.{' '}
           <Link href="/manifests" className="font-bold underline underline-offset-2">
             All manifests
           </Link>
@@ -352,10 +350,10 @@ export default async function LifecyclePage({
       <Section
         stage="recovered → certified"
         unit="Unit: one pickup"
-        blurb="The end of the journey, and the only advance that mints a document — the Certificate row and its PDF, which is what the vendor downloads from their own compliance screen."
+        blurb="Issues the EPR certificate the vendor downloads."
       >
         {recovered.length === 0 ? (
-          <Empty>Nothing is waiting to be certified.</Empty>
+          <Empty>Nothing to certify.</Empty>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-console-line bg-surface">
             <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -399,12 +397,12 @@ export default async function LifecyclePage({
                           `acceptOffer`. */}
                       <form action={certifyPickupAction}>
                         <input type="hidden" name="pickupId" value={p.id} />
-                        <button
-                          type="submit"
+                        <ConfirmSubmit
+                          message={`Certify ${p.id} and issue its EPR certificate? This can't be undone.`}
                           className="inline-flex items-center rounded-lg bg-primary-black px-3 py-1.5 text-xs font-bold text-primary-green transition-opacity hover:opacity-90"
                         >
                           Certify
-                        </button>
+                        </ConfirmSubmit>
                       </form>
                     </Td>
                   </tr>
@@ -413,19 +411,13 @@ export default async function LifecyclePage({
             </table>
           </div>
         )}
-        <FootNote>
-          Certifying mints the <span className="font-mono text-[11px]">Certificate</span> row, its
-          public token and its CO₂e figure, and hands the PDF to the customer app&rsquo;s lazy
-          renderer — the same pipeline every receipt and invoice already uses. Idempotent: a second
-          click returns the certificate that exists rather than issuing a second one.
-        </FootNote>
       </Section>
 
       {/* ── The escape hatch ───────────────────────────────────────────────── */}
       <Section
         stage="Manual override"
         unit="Unit: one pickup, one step"
-        blurb="Risk R1's escape hatch. It bypasses the unit rules above and AD6's coverage gate, so it demands a typed reason and writes an audit row that says the normal path was skipped. Reach for it when something is genuinely stuck — not to save a click."
+        blurb="Only for a stuck pickup. One stage forward, logged with your reason."
       >
         <form
           action={overrideLifecycleAction}
@@ -465,7 +457,7 @@ export default async function LifecyclePage({
                 {LIFECYCLE_STAGES.filter((st) => st !== 'requested' && st !== 'certified').map(
                   (st) => (
                     <option key={st} value={st}>
-                      {STAGE_LABELS[st]} ({st})
+                      {STAGE_LABELS[st]}
                     </option>
                   ),
                 )}
@@ -474,7 +466,7 @@ export default async function LifecyclePage({
           </div>
           <label className="mt-3 flex flex-col gap-1">
             <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-warning-text">
-              Reason (required — it is the only record of why the gate was bypassed)
+              Reason (required)
             </span>
             <textarea
               name="reason"
@@ -485,17 +477,12 @@ export default async function LifecyclePage({
               className="rounded-lg border border-console-line bg-surface px-2.5 py-1.5 text-xs text-text-primary"
             />
           </label>
-          <button
-            type="submit"
+          <ConfirmSubmit
+            message="Apply this override? It is logged with your reason and can't be undone."
             className="mt-3 inline-flex items-center rounded-lg bg-primary-black px-4 py-2 text-xs font-bold text-primary-green transition-opacity hover:opacity-90"
           >
             Apply override
-          </button>
-          <p className="mt-2 max-w-[620px] text-[11px] leading-relaxed text-warning-text">
-            One step forward only — no skipping and no reversing. The status event it writes says
-            <span className="font-mono"> actorRole: admin</span>, like every other advance this
-            console makes.
-          </p>
+          </ConfirmSubmit>
         </form>
       </Section>
     </>
@@ -616,7 +603,7 @@ function Section({
 }: {
   stage: string
   unit: string
-  blurb: string
+  blurb?: string
   action?: React.ReactNode
   children: React.ReactNode
 }) {
@@ -630,7 +617,9 @@ function Section({
           <div className="mt-1 font-mono text-[9.5px] uppercase tracking-[0.08em] text-text-secondary">
             {unit}
           </div>
-          <p className="mt-1.5 max-w-[620px] text-xs leading-relaxed text-text-secondary">{blurb}</p>
+          {blurb ? (
+            <p className="mt-1.5 max-w-[620px] text-xs leading-relaxed text-text-secondary">{blurb}</p>
+          ) : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>

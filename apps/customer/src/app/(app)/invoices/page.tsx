@@ -44,7 +44,7 @@ export default async function InvoicesPage() {
         {invoices.length === 0 ? (
           <EmptyState
             heading="No invoices yet"
-            description="An invoice is raised each time a payout settles, and appears here with the PDF ready to download."
+            description="Invoices appear here after each payout."
           />
         ) : (
           <div className="flex flex-col gap-2">

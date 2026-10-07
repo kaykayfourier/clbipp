@@ -73,7 +73,7 @@ export default async function InvoiceDetailPage({
           </Banner>
         ) : (
           <Banner variant="info">
-            This invoice is raised. It settles once you choose how to be paid.
+            Choose how to be paid to settle this invoice.
           </Banner>
         )}
 

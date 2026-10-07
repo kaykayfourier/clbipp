@@ -43,7 +43,7 @@ export default async function Page() {
     <AppShell title="Drop-off" showBack backHref="/" hideNav>
       <PagePadding className="flex flex-col gap-4">
         {jobs.length === 0 ? (
-          <Banner variant="info">Nothing pending drop-off — every collected job has been handed off.</Banner>
+          <Banner variant="info">Nothing to drop off.</Banner>
         ) : (
           <BatchSelectForm jobs={jobs} />
         )}

@@ -122,8 +122,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           {header}
           <CancelledTimeline lastStage={lastRecordedStage(pickup.statusEvents)} stages={stages} />
           <Banner variant="error">
-            The vendor called this pickup off. Nothing more to do — if they
-            reschedule it, it comes back to your day view.
+            Cancelled by the vendor. If they reschedule, it comes back to you.
           </Banner>
           <CustodyLog entries={custody} roleLabels={AGENT_ROLE_LABELS} />
         </PagePadding>
@@ -144,17 +143,17 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (status === 'offered' && !offerAccepted) {
     banner = {
       variant: 'info',
-      text: 'Offer is with the vendor. Nothing to do until they accept — you will see it here.',
+      text: 'Waiting for the vendor to accept.',
     }
   } else if (status === 'offered' && offerAccepted) {
     banner = {
       variant: 'success',
-      text: 'The vendor accepted. Load the batteries and confirm the collection on site.',
+      text: 'Vendor accepted. Load the batteries and confirm collection.',
     }
   } else if (inVan) {
     banner = {
       variant: 'info',
-      text: 'Collected and in your vehicle. It stays your responsibility until the hub signs for it.',
+      text: 'In your vehicle. Your responsibility until the hub signs for it.',
     }
   } else if (handedOver) {
     // The "your role ends at drop-off" lock. Everything from here is the
@@ -163,12 +162,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     // `collected`, and nothing else (D7).
     banner = {
       variant: 'tinted',
-      text: 'Handed over — your part is done. Testing, processing and certification happen at the hub.',
+      text: 'Handed over — your part is done.',
     }
   } else {
     banner = {
       variant: 'info',
-      text: 'This screen updates itself as the job moves. No need to refresh.',
+      text: 'Updates live. No need to refresh.',
     }
   }
 

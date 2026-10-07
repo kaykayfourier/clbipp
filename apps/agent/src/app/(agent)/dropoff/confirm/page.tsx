@@ -67,7 +67,7 @@ export default async function Page({
         </Card>
 
         {facilities.length === 0 ? (
-          <Banner variant="error">No active facility is configured — contact admin.</Banner>
+          <Banner variant="error">No active facility. Contact admin.</Banner>
         ) : (
           <ConfirmDropoffForm pickupIds={pickups.map((p) => p.id)} userId={user.id} facilities={facilities} />
         )}

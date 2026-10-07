@@ -31,14 +31,13 @@ export default async function AddressesPage() {
               No pickup addresses yet
             </h2>
             <p className="max-w-xs text-sm text-text-secondary">
-              Add the place we should collect from. You can save more than one and pick
-              between them when you book.
+              Add the place we collect from.
             </p>
           </div>
         ) : (
           <>
             <p className="text-sm text-text-secondary">
-              The default address is preselected when you book a pickup.
+              Your default address is used when you book.
             </p>
 
             <div className="flex flex-col gap-3">

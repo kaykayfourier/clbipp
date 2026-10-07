@@ -98,7 +98,7 @@ export default async function Page({ params }: { params: Promise<{ batchId: stri
             than showing a zero that reads like a problem. */}
         <Banner variant={missing > 0 ? 'warning' : 'info'}>
           {checked === 0 && missing === 0
-            ? 'The hub checks each tag in against this list before the load is tested.'
+            ? 'The hub will check each tag against this list.'
             : `Hub check-in: ${checked} of ${lines.length} lines received${missing > 0 ? `, ${missing} reported missing` : ''}.`}
         </Banner>
 

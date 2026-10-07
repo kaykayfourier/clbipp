@@ -75,8 +75,7 @@ function ImpactCard({ impact }: { impact: ImpactSummary }) {
           ))}
 
           <p className="pt-3 text-[11px] leading-relaxed text-text-secondary">
-            From your issued certificates. CO₂e is estimated from published
-            recycling factors for each battery chemistry, not a measured figure.
+            From your issued certificates. CO₂e figures are estimates.
           </p>
         </CardContent>
       </Card>
@@ -140,7 +139,7 @@ function PopulatedDashboardPage({
       <InstallPrompt
         appName="Back2Basics"
         mark="B2"
-        blurb="Add it to your home screen — track pickups and offers without hunting for the link."
+        blurb="Track pickups and offers from your home screen."
       />
 
       <div className="grid grid-cols-3 gap-2">
@@ -216,7 +215,7 @@ function EmptyDashboardPage({ profileId }: { profileId: string }) {
       <div className="w-20 h-20 rounded-2xl bg-[#E8E1D2] flex items-center justify-center text-[#6B6F6B]" />
       <h1 className="font-serif text-2xl font-medium text-[#0E120E]">No pickups yet</h1>
       <p className="text-sm text-[#3B3F3B] max-w-[220px] leading-relaxed">
-        Request your first battery pickup to start recovering materials and earning EPR certificates.
+        Request your first battery pickup.
       </p>
       <Link href="/book">
         <Button variant="primary" fullWidth className="max-w-[220px]">

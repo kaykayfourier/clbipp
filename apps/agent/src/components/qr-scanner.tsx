@@ -55,7 +55,7 @@ export function QrScanner({ onResult, onClose }: { onResult: (text: string) => v
 
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError('This browser cannot open the camera here (it needs HTTPS). Type the code instead.')
+        setError('Camera not available. Type the code instead.')
         return
       }
       try {
@@ -64,7 +64,7 @@ export function QrScanner({ onResult, onClose }: { onResult: (text: string) => v
           audio: false,
         })
       } catch {
-        setError('Camera blocked or unavailable. Allow camera access, or type the code instead.')
+        setError('Camera blocked. Allow camera access, or type the code.')
         return
       }
       if (cancelled || !videoRef.current) {

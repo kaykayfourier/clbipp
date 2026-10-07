@@ -54,9 +54,7 @@ export default async function ManifestsPage() {
             Dispatch manifests
           </h1>
           <p className="mt-1 max-w-[620px] text-xs leading-relaxed text-text-secondary">
-            Draft, dispatched, received and reconciled shipments to recyclers. A manifest is
-            facility → recycler; the agent → facility hand-off is a custody batch, a different
-            document on a different edge of the chain of custody.
+            Shipments from a hub to a recycler or refurbisher.
           </p>
         </div>
         <Link
@@ -81,7 +79,7 @@ export default async function ManifestsPage() {
         <div className="rounded-xl border border-console-line bg-surface px-6 py-12 text-center">
           <p className="text-sm font-bold text-text-primary">No manifests yet</p>
           <p className="mx-auto mt-1 max-w-[420px] text-xs leading-relaxed text-text-secondary">
-            Build one from a facility&rsquo;s tested stock and it appears here as a draft.
+            New manifests start here as drafts.
           </p>
         </div>
       ) : (

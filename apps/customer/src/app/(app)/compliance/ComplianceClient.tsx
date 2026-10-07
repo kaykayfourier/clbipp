@@ -61,7 +61,7 @@ export default function ComplianceClient({
           Compliance log
         </h1>
         <p className="text-sm text-[#3B3F3B] mt-1">
-          Every certificate in one place, ready for your CPCB return.
+          All your EPR certificates.
         </p>
       </div>
 

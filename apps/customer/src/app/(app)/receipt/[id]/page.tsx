@@ -48,7 +48,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         <PagePadding>
           <ErrorState
             heading="No receipt yet"
-            message="A receipt is issued when your batteries are collected. Track this pickup to see where it is."
+            message="You get a receipt when your batteries are collected."
           />
         </PagePadding>
       </AppShell>
@@ -102,9 +102,6 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         {hasGps && (
           <Card variant="tinted" className="flex flex-col gap-2">
             <SectionLabel>Where</SectionLabel>
-            <p className="text-sm text-text-secondary">
-              The handover location was recorded as part of the chain of custody.
-            </p>
             {/* Plain maps URL — no API key, no billing, same as the custody log. */}
             <a
               href={`https://www.google.com/maps?q=${lat},${lng}`}
@@ -118,8 +115,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         )}
 
         <Banner variant="info">
-          This is not your EPR certificate. That is issued once your batteries
-          have been tested and recycled, and appears in your compliance log.
+          This is not your EPR certificate. That comes after recycling.
         </Banner>
 
         <div className="flex flex-col gap-3">

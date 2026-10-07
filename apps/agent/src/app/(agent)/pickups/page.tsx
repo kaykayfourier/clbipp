@@ -47,6 +47,7 @@ export default async function Page() {
       status: true,
       custodyBatchId: true,
       collectionScheduledAt: true,
+      offer: { select: { acceptedAt: true } },
       scheduledSlot: true,
       vendor: { select: { fullName: true } },
       _count: { select: { items: true } },
@@ -97,7 +98,7 @@ export default async function Page() {
         <div>
           <h1 className="font-serif text-2xl font-medium text-text-primary">My pickups</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Every job assigned to you. Tap any row to see where it has got to.
+            Every job assigned to you.
           </p>
         </div>
 
@@ -123,7 +124,7 @@ export default async function Page() {
                   <p className="mt-0.5 text-xs text-text-secondary">
                     {`${pendingUnits} unit${
                       pendingUnits === 1 ? '' : 's'
-                    } · ~${pendingKg.toFixed(1)} kg · take them to the hub together`}
+                    } · ~${pendingKg.toFixed(1)} kg`}
                   </p>
                 </div>
                 <span className="shrink-0 text-xs font-bold text-text-primary underline underline-offset-2">
@@ -143,7 +144,7 @@ export default async function Page() {
           {active.length === 0 ? (
             <EmptyState
               heading="Nothing open"
-              description="Every job assigned to you is done or on its way through recovery. New ones appear here the moment they're scheduled."
+              description="New jobs show up here."
             />
           ) : (
             <div className="flex flex-col gap-2">
@@ -155,7 +156,7 @@ export default async function Page() {
                 >
                   <ListRow id={job.id} subtitle={jobSubtitle(job)} status={job.status} />
                   <span className="px-1 text-[11px] text-text-secondary">
-                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt)}
+                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt, job.offer?.acceptedAt ?? null)}
                   </span>
                 </Link>
               ))}
@@ -179,8 +180,7 @@ export default async function Page() {
               ))}
             </div>
             <p className="text-[11px] leading-relaxed text-text-secondary">
-              Your part on these is finished. They stay here so you can check
-              progress, and move to History once certified.
+              Your part is finished. These move to History once certified.
             </p>
           </div>
         )}

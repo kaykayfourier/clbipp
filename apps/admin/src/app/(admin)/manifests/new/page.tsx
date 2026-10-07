@@ -80,8 +80,7 @@ export default async function NewManifestPage({
             New manifest
           </h1>
           <p className="mt-1 max-w-[620px] text-xs leading-relaxed text-text-secondary">
-            Build a shipment from a facility&rsquo;s tested stock and name a recycler — or, for
-            second-life batteries, a refurbisher.
+            Build a shipment from a hub&rsquo;s tested stock.
           </p>
         </div>
         <Link
@@ -105,10 +104,7 @@ export default async function NewManifestPage({
         <div className="rounded-xl border border-console-line bg-surface px-6 py-12 text-center">
           <p className="text-sm font-bold text-text-primary">No shippable stock</p>
           <p className="mx-auto mt-1 max-w-[460px] text-xs leading-relaxed text-text-secondary">
-            Nothing is sitting at a facility on a pickup that has reached tested and is not already
-            on a manifest. Advance a hub batch on the lifecycle board first — that is the
-            <span className="font-mono text-[11px]"> collected → tested </span>
-            write, and it is what makes stock shippable.
+            Mark a hub batch tested first.
           </p>
           <Link
             href="/lifecycle"

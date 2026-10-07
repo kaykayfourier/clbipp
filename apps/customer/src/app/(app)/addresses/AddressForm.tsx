@@ -124,7 +124,7 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
       setGeo({
         kind: 'failed',
         message:
-          'Location needs a secure (https) connection — this page is on plain http. Type the address instead.',
+          "Location isn't available here. Type the address instead.",
       })
       return
     }
@@ -145,8 +145,8 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
         // alarming anyone about — the address is still perfectly usable.
         const message =
           err.code === err.PERMISSION_DENIED
-            ? "Location permission was denied. Enter the address manually — that's fine."
-            : "Couldn't get your location. Enter the address manually."
+            ? "Location permission denied. Type the address instead."
+            : "Couldn't get your location. Type the address instead."
         setGeo({ kind: 'failed', message })
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
@@ -164,7 +164,7 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
         required
         maxLength={40}
         placeholder="Warehouse, Home, Depot 2"
-        hint="A short name so you can tell your addresses apart."
+        hint="A short name"
       />
       <Field label="Address line 1" name="line1" type="text" required maxLength={120} placeholder="Building, street" />
       <Field label="Address line 2" name="line2" type="text" maxLength={120} placeholder="Area, landmark (optional)" />
@@ -191,7 +191,7 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
           Location (optional)
         </span>
         <p className="text-[11px] text-text-secondary">
-          Helps the collection partner find you. Optional.
+          Optional. Helps our agent find you.
         </p>
 
         <Button
@@ -212,8 +212,7 @@ export function AddressForm({ action }: { action: (formData: FormData) => void }
                 deliberately not an embedded picker — an embed needs a billed
                 Maps key. */}
             <p className="text-[11px] text-text-primary">
-              Pin saved — accurate to about {geo.accuracy} m. Saved alongside the
-              typed address, not instead of it.
+              Pin saved (about {geo.accuracy} m).
             </p>
             <a
               href={`https://www.google.com/maps?q=${geo.lat},${geo.lng}`}

@@ -75,7 +75,7 @@ export interface InstallPromptProps {
 export function InstallPrompt({
   appName,
   mark = "B2",
-  blurb = "Add it to your home screen — it opens full-screen, like a normal app.",
+  blurb = "Add it to your home screen.",
   className,
 }: InstallPromptProps) {
   const [deferred, setDeferred] = React.useState<BeforeInstallPromptEvent | null>(null);
@@ -167,8 +167,7 @@ export function InstallPrompt({
 
         {iosHint ? (
           <p className="text-xs leading-relaxed text-white/70">
-            Tap the Share icon in Safari, then <b className="text-white">Add to Home Screen</b>.
-            Safari has no one-tap install, so this is the way in on iPhone.
+            Tap Share in Safari, then <b className="text-white">Add to Home Screen</b>.
           </p>
         ) : (
           <>

@@ -126,8 +126,7 @@ function NoAddressState() {
             Add a pickup address first
           </h2>
           <p className="text-sm leading-relaxed text-text-secondary">
-            We need somewhere to send the field agent. Add your warehouse or site address and
-            you can book a pickup right after.
+            We need an address to send our agent to.
           </p>
           <Link href="/addresses/new" className="block">
             <Button variant="primary" fullWidth>
@@ -139,7 +138,7 @@ function NoAddressState() {
         <p className="text-center text-xs text-text-secondary">
           Already added one?{' '}
           <Link href="/addresses" className="underline">
-            Check it isn&apos;t marked not operational
+            Check your addresses
           </Link>
           .
         </p>

@@ -87,12 +87,12 @@ export default async function QuotesPage() {
     <>
       <PageHead
         title="Quote queue"
-        description={`Every priced item — engine-quoted and flat-rate alike (AD1). ${items.length >= MAX_ROWS ? `Showing the most recent ${MAX_ROWS}.` : ''}`}
+        description={`Every priced item. ${items.length >= MAX_ROWS ? `Showing the most recent ${MAX_ROWS}.` : ''}`}
       />
 
       <div className="flex flex-wrap gap-3">
         <KpiTile label="Total quoted" value={String(rows.length)} />
-        <KpiTile label="Engine-priced" value={String(enginePriced)} delta="li-ion, damage-rubric routed" deltaTone="neutral" />
+        <KpiTile label="Engine-priced" value={String(enginePriced)} delta="lithium-ion" deltaTone="neutral" />
         <KpiTile label="Flat-rate" value={String(flatRate)} delta="lead-acid / NiMH / other" deltaTone="neutral" />
         <KpiTile
           label="HOLD / REVIEW"
@@ -105,8 +105,7 @@ export default async function QuotesPage() {
       <QuotesTable rows={rows} />
 
       <p className="text-xs leading-relaxed text-text-secondary">
-        Read-only. A flagged item is resolved on{' '}
-        <span className="font-mono text-[11px]">/exceptions</span>, not here.
+        Read-only. Flags are resolved in Exceptions.
       </p>
     </>
   )

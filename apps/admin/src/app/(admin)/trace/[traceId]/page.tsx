@@ -72,10 +72,6 @@ export default async function TracePage({ params }: { params: Promise<{ traceId:
         />
         <Card>
           <p className="text-sm font-bold text-text-primary">No engine record for this trace id yet</p>
-          <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-            The item exists and carries this trace id, but its quote payload has not been recorded — it may still be
-            mid-computation, or this is an older row from before the current audit format.
-          </p>
         </Card>
       </>
     )
@@ -141,7 +137,7 @@ export default async function TracePage({ params }: { params: Promise<{ traceId:
             <p className="mt-4 text-sm leading-relaxed text-text-primary">{output.decision.rationale}</p>
             {output.decision.tiebreaker_applied ? (
               <p className="mt-2 text-xs text-warning-text">
-                A tiebreaker rule decided between pathways of near-equal value (see Alternatives).
+                Decided by tiebreaker — see Alternatives.
               </p>
             ) : null}
             {output.decision.eligible_pathways.length > 1 ? (
@@ -166,8 +162,7 @@ export default async function TracePage({ params }: { params: Promise<{ traceId:
             </div>
             {item.linePricePaise !== null && item.linePricePaise !== pRecommendedPaise ? (
               <p className="mt-3 text-xs text-warning-text">
-                The pickup&rsquo;s recorded line price ({formatPaise(item.linePricePaise)}) differs from this run&rsquo;s P
-                recommended — likely a later re-quote. This page shows the run named by this trace id specifically.
+                Recorded line price is {formatPaise(item.linePricePaise)} — likely re-quoted later.
               </p>
             ) : null}
           </Card>
@@ -250,19 +245,15 @@ export default async function TracePage({ params }: { params: Promise<{ traceId:
               Audit block — immutable
             </p>
             <div className="flex flex-col gap-2.5 font-mono text-[11px]">
-              <AuditRow label="trace_id" value={output.trace_id} />
-              <AuditRow label="battery_id" value={output.battery_id} />
-              <AuditRow label="config_version" value={output.audit.config_version} />
-              <AuditRow label="market_snapshot_id" value={output.audit.market_snapshot_id} />
-              <AuditRow label="fx_rate_usd_inr" value={output.audit.fx_rate_usd_inr.toFixed(2)} />
-              <AuditRow label="decision_timestamp" value={formatIstDateTime(new Date(output.audit.decision_timestamp))} />
-              <AuditRow label="input_hash" value={output.audit.input_hash} />
-              <AuditRow label="engine_version" value={output.audit.engine_version} />
+              <AuditRow label="Trace id" value={output.trace_id} />
+              <AuditRow label="Battery id" value={output.battery_id} />
+              <AuditRow label="Config version" value={output.audit.config_version} />
+              <AuditRow label="Market snapshot" value={output.audit.market_snapshot_id} />
+              <AuditRow label="USD/INR" value={output.audit.fx_rate_usd_inr.toFixed(2)} />
+              <AuditRow label="Decided at" value={formatIstDateTime(new Date(output.audit.decision_timestamp))} />
+              <AuditRow label="Input hash" value={output.audit.input_hash} />
+              <AuditRow label="Engine version" value={output.audit.engine_version} />
             </div>
-            <p className="mt-3 text-[10.5px] leading-relaxed text-text-secondary">
-              This block is written once, at quote time. It does not update if the config or market data changes
-              later — that is the point of an audit trail.
-            </p>
           </div>
 
           <Card>

@@ -42,7 +42,7 @@ export default function HistoryClient({ rows }: { rows: AgentHistoryRow[] }) {
       <div>
         <h1 className="font-serif text-2xl font-medium text-text-primary">History</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Every job you have been assigned, and what you earned on it.
+          Every job you have been assigned.
         </p>
       </div>
 
@@ -69,7 +69,7 @@ export default function HistoryClient({ rows }: { rows: AgentHistoryRow[] }) {
       {rows.length === 0 ? (
         <EmptyState
           heading="No jobs yet"
-          description="Once a pickup is scheduled and assigned to you it shows up here, along with everything that happened to it."
+          description="Assigned jobs show up here."
         />
       ) : (
         <div className="flex flex-col gap-3">

@@ -89,7 +89,7 @@ export function StepSchedule({
           <Link href="/addresses/new" className="underline">
             Add an address
           </Link>
-          . Addresses marked not operational aren&apos;t shown here.
+          .
         </p>
       </fieldset>
 
@@ -106,7 +106,7 @@ export function StepSchedule({
           className="w-full rounded-xl border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-green"
         />
         <p className="text-xs text-text-secondary">
-          We&apos;ll confirm the actual slot once an agent is assigned.
+          We&apos;ll confirm the time with you.
         </p>
       </div>
 

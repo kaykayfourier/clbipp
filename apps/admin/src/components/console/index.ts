@@ -18,6 +18,7 @@ export * from './mini-bar-chart'
 export * from './split-bar'
 export * from './drawer'
 export * from './confirm-dialog'
+export * from './confirm-submit'
 export * from './states'
 export * from './blocks'
 // Fixtures are deliberately NOT re-exported. They are sample data for building

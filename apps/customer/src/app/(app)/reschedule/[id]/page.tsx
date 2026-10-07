@@ -57,16 +57,14 @@ export default async function ReschedulePage({ params }: PageProps) {
       <PagePadding className="flex flex-col gap-5">
         {pickup.status === "cancelled" && (
           <Banner variant="info">
-            This pickup was cancelled. Rescheduling brings back the same request with a
-            new date — no need to start over.
+            This pickup was cancelled. Pick a new date to bring it back.
           </Banner>
         )}
 
         {!canReschedule ? (
           <>
             <Banner variant="error">
-              This pickup has already moved past collection and can no longer be
-              rescheduled.
+              This pickup can no longer be rescheduled.
             </Banner>
             <Link
               href={`/track/${pickup.id}`}

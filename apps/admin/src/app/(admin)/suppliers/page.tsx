@@ -44,7 +44,7 @@ export default async function SuppliersPage() {
 
   return (
     <>
-      <PageHead title="Suppliers" description="Vendors, EPR registration, KYC status, and each one's margin-tier override." />
+      <PageHead title="Suppliers" description="Vendors, EPR registration, KYC and margin tier." />
       <SuppliersTable rows={rows} />
     </>
   )

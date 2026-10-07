@@ -163,12 +163,12 @@ export default async function TrackPage({
     const offerAccepted = Boolean(pickup.offer?.acceptedAt)
 
     const banner: Record<typeof status, string> = {
-      requested: "Your request is in. We'll confirm a collection slot shortly.",
-      scheduled: 'Collection is scheduled. Track this screen on the day.',
-      arrived: 'Your collection agent is on site and assessing the batteries.',
+      requested: "Request received. We'll confirm a time soon.",
+      scheduled: 'Collection is scheduled.',
+      arrived: 'Our agent is on site checking the batteries.',
       offered: offerAccepted
-        ? 'Offer accepted. Your agent will load the batteries and confirm the handover on site.'
-        : 'Your offer is ready. Review it to confirm handover.',
+        ? 'Offer accepted. Our agent will load the batteries.'
+        : 'Your offer is ready.',
     }
 
     return (
@@ -216,11 +216,8 @@ export default async function TrackPage({
           {/* B7 — say what we actually do. There is no SMS/WhatsApp/push
               notification pipeline (Plan v2 §1.3 A3, not built), so promising
               one was a promise the app can't keep. */}
-          <Banner variant="info">
-            This screen updates itself as your batteries move through each stage.
-          </Banner>
           <Banner variant="tinted">
-            Recovery breakdown and certificate unlock once recovered.
+            Your certificate comes after recycling.
           </Banner>
           {documents}
           {partner}
@@ -244,7 +241,7 @@ export default async function TrackPage({
           </Card>
           <RecoverySummary materials={materials} />
           <Banner variant="tinted">
-            Your EPR certificate becomes available once certified.
+            Your certificate is on its way.
           </Banner>
           {documents}
           <CustodyLog entries={custody} />

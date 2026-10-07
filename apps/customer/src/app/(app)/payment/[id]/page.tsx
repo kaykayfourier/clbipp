@@ -51,7 +51,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
         <PagePadding>
           <ErrorState
             heading="No payment yet"
-            message="A payout is raised once your batteries have been collected and weighed."
+            message="Your payout appears after collection."
           />
         </PagePadding>
       </AppShell>
@@ -147,9 +147,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
               // whether real money moved, and the honest answer belongs on the
               // screen, not in a README.
               <Banner variant="warning">
-                Payments are running in simulation for now — confirming settles
-                the payout in the app and credits your wallet, but no money
-                leaves a bank.
+                Test mode: payouts are a simulation. No real money is sent.
               </Banner>
             )}
           </>
@@ -157,8 +155,7 @@ export default async function PaymentPage({ params }: { params: Promise<{ id: st
 
         {payment.status === 'processing' && (
           <Banner variant="info">
-            This payout is being processed. It will show as paid here once it
-            settles.
+            Payout in progress.
           </Banner>
         )}
 

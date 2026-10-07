@@ -40,7 +40,7 @@ export default function HistoryClient({ rows }: { rows: HistoryRow[] }) {
       <div>
         <h1 className="font-serif text-2xl font-medium text-text-primary">Pickup history</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Every request you&apos;ve made, and a shortcut to book the same load again.
+          All your requests.
         </p>
       </div>
 
@@ -67,7 +67,7 @@ export default function HistoryClient({ rows }: { rows: HistoryRow[] }) {
       {rows.length === 0 ? (
         <EmptyState
           heading="No pickups yet"
-          description="Once you request your first battery pickup it will show up here, along with everything that happened to it."
+          description="Your pickups will show up here."
         />
       ) : (
         <div className="flex flex-col gap-3">

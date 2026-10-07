@@ -154,9 +154,8 @@ export function StepItems({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm leading-relaxed text-text-secondary">
-        Add a line for each batch of {CATEGORY_LABELS[category].toLowerCase()} batteries. Every
-        line needs a photo. Weight is optional — leave it blank and the agent weighs them on
-        collection.
+        One line per batch of {CATEGORY_LABELS[category].toLowerCase()} batteries. Each line
+        needs a photo. Weight is optional.
       </p>
 
       {items.map((item, index) => (
@@ -276,8 +275,7 @@ function LineCard({
         <p className="text-xs text-text-secondary">{CONDITION_HINTS[item.condition]}</p>
         {item.condition !== 'healthy' && (
           <Banner variant="warning">
-            Please don&apos;t stack or puncture these. Keep them somewhere cool and away from
-            other waste until we collect.
+            Don&apos;t stack or puncture these. Keep them cool and apart from other waste.
           </Banner>
         )}
       </fieldset>
@@ -343,8 +341,7 @@ function LineCard({
         )}
 
         <p className="text-xs text-text-secondary">
-          One photo minimum, up to 6, {MAX_FILE_MB} MB each. Show the whole lot in one frame if you
-          can — it is what our team uses to plan the collection before an agent sets off.
+          1 to 6 photos, up to {MAX_FILE_MB} MB each. Show the whole lot if you can.
         </p>
 
         {photoErrors.map((message) => (

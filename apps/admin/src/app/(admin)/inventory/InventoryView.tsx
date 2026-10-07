@@ -108,7 +108,7 @@ export function InventoryView({
           getRowKey={(r) => `${r.facilityId}-${r.chemistry}`}
           initialSort={{ key: 'weight', direction: 'desc' }}
           emptyHeading="No stock on hand"
-          emptyDescription="Every custody batch's items have already been dispatched, or none has arrived yet."
+          emptyDescription="Nothing at the hubs right now."
         />
       </div>
     </div>

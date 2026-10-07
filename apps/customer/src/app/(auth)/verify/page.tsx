@@ -72,7 +72,7 @@ export default async function VerifyPage({
         </form>
 
         <p className="text-center text-xs text-text-secondary">
-          Codes can take a minute and sometimes land in spam. You can always{' '}
+          No code? Check spam, or{' '}
           <Link href="/login" className="font-medium underline">
             log in with your password
           </Link>{' '}

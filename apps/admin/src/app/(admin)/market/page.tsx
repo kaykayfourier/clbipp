@@ -44,7 +44,7 @@ export default async function MarketPage({
           Market feed
         </h1>
         <p className="mt-1 text-xs text-text-secondary">
-          Metal prices, freshness, fx rate, and audited manual overrides.
+          Metal prices, fx rate and manual overrides.
         </p>
       </div>
 
@@ -61,7 +61,7 @@ export default async function MarketPage({
 
       {!current ? (
         <p className="text-sm text-text-secondary">
-          No market snapshot exists. Run <code>npm run reset-demo</code>.
+          No market prices yet.
         </p>
       ) : (
         <>
@@ -112,8 +112,7 @@ export default async function MarketPage({
               Manual override
             </h2>
             <p className="mb-3 text-xs text-text-secondary">
-              Writes a new snapshot; the current one is kept as history. A reason
-              is required and is recorded in the audit log.
+              Saves new prices. A reason is required.
             </p>
 
             <form action={overrideMarketPrices} className="space-y-4">
@@ -158,7 +157,7 @@ export default async function MarketPage({
                   name="note"
                   type="text"
                   required
-                  placeholder="Why is this override being made?"
+                  placeholder="Reason"
                   className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary"
                 />
               </label>

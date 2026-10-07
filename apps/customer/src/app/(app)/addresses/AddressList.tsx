@@ -82,7 +82,7 @@ export function AddressCard({ address }: { address: AddressCardData }) {
 
             {address.hasCoords && (
               <p className="mt-1 text-[11px] text-text-secondary">
-                📍 Map pin saved for the collection partner
+                Map pin saved
               </p>
             )}
           </div>

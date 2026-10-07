@@ -49,11 +49,10 @@ export function StepReview({
           Your price
         </span>
         <p className="text-sm leading-relaxed text-text-primary">
-          We&apos;ll give you a price after our agent has inspected the batteries in person.
+          Our agent inspects the batteries and gives you a price on site.
         </p>
         <p className="text-xs leading-relaxed text-text-secondary">
-          They&apos;ll weigh each line on a digital scale and check its condition, then make you an
-          offer on the spot. Nothing is collected until you accept it.
+          Nothing is collected until you accept it.
         </p>
       </Card>
 
@@ -98,8 +97,7 @@ export function StepReview({
       </Card>
 
       <p className="text-xs leading-relaxed text-text-secondary">
-        Submitting sends this to our operations team. You&apos;ll be able to track it from the
-        moment it&apos;s created, and you can cancel while it&apos;s still unscheduled.
+        You can track or cancel it after you submit.
       </p>
     </div>
   )

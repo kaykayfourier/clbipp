@@ -66,9 +66,9 @@ const CAUSE_LABELS: Record<string, string> = {
 }
 
 const RESOLUTION_LABELS: Record<string, string> = {
-  retest: 'Retest — send it back for a second read',
-  override: 'Override — the flag was wrong, clear it',
-  reject: 'Reject — the flag stands, the item is out',
+  retest: 'Retest',
+  override: 'Override — flag was wrong',
+  reject: 'Reject — item is out',
 }
 
 /** Built from the Prisma enum, so the <select> and the action's validator can
@@ -149,26 +149,23 @@ export default async function ExceptionsPage({
           Exception queue
         </h1>
         <p className="mt-1 max-w-[660px] text-xs leading-relaxed text-text-secondary">
-          Engine holds and reviews, per battery item, resolved as retest, override or reject.
-          Resolving one records a decision — it does not move a pickup. An item&rsquo;s pickup stays
-          at whatever stage it reached.
+          Items the engine flagged. Resolving one does not move the pickup.
         </p>
       </div>
 
       {params.error ? <Banner tone="error">{params.error}</Banner> : null}
       {params.resolved ? (
         <Banner tone="success">
-          Exception resolved. The decision, who made it and the note are on the{' '}
+          Exception resolved. See the{' '}
           <Link href="/audit" className="font-semibold underline underline-offset-2">
             audit log
           </Link>
-          . Nothing about the item&rsquo;s pickup changed.
+          .
         </Banner>
       ) : null}
       {params.already ? (
         <Banner tone="success">
-          That exception was already resolved — the first resolution stands and no second one was
-          written. Resolution is idempotent by design.
+          Already resolved. No change made.
         </Banner>
       ) : null}
 
@@ -213,10 +210,10 @@ export default async function ExceptionsPage({
       {rows.length === 0 ? (
         <Empty>
           {state === 'resolved'
-            ? 'Nothing has been resolved yet. Close an open exception and it appears here with who closed it and why.'
+            ? 'Nothing resolved yet.'
             : state === 'open'
-              ? 'No open exceptions. Every engine hold and review has been dealt with.'
-              : 'No exceptions at all — the engine has not flagged an item.'}
+              ? 'No open exceptions.'
+              : 'No exceptions.'}
         </Empty>
       ) : (
         <div className="flex flex-col gap-3">
@@ -227,14 +224,11 @@ export default async function ExceptionsPage({
       )}
 
       <p className="max-w-[680px] text-xs leading-relaxed text-text-secondary">
-        🔴 A resolution is a decision about an <em>item</em>, not about its pickup.
-        <span className="font-mono text-[11px]"> override</span> here means the engine&rsquo;s flag
-        was wrong, not &ldquo;advance this pickup&rdquo;. If a rejection ought to stop a pickup
-        moving, that is the manual override on{' '}
+        To stop or move a pickup, use the manual override on{' '}
         <Link href="/lifecycle" className="font-semibold underline underline-offset-2">
           lifecycle control
         </Link>
-        , which takes a typed reason and writes a status event.
+        .
       </p>
     </>
   )
@@ -298,7 +292,7 @@ function ExceptionCard({ row, now }: { row: ExceptionRow; now: Date }) {
                 readable off the screen rather than translated away. */}
             <span className="font-mono text-[11px] font-bold text-text-primary">{row.cause}</span>
             <span className="text-xs text-text-secondary">
-              {CAUSE_LABELS[row.cause] ?? 'Uncatalogued engine flag'}
+              {CAUSE_LABELS[row.cause] ?? 'Other flag'}
             </span>
           </div>
           {row.detail ? (
@@ -380,7 +374,7 @@ function ExceptionCard({ row, now }: { row: ExceptionRow; now: Date }) {
             </label>
             <label className="flex min-w-[320px] flex-[2] flex-col gap-1">
               <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-text-secondary">
-                Notes (optional — they land on the audit trail)
+                Notes (optional)
               </span>
               <input
                 type="text"

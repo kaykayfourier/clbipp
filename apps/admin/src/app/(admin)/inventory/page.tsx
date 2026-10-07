@@ -96,7 +96,7 @@ export default async function InventoryPage() {
 
   return (
     <>
-      <PageHead title="Inventory" description="Facility stock by chemistry, capacity gauges, and dwell alerts — derived from custody batches, not a stored counter." />
+      <PageHead title="Inventory" description="Stock by facility and chemistry, capacity, and dwell alerts." />
       {facilities.length === 0 ? (
         <p className="rounded-xl border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning-text">
           No active facilities are configured.

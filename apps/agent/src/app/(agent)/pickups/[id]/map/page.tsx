@@ -73,8 +73,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           <JobMap lat={lat} lng={lng} label={textAddress} />
         ) : (
           <Banner variant="info">
-            No pin recorded for this address — the vendor entered it by hand.
-            Google Maps will still search for it by name.
+            No map pin for this address. Google Maps can still find it.
           </Banner>
         )}
 

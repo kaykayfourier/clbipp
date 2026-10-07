@@ -9,6 +9,7 @@ import { STAGE_LABELS, isLifecycleStage } from '@clbipp/ui'
 import { formatIstDateTime } from '@/lib/ist'
 import {
   Chip,
+  ConfirmSubmit,
   FieldLabel,
   Notice,
   PageHead,
@@ -98,7 +99,7 @@ export default async function CustodyCheckIn({
     <>
       <PageHead
         title={`Hub check-in · ${batch.batchNo}`}
-        description={`${batch.facility.name} · handed in by ${batch.agent.fullName} on ${formatIstDateTime(batch.handedOffAt)} · received by ${batch.receivingStaffName} (agent-recorded)`}
+        description={`${batch.facility.name} · handed in by ${batch.agent.fullName} on ${formatIstDateTime(batch.handedOffAt)} · received by ${batch.receivingStaffName}`}
         actions={
           <Link href="/lifecycle" className={secondaryButtonClass}>
             Lifecycle
@@ -251,15 +252,14 @@ export default async function CustodyCheckIn({
                 Check in
               </button>
               <p className="text-[11px] leading-relaxed text-text-secondary">
-                A USB or Bluetooth barcode scanner works here as-is — it types the code and presses Enter. A tag from
-                another batch, or one never issued, is refused with the reason.
+                Works with a USB or Bluetooth scanner.
               </p>
             </form>
           </Panel>
 
           <Panel title="Advance to tested">
             {stillCollected.length === 0 ? (
-              <p className="text-xs text-text-secondary">Every pickup in this batch is already past collected.</p>
+              <p className="text-xs text-text-secondary">All pickups in this batch are past collected.</p>
             ) : (
               <form action={advanceCustodyBatchAction} className="flex flex-col gap-3">
                 <input type="hidden" name="batchId" value={batch.id} />
@@ -267,12 +267,20 @@ export default async function CustodyCheckIn({
                   {readyToAdvance.length} of {stillCollected.length} pickup{stillCollected.length === 1 ? '' : 's'} fully
                   checked in.
                 </p>
-                <button type="submit" className={primaryButtonClass} disabled={readyToAdvance.length === 0}>
-                  Mark {readyToAdvance.length} tested
-                </button>
+                {readyToAdvance.length === 0 ? (
+                  <button type="submit" className={primaryButtonClass} disabled>
+                    Mark {readyToAdvance.length} tested
+                  </button>
+                ) : (
+                  <ConfirmSubmit
+                    message={`Mark ${readyToAdvance.length} pickup${readyToAdvance.length === 1 ? '' : 's'} in ${batch.batchNo} as tested? This can't be undone.`}
+                    className={primaryButtonClass}
+                  >
+                    Mark {readyToAdvance.length} tested
+                  </ConfirmSubmit>
+                )}
                 <p className="text-[11px] leading-relaxed text-text-secondary">
-                  Only pickups whose every line is received move. One unchecked or missing line holds its whole pickup
-                  — the same rule manifests follow (AD6).
+                  A pickup with an unchecked or missing line stays held.
                 </p>
               </form>
             )}

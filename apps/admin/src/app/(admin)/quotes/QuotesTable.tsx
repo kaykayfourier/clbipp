@@ -149,7 +149,7 @@ export function QuotesTable({ rows }: { rows: readonly QuoteRow[] }) {
         getSearchText={(r) => `${r.pickupId} ${r.vendorName} ${r.traceId ?? ''} ${r.category} ${r.chemistry ?? ''}`}
         searchPlaceholder="Search pickup id, vendor, trace id…"
         emptyHeading="No items match this filter"
-        emptyDescription="Try a different filter, or clear the search box."
+        emptyDescription="Try another filter or clear the search."
         rowNounPlural="items"
       />
     </div>

@@ -161,8 +161,7 @@ export default async function ScheduledPage({ searchParams }: PageProps) {
 
         {/* Info banner — agent will be assigned soon */}
         <Banner variant="info">
-          You&apos;ll be notified as soon as a field agent is assigned and
-          a collection time is confirmed.
+          We&apos;ll confirm the agent and time soon.
         </Banner>
 
         {/* Actions */}

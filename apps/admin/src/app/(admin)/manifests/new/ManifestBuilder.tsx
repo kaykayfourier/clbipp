@@ -138,9 +138,9 @@ export function ManifestBuilder({
     <form action={createManifestAction} className="flex flex-col gap-5">
       {/* ── 0 · Destination (FV13 · FD17) ───────────────────────────────── */}
       <Panel
-        step="0"
+        step="1"
         title="Destination"
-        hint="Second Life and Recycling are different journeys. A second-life battery goes to a refurbisher, never on a recycler's lorry; everything else — including every flat-rate line — goes to a recycler."
+        hint="Second-life batteries go to a refurbisher. Everything else goes to a recycler."
       >
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Destination">
           {(
@@ -173,9 +173,8 @@ export function ManifestBuilder({
 
       {/* ── 1 · Facility ─────────────────────────────────────────────────── */}
       <Panel
-        step="1"
+        step="2"
         title="Facility"
-        hint="One manifest is one shipment leaving one building. The action rejects a selection that spans two."
       >
         <select
           value={facilityId}
@@ -195,15 +194,14 @@ export function ManifestBuilder({
 
       {/* ── 2 · Items ────────────────────────────────────────────────────── */}
       <Panel
-        step="2"
+        step="3"
         title="Tested stock on hand"
-        hint="Items on a pickup that has reached tested, physically at this facility, and not already on another manifest — drafts included, so two drafts can never claim the same battery."
       >
         {visible.length === 0 ? (
           <p className="text-xs leading-relaxed text-text-secondary">
             {kind === 'refurbisher'
-              ? 'No second-life stock at this facility. An item appears here when its pathway is reuse or refurbish (the engine\'s verdict, or an admin\'s override on the pickup) and its pickup has reached tested.'
-              : 'Nothing shippable at this facility. Stock appears here once a hub batch is advanced to tested on the lifecycle board.'}
+              ? 'No second-life stock at this facility.'
+              : 'Nothing to ship at this facility.'}
           </p>
         ) : (
           <>
@@ -284,9 +282,9 @@ export function ManifestBuilder({
 
       {/* ── 3 · Recycler ─────────────────────────────────────────────────── */}
       <Panel
-        step="3"
+        step="4"
         title={kind === 'refurbisher' ? 'Refurbisher' : 'Recycler'}
-        hint="AD7 — a manifest may only name an active partner of the right kind whose accepted chemistries cover EVERY item on it. That is chemistry-wise segregation, and it is why one pickup's items can end up on two manifests."
+        hint="Must accept every chemistry you selected."
       >
         <select
           name="recyclerId"
@@ -309,8 +307,7 @@ export function ManifestBuilder({
         <ul className="mt-3 flex flex-col gap-1.5">
           {partners.length === 0 ? (
             <li className="text-[11px] text-warning-text">
-              No {kind === 'refurbisher' ? 'refurbisher' : 'recycler'} is registered. Add one to the partner directory
-              before this stock can move.
+              No {kind === 'refurbisher' ? 'refurbisher' : 'recycler'} registered yet.
             </li>
           ) : null}
           {partners.map((r) => {
@@ -335,9 +332,8 @@ export function ManifestBuilder({
 
         {selectedVisible.length > 0 && eligible.length === 0 ? (
           <div className="mt-3 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-xs leading-relaxed text-warning-text">
-            No active {kind === 'refurbisher' ? 'refurbisher' : 'recycler'} accepts every chemistry in this selection. Split it — that is exactly
-            what AD7 is for, and it is why a pickup&rsquo;s items legitimately end up on two
-            different manifests.
+            No active {kind === 'refurbisher' ? 'refurbisher' : 'recycler'} accepts every chemistry
+            selected. Split it into two manifests.
           </div>
         ) : null}
       </Panel>
@@ -367,9 +363,7 @@ export function ManifestBuilder({
       </div>
 
       <p className="text-xs leading-relaxed text-text-secondary">
-        This creates a <span className="font-mono text-[11px]">draft</span> only. Nothing has left
-        the building and no pickup advances — dispatching it is a separate, deliberate act on the
-        manifest&rsquo;s own screen.
+        Creates a draft. Nothing ships until you dispatch it.
       </p>
     </form>
   )
@@ -383,7 +377,7 @@ function Panel({
 }: {
   step: string
   title: string
-  hint: string
+  hint?: string
   children: React.ReactNode
 }) {
   return (
@@ -392,7 +386,9 @@ function Panel({
         <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.09em] text-text-primary">
           {step} · {title}
         </h2>
-        <p className="mt-1 max-w-[620px] text-xs leading-relaxed text-text-secondary">{hint}</p>
+        {hint ? (
+          <p className="mt-1 max-w-[620px] text-xs leading-relaxed text-text-secondary">{hint}</p>
+        ) : null}
       </div>
       {children}
     </section>

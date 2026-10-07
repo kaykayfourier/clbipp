@@ -30,7 +30,7 @@ export function PickupActions({
   const [error, setError] = useState<string | null>(null);
 
   function handleCancel() {
-    if (!window.confirm("Cancel this pickup request? This can't be undone.")) return;
+    if (!window.confirm("Cancel this pickup? You can rebook it later.")) return;
     setError(null);
     startTransition(async () => {
       const { error } = await cancelPickup(pickupId);

@@ -57,7 +57,7 @@ export default async function AnalyticsPage() {
           </h2>
           <MiniBarChart points={marginPoints} formatValue={(v) => `${v.toFixed(1)}%`} />
           <p className="text-[10.5px] text-text-disabled">
-            Average margin at recommended price, engine-priced items only, by week starting.
+            Average margin, engine-priced items, by week.
           </p>
         </div>
       </div>

@@ -22,8 +22,7 @@ export function StepCategory({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm leading-relaxed text-text-secondary">
-        Pick the closest match. Our field agent confirms the exact chemistry and condition on
-        site — you don&apos;t need to know it.
+        Pick the closest match. Our agent checks the details on site.
       </p>
 
       <fieldset className="flex flex-col gap-2">
@@ -61,8 +60,7 @@ export function StepCategory({
       </fieldset>
 
       <p className="text-xs leading-relaxed text-text-secondary">
-        Collecting more than one category? Book them as separate pickups so each gets its own
-        agent, quote and EPR certificate.
+        More than one category? Book a separate pickup for each.
       </p>
     </div>
   )

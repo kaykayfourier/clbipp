@@ -186,8 +186,7 @@ export function ConfirmDropoffForm({
       <div className="flex flex-col gap-2">
         <SectionLabel>Receiving staff</SectionLabel>
         <Banner variant="info">
-          Agent-attested only — there&rsquo;s no hub-staff login yet, so this name
-          is typed by you, not confirmed by the person it names.
+          Agent-attested only. Type the name of the person receiving.
         </Banner>
         <input
           type="text"
@@ -205,7 +204,7 @@ export function ConfirmDropoffForm({
       </div>
 
       <p className="text-[11px] text-text-secondary">
-        {coords ? 'Location captured.' : 'Location not available — the hand-off will be recorded without it.'}
+        {coords ? 'Location captured.' : 'No location. Hand-off saves without it.'}
       </p>
 
       <Button type="submit" variant="primary" fullWidth disabled={!ready}>

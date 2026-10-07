@@ -152,9 +152,7 @@ export function BookingWizard({
             reach step 2 and wonder where their pictures went. */}
         {initialDraft && step === 1 && (
           <Banner variant="info">
-            Copied from {initialDraft.sourcePickupId} — same category, lines and
-            address. Add fresh photos for this load; the old ones stay with the
-            pickup they were taken for.
+            Copied from {initialDraft.sourcePickupId}. Add new photos for this load.
           </Banner>
         )}
 

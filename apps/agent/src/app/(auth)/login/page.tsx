@@ -68,8 +68,7 @@ export default async function LoginPage({
         </form>
 
         <p className="text-center text-xs text-text-secondary">
-          Accounts are issued by your operations team. Contact your supervisor if
-          you cannot sign in.
+          Can&rsquo;t log in? Contact your supervisor.
         </p>
       </PagePadding>
     </AppShell>

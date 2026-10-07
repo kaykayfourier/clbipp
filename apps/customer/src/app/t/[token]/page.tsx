@@ -114,12 +114,12 @@ export default async function PublicTrackPage({
     const offerAccepted = Boolean(pickup.offer?.acceptedAt)
 
     const banner: Record<typeof status, string> = {
-      requested: 'This pickup is confirmed. Collection will be arranged shortly.',
+      requested: 'Request received. Collection will be arranged soon.',
       scheduled: 'Collection is scheduled.',
       arrived: 'The collection agent is on site.',
       offered: offerAccepted
-        ? 'The offer has been accepted. The agent will collect the batteries on site.'
-        : 'An offer has been made and is awaiting the vendor.',
+        ? 'Offer accepted. Awaiting collection.'
+        : 'Offer made. Awaiting the vendor.',
     }
 
     return (
@@ -146,7 +146,7 @@ export default async function PublicTrackPage({
             <Timeline currentStage={status} stages={stages} pulse />
           </Card>
           <Banner variant="tinted">
-            Recovery breakdown and certificate unlock once recovered.
+            The certificate comes after recycling.
           </Banner>
           <CustodyLog entries={custody} showPhotos={false} />
         </PagePadding>
@@ -165,7 +165,7 @@ export default async function PublicTrackPage({
           </Card>
           <RecoverySummary materials={materials} />
           <Banner variant="tinted">
-            The EPR certificate becomes available once certified.
+            The certificate is on its way.
           </Banner>
           <CustodyLog entries={custody} showPhotos={false} />
         </PagePadding>

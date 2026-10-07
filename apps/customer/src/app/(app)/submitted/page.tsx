@@ -90,8 +90,7 @@ export default async function SubmittedPage({ searchParams }: PageProps) {
           {/* B7 — no notification pipeline exists (Plan v2 §1.3 A3), so this
               describes in-app tracking rather than promising a message. */}
           <p className="text-sm text-text-secondary max-w-xs leading-relaxed">
-            Track this pickup here — the status updates as soon as a collection
-            partner is assigned.
+            We&apos;ll assign an agent soon.
           </p>
         </div>
 
@@ -134,12 +133,6 @@ export default async function SubmittedPage({ searchParams }: PageProps) {
             })}
           />
         </Card>
-
-        {/* Message */}
-        <p className="text-sm text-text-secondary text-center leading-relaxed">
-          A field agent will be assigned shortly. You&apos;ll receive a
-          notification with their ETA.
-        </p>
 
         {/* CTA */}
         <Link href={`/scheduled?id=${pickup.id}`} className="block">

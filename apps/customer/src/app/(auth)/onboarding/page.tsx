@@ -67,8 +67,7 @@ export default async function OnboardingPage({
         {vendorType === null ? (
           <>
             <p className="text-sm text-text-secondary">
-              One more step — what kind of account is this? It decides which
-              details and which compliance documents we ask you for.
+              One more step — what kind of account is this?
             </p>
 
             <div className="flex flex-col gap-3">

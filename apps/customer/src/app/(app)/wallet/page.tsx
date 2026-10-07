@@ -69,8 +69,7 @@ export default async function WalletPage() {
 
         {pendingPayments.length > 0 && (
           <Banner variant="warning">
-            {formatPaise(pendingTotal)} is waiting for you to choose how to be
-            paid.{' '}
+            {formatPaise(pendingTotal)} is waiting for you.{' '}
             <Link
               href={`/payment/${pendingPayments[0].pickupId}`}
               className="font-semibold underline"
@@ -88,7 +87,7 @@ export default async function WalletPage() {
             <div className="mt-3">
               <EmptyState
                 heading="Nothing here yet"
-                description="Payouts from your pickups will appear here once your batteries are collected and paid for."
+                description="Payouts appear here after collection."
               />
             </div>
           ) : (
@@ -109,9 +108,7 @@ export default async function WalletPage() {
         </div>
 
         <Banner variant="info">
-          Your balance is held against your account. Withdrawals to a bank
-          account are coming — for now, payouts can be sent straight to UPI or
-          your bank when you accept them.
+          Bank withdrawals are coming soon.
         </Banner>
 
         <div className="flex flex-col gap-3">

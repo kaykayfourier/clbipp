@@ -79,8 +79,7 @@ function EmptyQueue() {
         </div>
         <p className="text-sm font-bold text-text-primary">Queue&rsquo;s empty</p>
         <p className="max-w-[240px] text-xs leading-relaxed text-text-secondary">
-          No pickups assigned right now. New jobs appear here the moment
-          they&rsquo;re scheduled — you don&rsquo;t need to go looking for them.
+          No pickups assigned. New jobs show up here.
         </p>
       </CardContent>
     </Card>
@@ -119,6 +118,7 @@ export default async function Page() {
         status: true,
         custodyBatchId: true,
         collectionScheduledAt: true,
+        offer: { select: { acceptedAt: true } },
         scheduledSlot: true,
         vendor: { select: { fullName: true } },
         _count: { select: { items: true } },
@@ -207,7 +207,7 @@ export default async function Page() {
           </h1>
           <p className="text-sm text-text-secondary">
             {active.length === 0
-              ? 'Nothing on your slate right now.'
+              ? 'No open jobs.'
               : `${active.length} job${active.length === 1 ? '' : 's'} still open.`}
           </p>
         </div>
@@ -218,7 +218,7 @@ export default async function Page() {
         <InstallPrompt
           appName="Field Agent"
           mark="FA"
-          blurb="Add it to your home screen — one tap to today's jobs, no browser in the way."
+          blurb="Add to your home screen."
         />
 
         {/* Assigned / Collected / Earned. No "Avg margin" — the wireframe puts
@@ -278,7 +278,7 @@ export default async function Page() {
                 >
                   <ListRow id={job.id} subtitle={jobSubtitle(job)} status={job.status} />
                   <span className="px-1 text-[11px] text-text-secondary">
-                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt)}
+                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt, job.offer?.acceptedAt ?? null)}
                   </span>
                 </Link>
               ))}
@@ -301,7 +301,7 @@ export default async function Page() {
                 >
                   <ListRow id={job.id} subtitle={jobSubtitle(job)} status={job.status} />
                   <span className="px-1 text-[11px] text-text-secondary">
-                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt)}
+                    {jobNextStep(job.status, job.custodyBatchId, job.collectionScheduledAt, job.offer?.acceptedAt ?? null)}
                   </span>
                 </Link>
               ))}

@@ -136,7 +136,7 @@ export default async function ConfigPage({
           Engine config
         </h1>
         <p className="mt-1 text-xs text-text-secondary">
-          Pricing parameters. Tiers 1 and 2 editable, tier 3 read-only (AD8).
+          Pricing settings used by the engine.
         </p>
       </div>
 
@@ -147,15 +147,13 @@ export default async function ConfigPage({
       )}
       {published && (
         <div className="rounded-md border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800">
-          Published. {published} field{published === '1' ? '' : 's'} changed — the next quote uses
-          the new config.
+          Published. {published} field{published === '1' ? '' : 's'} changed.
         </div>
       )}
 
       {!active ? (
         <p className="text-sm text-text-secondary">
-          No active config row. The engine will not price without one — run{' '}
-          <code>npm run reset-demo</code>.
+          No live config. Quotes cannot be priced until one is published.
         </p>
       ) : (
         <>
@@ -185,7 +183,7 @@ export default async function ConfigPage({
           {/* ── Tier 3 — read-only, and structurally unsubmittable ── */}
           <Section
             title="Tier 3 — not configurable"
-            hint="These are literals in the engine's own code, not config parameters. There is no field for them here because there is nowhere for a value to go — changing one is a code change and a redeploy."
+            hint="Fixed in the engine. Read-only."
           >
             <div className="rounded-lg border border-amber-300 bg-amber-50/60 px-4 py-3 text-sm">
               <dl className="grid gap-3 sm:grid-cols-2">
@@ -226,7 +224,7 @@ export default async function ConfigPage({
           {/* ── Simulate — the named cut ─────────────────────────── */}
           <Section
             title="Simulate"
-            hint="Replay recent quotes against a candidate config before publishing it."
+            hint="Test a config on recent quotes."
           >
             {/* TODO: replay the last N quotes off BatteryItem.quoteData.
                 Genuinely buildable — computeQuote is pure and quoteData holds a
@@ -236,16 +234,12 @@ export default async function ConfigPage({
                 bug. It becomes worth building once real quotes accumulate.
                 Named as a cut in PLAN_ADMIN_APP.md §2. */}
             <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
-              <p className="text-sm text-text-secondary">Not built.</p>
-              <p className="mt-1 text-xs text-text-secondary">
-                A replay needs stored quote inputs, and <code>BatteryItem.quoteData</code> is not
-                seeded — there is nothing to replay until the app has priced real items.
-              </p>
+              <p className="text-sm text-text-secondary">Not available yet.</p>
             </div>
           </Section>
 
           {/* ── Publish history ──────────────────────────────────── */}
-          <Section title="Publish history" hint="Append-only. A config is never edited in place.">
+          <Section title="Publish history" hint="Every published version.">
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-sm">
                 <thead className="border-b border-border bg-surface-muted">
@@ -301,7 +295,7 @@ function ConfigForm({ config }: { config: Config }) {
     <form action={publishConfig} className="space-y-8">
       <Section
         title="Margin & pricing"
-        hint="🔴 Ordered aggressive > standard > generous — the band is anchored on it. p_min uses aggressive, p_max uses generous, and inverting them inverts every quote without erroring. Fractions, not percents: 0.30 means we keep 30%."
+        hint="Keep aggressive > standard > generous. Enter fractions: 0.30 = 30%."
       >
         <div className="grid gap-3 sm:grid-cols-4">
           {MARGIN_TIER_KEYS.map((tier) => (
@@ -317,12 +311,12 @@ function ConfigForm({ config }: { config: Config }) {
             name="hurdle_rate"
             label="Hurdle rate"
             value={config.hurdle_rate}
-            suffix="₹, below which the winner gets a REVIEW flag"
+            suffix="₹, below this the quote is flagged for review"
           />
         </div>
       </Section>
 
-      <Section title="Cost rates" hint="Each is either a per-kg component rate or a flat lump sum.">
+      <Section title="Cost rates" hint="Per kg or a flat amount.">
         <div className="grid gap-3 sm:grid-cols-3">
           <CostField name="processing" label="Processing (intake, all pathways)" value={config.processing} />
           <CostField name="qa_reuse" label="QA — reuse" value={config.qa_reuse} />
@@ -345,7 +339,7 @@ function ConfigForm({ config }: { config: Config }) {
             name="soh_restoration_delta"
             label="SoH restoration delta"
             value={config.soh_restoration_delta}
-            suffix="percentage points regained by a refurb"
+            suffix="points gained by refurb"
           />
           <NumberField
             name="logistics_rate_per_km"
@@ -358,7 +352,7 @@ function ConfigForm({ config }: { config: Config }) {
 
       <Section
         title="Percentages"
-        hint="All three are FRACTIONS. 0.08 is 8%; entering 8 charges 800% and drives every net value negative — the validator rejects it."
+        hint="Enter fractions: 0.08 = 8%."
       >
         <div className="grid gap-3 sm:grid-cols-3">
           <NumberField name="overhead_rate_pct" label="Overhead" value={config.overhead_rate_pct} step="0.01" suffix="of revenue" />
@@ -367,14 +361,14 @@ function ConfigForm({ config }: { config: Config }) {
         </div>
       </Section>
 
-      <Section title="Eligibility caps" hint="Above either of these, REUSE is removed from the eligible set.">
+      <Section title="Eligibility caps" hint="Above either, a battery cannot be reused.">
         <div className="grid gap-3 sm:grid-cols-2">
           <NumberField name="cycle_cap" label="Cycle cap" value={config.cycle_cap} step="1" suffix="cycles" />
           <NumberField name="age_cap" label="Age cap" value={config.age_cap} step="1" suffix="years" />
         </div>
       </Section>
 
-      <Section title="Recovery efficiency" hint="Fraction of each metal actually recovered by the process. 0..1.">
+      <Section title="Recovery efficiency" hint="Share of each metal recovered, 0 to 1.">
         <div className="grid gap-3 sm:grid-cols-6">
           {METALS.map((metal) => (
             <NumberField
@@ -390,7 +384,7 @@ function ConfigForm({ config }: { config: Config }) {
 
       <Section
         title="Chemistry composition"
-        hint="kg of metal per kg of pack. Leave a cell BLANK where the chemistry does not contain that metal — LFP genuinely has no Co, Ni or Mn, and a 0 there is not the same thing. Each row must sum to ≤ 1.0."
+        hint="kg of metal per kg of pack. Leave blank if the metal is not present. Each row must total 1.0 or less."
       >
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
@@ -436,7 +430,7 @@ function ConfigForm({ config }: { config: Config }) {
         </div>
       </Section>
 
-      <Section title="Revenue rates per chemistry" hint="₹/kWh for the two resale pathways, plus the application multiplier.">
+      <Section title="Revenue rates per chemistry" hint="₹/kWh for resale, plus the multiplier.">
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-surface-muted">
@@ -492,21 +486,16 @@ function ConfigForm({ config }: { config: Config }) {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-text-secondary">
-          The <code>unknown</code> chemistry is deliberately absent: it is the sentinel that forces
-          RECYCLE via Layer 3, and it must never acquire a price. It is carried through a publish
-          untouched.
-        </p>
       </Section>
 
       <Section
         title="Publish"
-        hint="Appends a new version and deactivates the current one. The audit log records which fields moved."
+        hint="Saves a new version and makes it live."
       >
         <div className="space-y-3">
           <label className="block">
             <span className="mb-1 block text-xs font-semibold text-text-secondary">
-              Note (recorded on the audit row)
+              Note
             </span>
             <input
               name="note"
@@ -522,8 +511,7 @@ function ConfigForm({ config }: { config: Config }) {
             Publish new config
           </button>
           <p className="text-xs text-text-secondary">
-            🔴 This takes effect immediately. The next quote the agent app computes uses these
-            numbers.
+            Takes effect on the next quote.
           </p>
         </div>
       </Section>

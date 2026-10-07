@@ -61,7 +61,7 @@ export default async function AgentsPage({
     <>
       <PageHead
         title="Agent roster"
-        description="Zone, vehicle, safety training, rating, live job load — and who is on duty. An off-duty agent is shown to dispatch as unavailable and cannot be assigned."
+        description="Zone, vehicle, training, rating, workload and duty. Off-duty agents cannot be assigned."
       />
       {error ? <Notice tone="error">{error}</Notice> : null}
       <AgentsTable rows={rows} />

@@ -173,14 +173,12 @@ export default async function HandoverPage({ searchParams }: PageProps) {
                   {formatCollectionDate(pickup.collectionScheduledAt)}
                 </p>
                 <p className="text-xs leading-relaxed text-text-secondary">
-                  Our agent has booked this date with you. Keep the batteries somewhere cool and
-                  away from other waste until then. If the date needs to change, call us.
+                  Keep the batteries cool and apart from other waste. Need a new date? Call us.
                 </p>
               </>
             ) : (
               <p className="text-xs leading-relaxed text-text-secondary">
-                Our agent is collecting these on this visit. You&rsquo;ll get a receipt as soon
-                as they do.
+                Our agent collects these on this visit.
               </p>
             )}
           </Card>
@@ -211,16 +209,16 @@ export default async function HandoverPage({ searchParams }: PageProps) {
             their own load collected. */}
         <Banner variant="success">
           {awaitingCollection
-            ? "Your offer is accepted. Your collection agent will weigh and load the batteries on site, and confirm the handover from there."
-            : "Your batteries have been collected. Our collection partner will contact you shortly to arrange the final handover details."}
+            ? "Offer accepted. Our agent will weigh and load the batteries."
+            : "Your batteries have been collected."}
         </Banner>
 
         <Card variant="tinted">
           <SectionLabel className="mb-2">Next Steps</SectionLabel>
           <p className="text-sm text-text-secondary leading-relaxed">
             {awaitingCollection
-              ? "Keep the load accessible and the packaging sealed until the agent arrives. Once collected and processed, your EPR certificate will be available under Certificates."
-              : "Once processed, your EPR certificate will be available under Certificates. You'll receive a notification at each stage."}
+              ? "Keep the load ready for the agent. Your EPR certificate will appear under Certificates."
+              : "Your EPR certificate will appear under Certificates once processed."}
           </p>
         </Card>
 

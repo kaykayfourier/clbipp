@@ -54,7 +54,7 @@ export default async function FacilitiesPage() {
 
   return (
     <>
-      <PageHead title="Facilities & recyclers" description="Hubs we operate, and the CPCB-registered partners we ship to — recyclers for material recovery, refurbishers for second life." />
+      <PageHead title="Facilities & recyclers" description="Our hubs, and the recyclers and refurbishers we ship to." />
       <FacilitiesTables facilities={facilityRows} recyclers={recyclerRows} />
     </>
   )

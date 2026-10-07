@@ -74,9 +74,6 @@ function CustodyLog({
         <p className="text-xs font-bold uppercase tracking-widest text-text-secondary">
           Chain of custody
         </p>
-        <p className="mt-1 text-xs text-text-secondary">
-          Every handling step, with where and when it was recorded.
-        </p>
       </div>
 
       <ol className="flex flex-col">

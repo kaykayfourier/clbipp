@@ -78,7 +78,7 @@ export default async function OverviewPage() {
       */}
       <div className="flex flex-wrap gap-3">
         <KpiTile label="Pickups today" value={String(pickupsToday)} delta="requested since midnight IST" deltaTone="neutral" href="/dispatch" />
-        <KpiTile label="Active pickups" value={String(activePickups)} delta="requested → recovered" deltaTone="neutral" href="/pickups" />
+        <KpiTile label="Active pickups" value={String(activePickups)} delta="in progress" deltaTone="neutral" href="/pickups" />
         <KpiTile label="Avg margin" value={avgMargin !== null ? `${avgMargin.toFixed(1)}%` : '—'} delta={`last ${MARGIN_WINDOW_DAYS}d, engine-priced`} deltaTone="neutral" href="/quotes" />
         <KpiTile label="Net value" value={formatPaise(netValuePaise)} delta={`last ${MARGIN_WINDOW_DAYS}d`} deltaTone="neutral" href="/quotes" />
         <KpiTile
@@ -102,7 +102,7 @@ export default async function OverviewPage() {
           />
           {pathwaySplit.other > 0 ? (
             <p className="text-[10.5px] text-text-secondary">
-              + {pathwaySplit.other} flat-rate / dispose item{pathwaySplit.other === 1 ? '' : 's'} outside the engine pathway mix.
+              + {pathwaySplit.other} flat-rate / dispose item{pathwaySplit.other === 1 ? '' : 's'} not counted above.
             </p>
           ) : null}
         </div>

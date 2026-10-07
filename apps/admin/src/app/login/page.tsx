@@ -82,8 +82,7 @@ export default async function LoginPage({
         </div>
 
         <p className="mt-5 text-center text-xs text-text-secondary">
-          Console accounts are issued internally. There is no self-service
-          sign-up.
+          Accounts are issued by the office.
         </p>
       </div>
     </main>

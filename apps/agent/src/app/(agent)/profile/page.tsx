@@ -174,15 +174,13 @@ export default async function Page() {
             </span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-            Your collection fees (D3) — what you earn for the job, not what the
-            vendor is paid for their batteries.
+            Your fees — what you earn for the job, not what the vendor is paid.
           </p>
 
           {balanceMismatch && (
             <Banner variant="error" className="mt-3">
-              This balance doesn&rsquo;t match the stored total ({formatPaise(cachedBalance)}).
-              Tell whoever is on the build — a fee was written to one place and
-              not the other.
+              Balance doesn&rsquo;t match the stored total ({formatPaise(cachedBalance)}).
+              Tell the office.
             </Banner>
           )}
 
@@ -210,7 +208,7 @@ export default async function Page() {
           )}
           {ledger.length === 0 && (
             <p className="mt-3 text-xs text-text-secondary">
-              Nothing yet. Your fee lands here when you confirm a collection.
+              Nothing yet. Fees show here after each collection.
             </p>
           )}
         </Card>
@@ -230,12 +228,11 @@ export default async function Page() {
                 month: 'short',
                 year: 'numeric',
               })}
-              . Your per-job safety checklist is still required on every pickup.
+              . Checklist still needed on every pickup.
             </Banner>
           ) : (
             <Banner variant="error">
-              No training recorded. Speak to your supervisor — this is required
-              before handling lithium-ion.
+              No training recorded. See your supervisor before handling lithium-ion.
             </Banner>
           )}
         </Card>

@@ -138,7 +138,7 @@ function MarginOverrideDrawer({ row, onClose }: { row: SupplierRow | null; onClo
       open={row !== null}
       onClose={onClose}
       title={row ? `Margin tier · ${row.name}` : ''}
-      description="Overrides the active engine config's default tier for this supplier only. Takes effect on the next quote."
+      description="Changes this supplier's prices from the next quote."
       footer={
         <>
           <button type="button" onClick={onClose} className="rounded-full border border-console-line px-4 py-2 text-[12.5px] font-semibold text-text-primary" disabled={isPending}>

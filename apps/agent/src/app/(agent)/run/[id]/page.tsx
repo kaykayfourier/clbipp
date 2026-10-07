@@ -63,6 +63,7 @@ export default async function Page({
           runSequence: true,
           custodyBatchId: true,
           collectionScheduledAt: true,
+          offer: { select: { acceptedAt: true } },
           scheduledSlot: true,
           location: true,
           vendor: { select: { fullName: true } },
@@ -108,7 +109,7 @@ export default async function Page({
               ) : (
                 <p className="text-xs text-text-secondary">
                   {open
-                    ? 'No box yet. Scan the QR on the box you are loading — that starts the run, and every battery you tag goes on record as in that box.'
+                    ? 'No box yet. Scan a box to start the run.'
                     : 'No boxes were loaded on this run.'}
                 </p>
               )}
@@ -139,7 +140,7 @@ export default async function Page({
                     status={p.status}
                   />
                   <span className="px-1 text-[11px] text-text-secondary">
-                    {`${jobNextStep(p.status, p.custodyBatchId, p.collectionScheduledAt)}${
+                    {`${jobNextStep(p.status, p.custodyBatchId, p.collectionScheduledAt, p.offer?.acceptedAt ?? null)}${
                       tagged > 0 || p.items.some((i) => i.untaggedReason) ? ` · tags ${tagged}/${p._count.items}` : ''
                     }`}
                   </span>
@@ -148,8 +149,7 @@ export default async function Page({
             })}
           </div>
           <p className="px-1 text-[11px] leading-relaxed text-text-secondary">
-            The order is a suggestion — nearest first from the hub, straight-line — not an optimised route. Drive
-            it however the roads say.
+            Suggested order only. Drive the best road.
           </p>
         </div>
 
@@ -160,7 +160,7 @@ export default async function Page({
               Finish run with nothing to hand in
             </Button>
             <p className="text-center text-[11px] text-text-secondary">
-              Batteries in the van go to the hub first. A drop-off with no stop left to visit closes the run itself.
+              Only if the van is empty. Otherwise drop off at the hub.
             </p>
           </form>
         ) : null}
