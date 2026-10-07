@@ -97,13 +97,12 @@ export default async function RunDetail({
 
       {created ? (
         <Notice tone="success">
-          Run built. {run.agent.fullName} sees it on their day view; it starts when they scan a box.
+          Run built. It starts when {run.agent.fullName} scans a box.
         </Notice>
       ) : null}
       {cancelled ? (
         <Notice tone="warning">
-          Run cancelled. Its stops left the run but kept their agent and slot — reassign them from the dispatch board
-          if needed.
+          Run cancelled. Stops keep their agent and slot.
         </Notice>
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -116,7 +115,7 @@ export default async function RunDetail({
       </div>
 
       <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Panel title="Stops" aside="Suggested order — nearest first from the hub, not an optimised route">
+        <Panel title="Stops" aside="Suggested order — nearest first">
           <ol className="flex flex-col divide-y divide-console-line">
             {run.pickups.map((p) => {
               const pTagged = p.items.filter((i) => i.tag).length
@@ -165,7 +164,7 @@ export default async function RunDetail({
           <Panel title="Boxes">
             {run.containers.length === 0 ? (
               <p className="text-xs text-text-secondary">
-                None loaded yet. The run starts when {run.agent.fullName} scans a box in the field agent app.
+                None loaded yet.
               </p>
             ) : (
               <ul className="flex flex-col gap-2">

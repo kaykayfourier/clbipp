@@ -62,7 +62,7 @@ export default async function TagsPage({
     <>
       <PageHead
         title="Battery tags"
-        description="Pre-issued QR tags. Print a sheet before a run; the agent binds one to each battery line at collection, and the hub scans each one back in."
+        description="QR tags for battery lines. Print a sheet before a run."
       />
 
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -75,8 +75,7 @@ export default async function TagsPage({
           >
             Download the sheet to print
           </a>{' '}
-          — A4, {TAG_LABELS_PER_SHEET} labels a page, standard 63.5 × 33.9 mm sticker stock (or plain paper and
-          scissors).
+          — A4, {TAG_LABELS_PER_SHEET} labels a page.
         </Notice>
       ) : null}
 
@@ -111,7 +110,7 @@ export default async function TagsPage({
 
           <Panel title="Issued sheets" aside="Newest first">
             {batches.length === 0 ? (
-              <p className="text-xs text-text-secondary">No tags issued yet. Issue a sheet to start.</p>
+              <p className="text-xs text-text-secondary">No tags yet.</p>
             ) : (
               <table className="w-full border-collapse text-sm">
                 <thead>
@@ -181,11 +180,6 @@ export default async function TagsPage({
             <button type="submit" className={primaryButtonClass}>
               Issue tags
             </button>
-            <p className="text-[11px] leading-relaxed text-text-secondary">
-              Every code carries a check character, so a tag typed by hand with one character wrong is refused
-              rather than bound to the wrong battery. One tag per battery line — a lot of small cells is bagged or
-              crated and tagged once.
-            </p>
           </form>
         </Panel>
       </div>
@@ -199,13 +193,17 @@ async function TagLookup({ raw }: { raw: string }) {
   if (!parsed.ok) return <p className="mt-4 text-xs text-error-text">{parsed.error}</p>
 
   if (parsed.kind === 'container') {
+    const box = await prisma.transportContainer.findUnique({ where: { code: parsed.code }, select: { id: true } })
     return (
       <p className="mt-4 text-xs text-text-secondary">
-        <span className="font-mono font-bold text-text-primary">{parsed.code}</span> is a transport box —{' '}
-        <Link href="/containers" className="underline underline-offset-2">
-          see Boxes
-        </Link>
-        .
+        <span className="font-mono font-bold text-text-primary">{parsed.code}</span> is a transport box.{' '}
+        {box ? (
+          <Link href={`/containers/${box.id}`} className="underline underline-offset-2">
+            See what is in it
+          </Link>
+        ) : (
+          'No box with this code is registered.'
+        )}
       </p>
     )
   }
@@ -244,7 +242,7 @@ async function TagLookup({ raw }: { raw: string }) {
   if (!tag) {
     return (
       <p className="mt-4 text-xs text-error-text">
-        {parsed.code} is a well-formed code, but it was never issued by this console. Check the sticker.
+        {parsed.code} was never issued. Check the sticker.
       </p>
     )
   }

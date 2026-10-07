@@ -31,10 +31,12 @@ function DetailRow({ label, value, last = false, strong = false, className }: De
         className,
       )}
     >
-      <span className="text-sm text-text-secondary">{label}</span>
+      <span className="shrink-0 text-sm text-text-secondary">{label}</span>
+      {/* min-w-0 + overflow-wrap so a long id, code or note wraps inside the
+          card instead of pushing out of it. */}
       <span
         className={cn(
-          "text-right text-sm text-text-primary",
+          "min-w-0 flex-1 text-right text-sm text-text-primary [overflow-wrap:anywhere]",
           strong ? "font-semibold" : "font-medium",
         )}
       >

@@ -6,8 +6,9 @@ import { categoryLabel } from '@clbipp/core/intake'
 import { formatPaise } from '@clbipp/core/format'
 import { STAGE_LABELS, isLifecycleStage } from '@clbipp/ui'
 
-import { assignPickupAction } from '../actions'
+import { assignCollectorAction, assignPickupAction } from '../actions'
 import { rankedAgentsFor } from '@/lib/agent-selection'
+import { inspectorOf } from '@/lib/inspector'
 import { toCoord } from './coords'
 
 import { AgentSelector } from './AgentSelector'
@@ -38,10 +39,10 @@ export default async function DispatchDetail({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string; assigned?: string }>
+  searchParams: Promise<{ error?: string; assigned?: string; collector?: string }>
 }) {
   const { id } = await params
-  const { error, assigned } = await searchParams
+  const { error, assigned, collector } = await searchParams
 
   const pickup = await prisma.pickup.findUnique({
     where: { id },
@@ -58,6 +59,8 @@ export default async function DispatchDetail({
       agentId: true,
       agentFeePaise: true,
       indicativeQuotePaise: true,
+      collectionScheduledAt: true,
+      offer: { select: { acceptedAt: true } },
       conditionFlags: true,
       vendor: {
         select: {
@@ -94,15 +97,19 @@ export default async function DispatchDetail({
   // workload and distance from the agent's last known operational position, all
   // gathered in one place (lib/agent-selection.ts) and ordered by the pure
   // ranker in @clbipp/core. The dispatcher still chooses.
-  const rankedAgents = isOpen
-    ? await rankedAgentsFor({
-        addressLat: toCoord(pickup.address?.lat),
-        addressLng: toCoord(pickup.address?.lng),
-        // Assigning for the vendor's preferred day when they named one; today
-        // otherwise. This is the day "jobs that day" is counted against.
-        targetDay: pickup.preferredDate ?? new Date(),
-      })
-    : []
+  // Accepted and not yet collected: the collector can be a different agent.
+  const collectorOpen = pickup.status === 'offered' && pickup.offer?.acceptedAt != null
+  const rankedAgents =
+    isOpen || collectorOpen
+      ? await rankedAgentsFor({
+          addressLat: toCoord(pickup.address?.lat),
+          addressLng: toCoord(pickup.address?.lng),
+          // The day "jobs that day" is counted against: the vendor's preferred
+          // day for a request, the booked collection day for a collection.
+          targetDay: (isOpen ? pickup.preferredDate : pickup.collectionScheduledAt) ?? new Date(),
+        })
+      : []
+  const inspector = isOpen ? null : await inspectorOf(pickup.id)
 
   const now = new Date()
   const units = pickup.items.reduce((sum, i) => sum + i.quantity, 0)
@@ -130,8 +137,14 @@ export default async function DispatchDetail({
 
       {assigned && !isOpen ? (
         <Banner tone="success">
-          Scheduled. {pickup.agent?.fullName ?? 'The agent'} can see this job on their day view now
-          {pickup.scheduledSlot ? `, for ${formatIstDateTime(pickup.scheduledSlot)}` : ''}.
+          Scheduled with {pickup.agent?.fullName ?? 'the agent'}
+          {pickup.scheduledSlot ? `, ${formatIstDateTime(pickup.scheduledSlot)}` : ''}.
+        </Banner>
+      ) : null}
+
+      {collector && collectorOpen ? (
+        <Banner tone="success">
+          {pickup.agent?.fullName ?? 'The agent'} will collect this load.
         </Banner>
       ) : null}
 
@@ -147,13 +160,12 @@ export default async function DispatchDetail({
         // deliberate: the vendor did nothing wrong, and the old agent is not on
         // this job any more — the DATA just still says they are.
         <Banner tone="warning">
-          <strong className="font-bold">Previously assigned to {staleAgent.fullName}.</strong> This
-          request was cancelled and rebooked by the vendor, which reactivates the pickup but leaves
-          the old agent
+          <strong className="font-bold">Previously assigned to {staleAgent.fullName}.</strong> The
+          vendor rebooked
           {pickup.agentFeePaise !== null
-            ? ` and their fee of ${formatPaise(pickup.agentFeePaise)}`
-            : ''}{' '}
-          attached to it. Assigning below clears both before writing the new assignment.
+            ? ` (old fee ${formatPaise(pickup.agentFeePaise)})`
+            : ''}
+          . Assigning below replaces the old agent.
         </Banner>
       ) : null}
 
@@ -284,6 +296,9 @@ export default async function DispatchDetail({
             <Panel title="Assigned">
               <dl className="grid grid-cols-1 gap-3">
                 <Row label="Agent" value={pickup.agent?.fullName ?? 'Unassigned'} />
+                {inspector && inspector.id !== pickup.agentId ? (
+                  <Row label="Inspected by" value={inspector.fullName} />
+                ) : null}
                 <Row label="Zone" value={pickup.agent?.agentZone ?? '—'} />
                 <Row
                   label="Slot"
@@ -300,10 +315,6 @@ export default async function DispatchDetail({
                   mono
                 />
               </dl>
-              <p className="mt-4 text-xs leading-relaxed text-text-secondary">
-                Dispatch only assigns a request. Everything after{' '}
-                <span className="font-mono text-[11px]">scheduled</span> lives on the pickup.
-              </p>
               <Link
                 href={`/pickups/${encodeURIComponent(pickup.id)}`}
                 className="mt-3 inline-flex items-center rounded-lg border border-console-line px-3 py-1.5 text-xs font-bold text-text-primary hover:bg-background"
@@ -312,6 +323,20 @@ export default async function DispatchDetail({
               </Link>
             </Panel>
           )}
+          {collectorOpen ? (
+            <Panel title="Who collects">
+              <form action={assignCollectorAction} className="flex flex-col gap-4">
+                <input type="hidden" name="pickupId" value={pickup.id} />
+                <AgentSelector agents={rankedAgents} staleAgentId={pickup.agentId} markLabel="Collecting now" />
+                <button
+                  type="submit"
+                  className="w-full rounded-lg bg-primary-black px-4 py-3 text-sm font-bold text-primary-green transition-opacity hover:opacity-90"
+                >
+                  Assign collector
+                </button>
+              </form>
+            </Panel>
+          ) : null}
         </div>
       </div>
     </>
@@ -338,7 +363,7 @@ function AssignPanel({
     <Panel title="Assign an agent">
       {agents.length === 0 ? (
         <p className="text-xs leading-relaxed text-text-secondary">
-          No agent accounts exist yet. Agents do not self-sign-up (D6) — they come from the seed.
+          No agents yet.
         </p>
       ) : (
         <form action={assignPickupAction} className="flex flex-col gap-4">
@@ -359,7 +384,7 @@ function AssignPanel({
               className="rounded-lg border border-console-line bg-surface px-3 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-green"
             />
             <p className="text-[11px] leading-relaxed text-text-secondary">
-              Times are IST. Defaults to 10:00 on the vendor&rsquo;s preferred date.
+              Defaults to 10:00 on the preferred date.
             </p>
           </div>
 
@@ -378,7 +403,7 @@ function AssignPanel({
               className="rounded-lg border border-console-line bg-surface px-3 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-green"
             />
             <p className="text-[11px] leading-relaxed text-text-secondary">
-              What the vendor sees on their tracking screen.
+              Shown to the vendor.
             </p>
           </div>
 
@@ -389,10 +414,6 @@ function AssignPanel({
             Assign &amp; schedule
           </button>
 
-          <p className="text-[11px] leading-relaxed text-text-secondary">
-            Writes <span className="font-mono">requested → scheduled</span>, a status event
-            attributed to you, and an audit row. Submitting twice does not reassign.
-          </p>
         </form>
       )}
     </Panel>

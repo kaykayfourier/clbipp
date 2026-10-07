@@ -36,7 +36,7 @@ export function PathwayOverride({
   if (locked) {
     return (
       <p className="text-[11px] text-text-disabled">
-        Pathway is part of the compliance record for this pickup and can no longer be changed.
+        Pathway is locked.
       </p>
     )
   }
@@ -82,15 +82,15 @@ export function PathwayOverride({
       <p className="text-[11px] leading-relaxed text-text-secondary">
         Goes to <b>{destination ? DESTINATION_LABELS[destination] : '—'}</b>.{' '}
         {destination === 'second_life'
-          ? 'It will be held at the facility and excluded from recycler manifests.'
-          : 'It stays available to put on a recycler manifest.'}
+          ? 'Held at the facility, not sent to a recycler.'
+          : 'Can go on a recycler manifest.'}
       </p>
 
       <textarea
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         rows={2}
-        placeholder={`Why is the engine wrong about this battery? (${MIN_PATHWAY_REASON_CHARS} characters minimum)`}
+        placeholder={`Reason (at least ${MIN_PATHWAY_REASON_CHARS} characters)`}
         className="w-full rounded-lg border border-console-line bg-surface px-2 py-1.5 text-xs text-text-primary"
       />
 

@@ -368,7 +368,7 @@ export function DispatchBoard({ rows }: { rows: readonly DispatchRow[] }) {
         initialSort={{ key: 'waiting', direction: 'asc' }}
         rowNounPlural="pickups"
         emptyHeading="Nothing matches those filters"
-        emptyDescription="Clear a filter, or switch to All live to see the whole pipeline."
+        emptyDescription="Clear a filter to see more."
       />
     </div>
   )

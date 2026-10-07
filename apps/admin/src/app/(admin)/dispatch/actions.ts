@@ -282,3 +282,103 @@ export async function assignPickupAction(formData: FormData) {
   // The confirmation IS the screen — there is no toast in this console yet.
   redirect(`${href}?assigned=1`)
 }
+
+// ─── Assign a different agent to COLLECT (feedback round 2) ──────────────────
+// The company wants the option for one agent to inspect and another to collect.
+// For an ACCEPTED, not-yet-collected pickup this moves Pickup.agentId to the
+// chosen collector. Nothing else changes: status stays `offered` (no new stage,
+// FD0), the inspector stays on the record (their item readings and the
+// `arrived` / `offered` events), and the fee is earned at collection by
+// whoever collects. Unused unless an admin chooses it.
+const COLLECTOR_ACTION: AdminAuditAction = 'pickup.assign_collector'
+
+export async function assignCollector(input: { pickupId: string; agentId: string }): Promise<AssignResult> {
+  const gate = await requireAdmin()
+  if (!gate.ok) return { error: gate.error }
+  const admin = gate.admin
+
+  const pickupId = input.pickupId.trim()
+  const agentId = input.agentId.trim()
+  if (!pickupId) return { error: 'No pickup selected.' }
+  if (!agentId) return { error: 'Choose who collects.' }
+
+  const before = await prisma.pickup.findUnique({
+    where: { id: pickupId },
+    select: {
+      status: true,
+      agentId: true,
+      custodyBatchId: true,
+      collectionScheduledAt: true,
+      offer: { select: { acceptedAt: true } },
+      collectionRun: { select: { runNo: true, status: true } },
+    },
+  })
+  if (!before) return { error: 'That pickup does not exist.' }
+  if (before.status !== 'offered' || !before.offer?.acceptedAt) {
+    return { error: 'A collector can be assigned only after the vendor accepts the offer, and before collection.' }
+  }
+  if (before.agentId === agentId) return { error: 'That agent is already collecting this pickup.' }
+  const run = before.collectionRun
+  if (run && (run.status === 'planned' || run.status === 'in_progress')) {
+    return { error: `This collection is a stop on ${run.runNo}. Change it from the run instead.` }
+  }
+
+  // Re-verified at the write, never trusted from the form (same checks as dispatch).
+  const agent = await prisma.profile.findUnique({ where: { id: agentId }, select: { id: true, role: true, fullName: true } })
+  if (!agent || agent.role !== 'agent') return { error: 'Choose an agent.' }
+  const confirmState = await agentStateAtConfirm(agentId, before.collectionScheduledAt ?? new Date())
+  if (confirmState.offDuty) return { error: `${agent.fullName} is marked off duty.` }
+  if (!confirmState.safetyTrained) {
+    return { error: `${agent.fullName} has no safety training on file and cannot handle the batteries.` }
+  }
+
+  const moved = await prisma.$transaction(
+    async (tx) => {
+      // Guarded on the agent we read, so two admins cannot both win.
+      const updated = await tx.pickup.updateMany({
+        where: { id: pickupId, status: 'offered', agentId: before.agentId },
+        data: { agentId: agent.id, agentFeePaise: null, collectionRunId: null, runSequence: null },
+      })
+      if (updated.count === 0) return false
+
+      await tx.statusEvent.create({
+        data: {
+          pickupId,
+          // The CURRENT status: a fact about who collects, not a stage.
+          status: 'offered',
+          actorId: admin.id,
+          actorRole: 'admin',
+          notes: `Collection assigned to ${agent.fullName}.`,
+        },
+      })
+      await tx.adminAudit.create({
+        data: {
+          actorId: admin.id,
+          action: COLLECTOR_ACTION,
+          subjectType: AUDIT_SUBJECT,
+          subjectId: pickupId,
+          before: { status: 'offered', agentId: before.agentId },
+          after: { status: 'offered', agentId: agent.id, agentFeePaise: null },
+        },
+      })
+      return true
+    },
+    { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
+  )
+  if (!moved) return { error: 'This pickup changed a moment ago. Reload and try again.' }
+  return { error: null }
+}
+
+export async function assignCollectorAction(formData: FormData) {
+  const pickupId = String(formData.get('pickupId') ?? '')
+  if (!pickupId) redirect('/dispatch')
+
+  const { error } = await assignCollector({ pickupId, agentId: String(formData.get('agentId') ?? '') })
+
+  const href = `/dispatch/${encodeURIComponent(pickupId)}`
+  if (error) redirect(`${href}?error=${encodeURIComponent(error)}`)
+  revalidatePath(href)
+  revalidatePath(`/pickups/${encodeURIComponent(pickupId)}`)
+  revalidatePath('/dispatch')
+  redirect(`${href}?collector=1`)
+}

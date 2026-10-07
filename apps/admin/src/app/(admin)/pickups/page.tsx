@@ -81,7 +81,7 @@ export default async function PickupsPage({
 
   return (
     <>
-      <PageHead title="Pickups" description="Every pickup, every stage. The spine of this console (AD1)." />
+      <PageHead title="Pickups" description="Every pickup, every stage." />
       <PickupsTable rows={rows} initialQuery={initialQuery} />
     </>
   )

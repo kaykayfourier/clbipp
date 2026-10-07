@@ -40,6 +40,7 @@ import { depotLocation, loadStopRows } from '@/lib/runs'
 const CREATE_ACTION: AdminAuditAction = 'run.create'
 const CANCEL_ACTION: AdminAuditAction = 'run.cancel'
 const ASSIGN_ACTION: AdminAuditAction = 'pickup.assign'
+const COLLECTOR_ACTION: AdminAuditAction = 'pickup.assign_collector'
 const RUN_SUBJECT: AdminAuditSubject = 'collection_run'
 const PICKUP_SUBJECT: AdminAuditSubject = 'pickup'
 
@@ -108,9 +109,10 @@ export async function createCollectionRun(input: {
   if (rows.length !== ids.length) {
     return { error: 'One of those pickups is no longer in the live pipeline. Reload and rebuild.', runId: null }
   }
-  const refused = rows
-    .map((r) => ({ r, e: runStopEligibility(r.facts, { agentId: agent.id, dateKey: input.dateKey, todayKey }) }))
-    .filter((x) => !x.e.ok)
+  const eligibility = new Map(
+    rows.map((r) => [r.id, runStopEligibility(r.facts, { agentId: agent.id, dateKey: input.dateKey, todayKey })]),
+  )
+  const refused = rows.map((r) => ({ r, e: eligibility.get(r.id)! })).filter((x) => !x.e.ok)
   if (refused.length > 0) {
     const first = refused[0]
     return {
@@ -137,6 +139,9 @@ export async function createCollectionRun(input: {
           })
 
           const assigned: Array<{ pickupId: string; slot: Date; before: { agentId: string | null } }> = []
+          // Accepted collections another agent inspected: this run's agent
+          // becomes the collector. Status stays `offered`.
+          const reassigned: Array<{ pickupId: string; before: { agentId: string | null } }> = []
 
           for (let i = 0; i < ordered.length; i += 1) {
             const stop = ordered[i]
@@ -159,6 +164,15 @@ export async function createCollectionRun(input: {
               })
               if (updated.count === 0) throw new Error(`RACE:${stop.id}`)
               assigned.push({ pickupId: stop.id, slot: slots[i], before: { agentId: stop.facts.agentId } })
+            } else if (changesCollector(eligibility.get(stop.id))) {
+              // Guarded on the agent the rule saw, so a concurrent change wins
+              // cleanly. The fee is earned at collection, by whoever collects.
+              const updated = await tx.pickup.updateMany({
+                where: { id: stop.id, status: 'offered', agentId: stop.facts.agentId },
+                data: { agentId: agent.id, agentFeePaise: null, collectionRunId: runId, runSequence: i + 1 },
+              })
+              if (updated.count === 0) throw new Error(`RACE:${stop.id}`)
+              reassigned.push({ pickupId: stop.id, before: { agentId: stop.facts.agentId } })
             } else {
               // Already this agent's, on this day (the eligibility rule said
               // so). Its slot is the one the vendor was told — left alone.
@@ -168,6 +182,19 @@ export async function createCollectionRun(input: {
               })
               if (updated.count === 0) throw new Error(`RACE:${stop.id}`)
             }
+          }
+
+          if (reassigned.length > 0) {
+            await tx.statusEvent.createMany({
+              data: reassigned.map((a) => ({
+                pickupId: a.pickupId,
+                // The CURRENT status: a fact about who collects, not a stage.
+                status: 'offered' as const,
+                actorId: admin.id,
+                actorRole: 'admin',
+                notes: `Collection assigned to ${agent.fullName} on run ${runNo}.`,
+              })),
+            })
           }
 
           if (assigned.length > 0) {
@@ -196,6 +223,7 @@ export async function createCollectionRun(input: {
                   vehicle,
                   stops: ordered.map((s) => s.id),
                   assigned: assigned.map((a) => a.pickupId),
+                  collectorChanged: reassigned.map((a) => a.pickupId),
                 },
               },
               // 🔴 One `pickup.assign` per newly assigned stop, so the audit
@@ -215,6 +243,14 @@ export async function createCollectionRun(input: {
                   agentFeePaise: null,
                   collectionRunId: runId,
                 },
+              })),
+              ...reassigned.map((a) => ({
+                actorId: admin.id,
+                action: COLLECTOR_ACTION,
+                subjectType: PICKUP_SUBJECT,
+                subjectId: a.pickupId,
+                before: { status: 'offered', agentId: a.before.agentId },
+                after: { status: 'offered', agentId: agent.id, agentFeePaise: null, collectionRunId: runId },
               })),
             ],
           })
@@ -321,4 +357,9 @@ export async function cancelCollectionRunAction(formData: FormData) {
   revalidatePath('/runs')
   revalidatePath('/dispatch')
   redirect(`/runs/${runId}?cancelled=1`)
+}
+
+/** The eligibility rule said this stop's collector becomes the run's agent. */
+function changesCollector(e: ReturnType<typeof runStopEligibility> | undefined): boolean {
+  return e !== undefined && e.ok && e.reassigns === true
 }

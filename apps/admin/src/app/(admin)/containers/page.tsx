@@ -68,7 +68,7 @@ export default async function ContainersPage({
     <>
       <PageHead
         title="Transport boxes"
-        description="Reusable QR-labelled boxes. Scanned onto a collection run by the agent, emptied at the hub drop-off."
+        description="Reusable QR-labelled boxes. Click a box to see what is in it."
         actions={
           active.length > 0 ? (
             <a href="/api/labels/containers" className={secondaryButtonClass}>
@@ -81,8 +81,7 @@ export default async function ContainersPage({
       {error ? <Notice tone="error">{error}</Notice> : null}
       {registered ? (
         <Notice tone="success">
-          Registered <span className="font-mono text-[12px] font-bold">{registered}</span>. Print its label from the
-          table and stick it on the box — the code is permanent.
+          Registered <span className="font-mono text-[12px] font-bold">{registered}</span>. Print its label below.
         </Notice>
       ) : null}
 
@@ -95,7 +94,7 @@ export default async function ContainersPage({
       <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1fr)_340px]">
         <Panel title="Boxes">
           {boxes.length === 0 ? (
-            <p className="text-xs text-text-secondary">No boxes registered yet. A collection run needs at least one.</p>
+            <p className="text-xs text-text-secondary">No boxes yet.</p>
           ) : (
             <table className="w-full border-collapse text-sm">
               <thead>
@@ -113,7 +112,11 @@ export default async function ContainersPage({
                   const onRun = isLoaded(b)
                   return (
                     <tr key={b.id} className="border-t border-console-line align-top">
-                      <td className="py-2.5 font-mono text-[11px] font-bold text-text-primary">{b.code}</td>
+                      <td className="py-2.5 font-mono text-[11px] font-bold text-text-primary">
+                        <Link href={`/containers/${b.id}`} className="underline underline-offset-2">
+                          {b.code}
+                        </Link>
+                      </td>
                       <td className="py-2.5">
                         <div className="text-xs text-text-primary">{b.label}</div>
                         <div className="text-[11px] text-text-secondary">
@@ -176,12 +179,8 @@ export default async function ContainersPage({
               <input id="capacityKg" name="capacityKg" type="number" min={1} step={1} className={inputClass} />
             </div>
             <button type="submit" className={primaryButtonClass}>
-              Register &amp; mint code
+              Register box
             </button>
-            <p className="text-[11px] leading-relaxed text-text-secondary">
-              The code is minted here and never changes — print the label and fix it to the box. Retire a box that is
-              lost or broken; its history stays.
-            </p>
           </form>
         </Panel>
       </div>

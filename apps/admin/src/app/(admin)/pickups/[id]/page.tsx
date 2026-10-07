@@ -31,6 +31,7 @@ import { PageHead, StatusPill } from '@/components/console'
 import { DESTINATION_LABELS, destinationOf } from '@clbipp/core/pathway'
 
 import { PathwayOverride } from './PathwayOverride'
+import { inspectorOf } from '@/lib/inspector'
 
 // B05 · Pickup detail — Batch 5, owner C — Ali.
 //
@@ -86,7 +87,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
         },
       },
       agent: {
-        select: { fullName: true, agentZone: true, agentVehicle: true, agentRating: true },
+        select: { id: true, fullName: true, agentZone: true, agentVehicle: true, agentRating: true },
       },
       address: { select: { label: true, line1: true, line2: true, city: true, state: true, pincode: true } },
       items: {
@@ -122,7 +123,17 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           },
         },
       },
-      offer: { select: { pathway: true, estimatedPrice: true, rationale: true, acceptedAt: true, createdAt: true } },
+      offer: {
+        select: {
+          pathway: true,
+          estimatedPrice: true,
+          recommendedPricePaise: true,
+          priceNote: true,
+          rationale: true,
+          acceptedAt: true,
+          createdAt: true,
+        },
+      },
       statusEvents: {
         orderBy: { occurredAt: 'asc' },
         select: { id: true, status: true, actorRole: true, notes: true, lat: true, lng: true, photoUrls: true, occurredAt: true },
@@ -138,6 +149,10 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
   })
 
   if (!pickup) notFound()
+
+  // Feedback round 2: the collector can differ from the inspector.
+  const inspector = await inspectorOf(pickup.id)
+  const canChangeCollector = pickup.status === 'offered' && pickup.offer?.acceptedAt != null
 
   // Sign every photo path this screen might show in one batch, rather than one
   // round trip per item/event — a pickup with a dozen items and a dozen status
@@ -215,7 +230,20 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
                 <CardContent className="flex flex-col gap-3">
                   <div className="flex flex-col">
                     <DetailRow label="Pathway" value={pickup.offer.pathway} />
-                    <DetailRow label="Estimated price" value={formatPaise(pickup.offer.estimatedPrice)} strong />
+                    <DetailRow label="Offered" value={formatPaise(pickup.offer.estimatedPrice)} strong />
+                    {/* Internal: the engine is recommendation-only for the pilot.
+                        The vendor never sees this figure or the note. */}
+                    {pickup.offer.recommendedPricePaise !== null ? (
+                      <DetailRow
+                        label="Engine recommended"
+                        value={
+                          pickup.offer.recommendedPricePaise === pickup.offer.estimatedPrice
+                            ? `${formatPaise(pickup.offer.recommendedPricePaise)} (offered as is)`
+                            : formatPaise(pickup.offer.recommendedPricePaise)
+                        }
+                      />
+                    ) : null}
+                    {pickup.offer.priceNote ? <DetailRow label="Agent's note" value={pickup.offer.priceNote} /> : null}
                     <DetailRow
                       label="Vendor response"
                       value={pickup.offer.acceptedAt ? `Accepted ${formatDateTime(pickup.offer.acceptedAt)}` : 'Awaiting vendor'}
@@ -223,7 +251,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
                     />
                   </div>
                   <div className="border-t border-console-line pt-2.5">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-text-disabled">Rationale</p>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-text-disabled">Shown to the vendor</p>
                     <p className="mt-1 text-xs leading-relaxed text-text-secondary">{pickup.offer.rationale}</p>
                   </div>
                 </CardContent>
@@ -269,7 +297,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
                 <DetailRow label="GST" value={pickup.vendor.gstNumber ?? '—'} />
                 <DetailRow label="EPR reg." value={pickup.vendor.eprRegId ?? '—'} />
                 <DetailRow label="KYC" value={pickup.vendor.kycStatus} />
-                <DetailRow label="Margin tier" value={pickup.vendor.marginTier ?? 'default (active config)'} last />
+                <DetailRow label="Margin tier" value={pickup.vendor.marginTier ?? 'default'} last />
               </CardContent>
             </Card>
           </Section>
@@ -279,10 +307,21 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
               <Card variant="outline">
                 <CardContent className="flex flex-col">
                   <DetailRow label="Name" value={pickup.agent.fullName} />
+                  {inspector && inspector.id !== pickup.agent.id ? (
+                    <DetailRow label="Inspected by" value={inspector.fullName} />
+                  ) : null}
                   <DetailRow label="Zone" value={pickup.agent.agentZone ?? '—'} />
                   <DetailRow label="Vehicle" value={pickup.agent.agentVehicle ?? '—'} />
                   <DetailRow label="Rating" value={pickup.agent.agentRating ? `★ ${Number(pickup.agent.agentRating).toFixed(1)}` : '—'} />
                   <DetailRow label="Agent fee" value={pickup.agentFeePaise !== null ? formatPaise(pickup.agentFeePaise) : '—'} last />
+                  {canChangeCollector ? (
+                    <Link
+                      href={`/dispatch/${encodeURIComponent(pickup.id)}`}
+                      className="mt-2 text-xs font-bold text-text-primary underline underline-offset-2"
+                    >
+                      Change who collects
+                    </Link>
+                  ) : null}
                 </CardContent>
               </Card>
             ) : (
@@ -562,7 +601,13 @@ function ItemCard({
             </span>
             {item.tag?.container ? (
               <span className="text-text-secondary">
-                Box <span className="font-mono text-text-primary">{item.tag.container.code}</span>
+                Box{' '}
+                <Link
+                  href={`/containers/${encodeURIComponent(item.tag.container.code)}`}
+                  className="font-mono text-text-primary underline underline-offset-2"
+                >
+                  {item.tag.container.code}
+                </Link>
               </span>
             ) : null}
             <span className="text-text-secondary">

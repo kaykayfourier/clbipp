@@ -226,7 +226,16 @@ export type StopFacts = {
 };
 
 export type StopEligibility =
-    | { ok: true; /** True for a `requested` stop: building the run assigns it. */ assigns: boolean }
+    | {
+          ok: true;
+          /** True for a `requested` stop: building the run assigns it. */
+          assigns: boolean;
+          /**
+           * True for an accepted collection another agent inspected: building the
+           * run makes the run's agent its collector (status stays `offered`).
+           */
+          reassigns?: true;
+      }
     | { ok: false; reason: string };
 
 /** The date a job is waiting on — what "same day" is judged against. */
@@ -262,12 +271,13 @@ export function runStopEligibility(
 
         case "offered": {
             if (!facts.offerAccepted) return { ok: false, reason: "Waiting on the vendor's decision" };
-            if (run.agentId && facts.agentId !== run.agentId) {
-                return { ok: false, reason: `Collection belongs to ${facts.agentName ?? "another agent"}` };
-            }
             // Accepted with no date = "collect today" (FV3); with a date, that day.
             const due = facts.collectionDateKey ?? run.todayKey;
             if (due !== run.dateKey) return { ok: false, reason: `Collection booked for ${due}` };
+            // Feedback round 2: the agent who inspected need not be the one who
+            // collects. Picking this stop for another agent's run is the
+            // dispatcher choosing that agent as collector — never automatic.
+            if (run.agentId && facts.agentId !== run.agentId) return { ok: true, assigns: false, reassigns: true };
             return { ok: true, assigns: false };
         }
 

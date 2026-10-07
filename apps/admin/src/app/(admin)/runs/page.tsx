@@ -40,7 +40,7 @@ export default async function RunsPage() {
     <>
       <PageHead
         title="Collection runs"
-        description="Same-day pickups grouped for one agent and one vehicle. Suggested from the dispatch board; built by a dispatcher."
+        description="Same-day pickups for one agent and one vehicle."
         actions={
           <Link href="/runs/new" className={primaryButtonClass}>
             Plan a run
@@ -62,8 +62,7 @@ export default async function RunsPage() {
       <Panel title="Runs" aside="Open runs first">
         {runs.length === 0 ? (
           <p className="text-xs text-text-secondary">
-            No runs yet. The dispatch board suggests same-day groups of nearby requests — plan one from there or from
-            here.
+            No runs yet.
           </p>
         ) : (
           <table className="w-full border-collapse text-sm">

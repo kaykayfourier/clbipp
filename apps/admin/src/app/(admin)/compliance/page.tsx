@@ -38,6 +38,8 @@ export default async function CompliancePage({
     totalWeightKg: Number(cert.totalWeightKg),
     co2AvoidedKg:  cert.co2AvoidedKg !== null ? Number(cert.co2AvoidedKg) : null,
     materials:     formatMaterials(aggregateMaterials([cert.materialSummary])),
+    // FV13 · FD17 — beside the materials, never inside them.
+    secondLifeKg:  cert.secondLifeKg !== null ? Number(cert.secondLifeKg) : 0,
     publicToken:   cert.publicToken,
   }))
 
@@ -165,7 +167,7 @@ export default async function CompliancePage({
                     CO₂e (kg)
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-widest text-text-secondary">
-                    Materials
+                    Recovered
                   </th>
                 </tr>
               </thead>
@@ -191,6 +193,11 @@ export default async function CompliancePage({
                     </td>
                     <td className="px-4 py-2 text-xs text-text-secondary">
                       {cert.materials}
+                      {cert.secondLifeKg > 0 ? (
+                        <div className="text-text-primary">
+                          Second life: {cert.secondLifeKg.toLocaleString("en-IN")} kg
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

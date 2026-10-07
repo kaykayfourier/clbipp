@@ -189,6 +189,15 @@ describe("runStopEligibility", () => {
         ).toBe(true);
     });
 
+    it("an accepted collection inspected by another agent joins, and changes collector", () => {
+        const offered = facts({ status: "offered", agentId: "sunita", agentName: "Sunita", offerAccepted: true });
+        expect(runStopEligibility(offered, RUN)).toEqual({ ok: true, assigns: false, reassigns: true });
+        // Same agent: nothing changes hands.
+        expect(runStopEligibility({ ...offered, agentId: "ravi" }, RUN)).toEqual({ ok: true, assigns: false });
+        // The booked day still rules.
+        expect(runStopEligibility({ ...offered, collectionDateKey: "2026-10-02" }, RUN).ok).toBe(false);
+    });
+
     it("refuses an offer the vendor has not accepted, and a visit in progress", () => {
         expect(runStopEligibility(facts({ status: "offered", agentId: "ravi" }), RUN).ok).toBe(false);
         expect(runStopEligibility(facts({ status: "arrived", agentId: "ravi" }), RUN).ok).toBe(false);

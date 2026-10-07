@@ -36,6 +36,11 @@ export default async function CertificatePage({
   })
 
   const summary = cert.materialSummary as Array<{ material: string; recovered_kg: number }>
+  // FV13 · FD17. Second-life mass sits BESIDE the materials, never inside them:
+  // a refurbished battery was not broken down, so it recovered no metal.
+  const secondLifeKg = cert.secondLifeKg === null ? 0 : Number(cert.secondLifeKg)
+  const routeLabel =
+    secondLifeKg > 0 && summary.length > 0 ? "Recycling · Second life" : secondLifeKg > 0 ? "Second life" : "Recycling"
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -49,13 +54,13 @@ export default async function CertificatePage({
             </div>
             Back2Basics
           </div>
-          <div className="text-[9px] tracking-widest uppercase opacity-80">Recycling</div>
+          <div className="text-[9px] tracking-widest uppercase opacity-80">{routeLabel}</div>
         </div>
 
         <div className="p-3.5 flex flex-col">
-          <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
-            <span className="text-[#6B6F6B]">Certificate no.</span>
-            <span className="font-bold font-mono text-right">{certNumber}</span>
+          <div className="flex justify-between gap-3 py-1.5 border-b border-black/10 text-[11.5px]">
+            <span className="shrink-0 text-[#6B6F6B]">Certificate no.</span>
+            <span className="min-w-0 font-bold font-mono text-right [overflow-wrap:anywhere]">{certNumber}</span>
           </div>
           <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">
             <span className="text-[#6B6F6B]">Battery ID</span>
@@ -72,6 +77,13 @@ export default async function CertificatePage({
               <span className="font-bold font-mono">{m.recovered_kg} kg</span>
             </div>
           ))}
+
+          {secondLifeKg > 0 && (
+            <div className="flex justify-between gap-3 py-1.5 border-b border-black/10 text-[11.5px]">
+              <span className="text-[#6B6F6B]">Sent for second life</span>
+              <span className="shrink-0 font-bold font-mono">{secondLifeKg.toLocaleString("en-IN")} kg</span>
+            </div>
+          )}
 
           {cert.co2AvoidedKg !== null && (
             <div className="flex justify-between py-1.5 border-b border-black/10 text-[11.5px]">

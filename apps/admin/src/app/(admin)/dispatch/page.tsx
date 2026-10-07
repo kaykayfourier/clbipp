@@ -175,7 +175,7 @@ export default async function DispatchPage() {
     <>
       <PageHead
         title="Dispatch board"
-        description="The live pipeline — requests waiting for an agent, jobs in progress, and collections booked for a later date."
+        description="Requests waiting for an agent, jobs in progress, and later collections."
       />
 
       <div className="flex flex-wrap gap-3">
@@ -187,7 +187,7 @@ export default async function DispatchPage() {
         <Stat value={String(booked.length)} label="Booked for a later date" />
         <Stat
           value={String(staleCount)}
-          label="Carrying a stale agent"
+          label="Rebooked, old agent attached"
           tone={staleCount > 0 ? 'warning' : 'default'}
         />
         <Stat value={String(urgent)} label="Urgent — declared hazard" tone={urgent > 0 ? 'warning' : 'default'} />
@@ -196,7 +196,7 @@ export default async function DispatchPage() {
       {groups.length > 0 && (
         <Panel
           title="Same-day groups — could share one run"
-          aside={`Unassigned requests within ${RUN_RADIUS_KM} km, straight-line`}
+          aside={`Unassigned, within ${RUN_RADIUS_KM} km`}
         >
           <ul className="flex flex-col gap-2">
             {groups.map((g) => (
@@ -210,7 +210,7 @@ export default async function DispatchPage() {
                   <span className="text-text-secondary">
                     {g.basis === 'distance' && g.spreadKm !== null
                       ? `${g.pickupIds.length} stops within ${formatKm(g.spreadKm)}`
-                      : `${g.pickupIds.length} stops in the same city — no coordinates to measure`}
+                      : `${g.pickupIds.length} stops in the same city`}
                   </span>
                 </div>
                 <Link href={`/runs/new?date=${g.dateKey}&pickups=${g.pickupIds.join(',')}`} className={secondaryButtonClass}>
@@ -239,13 +239,6 @@ export default async function DispatchPage() {
       )}
 
       <DispatchBoard rows={rows} />
-
-      <p className="text-xs leading-relaxed text-text-secondary">
-        Assigning writes <span className="font-mono text-[11px]">requested → scheduled</span> and
-        puts the job on that agent&rsquo;s day view. A collection booked for a later date stays at{' '}
-        <span className="font-mono text-[11px]">offered</span> — the date is a fact about the job,
-        not a tenth lifecycle stage.
-      </p>
     </>
   )
 }

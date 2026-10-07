@@ -153,7 +153,7 @@ async function main() {
     // first one that happened to.
     ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin","item.pathway",
      // feedback_logistics (FV10–FV15)
-     "tag.issue","container.register","container.status","run.create","run.cancel","custody.reconcile","agent.duty"].includes(a.action)),
+     "tag.issue","container.register","container.status","run.create","run.cancel","custody.reconcile","agent.duty","pickup.assign_collector"].includes(a.action)),
     `${audits.length} rows`)
 
   // 12 — FV2/FV1 evidence rules, made a fixture rather than a hope.

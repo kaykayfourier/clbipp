@@ -97,7 +97,7 @@ export default async function NewRunPage({
     <>
       <PageHead
         title="Plan a collection run"
-        description="Group nearby pickups for one day into one run: one agent, one vehicle, one or more QR-tracked boxes."
+        description="Nearby pickups on one day, one agent, one vehicle."
         actions={
           <Link href="/runs" className={secondaryButtonClass}>
             All runs
@@ -122,12 +122,11 @@ export default async function NewRunPage({
 
       <Panel
         title="Suggested same-day groups"
-        aside={`Unassigned requests within ${RUN_RADIUS_KM} km of each other · straight-line`}
+        aside={`Unassigned, within ${RUN_RADIUS_KM} km`}
       >
         {groups.length === 0 ? (
           <p className="text-xs text-text-secondary">
-            No two unassigned requests for {formatDateKey(dateKey)} sit close enough to share a run. You can still tick
-            stops by hand below.
+            No groups for {formatDateKey(dateKey)}. Pick stops below.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -141,7 +140,7 @@ export default async function NewRunPage({
                   <span className="ml-2 text-text-secondary">
                     {g.basis === 'distance' && g.spreadKm !== null
                       ? `within ${formatKm(g.spreadKm)}`
-                      : 'same city — no coordinates to measure'}
+                      : 'same city'}
                   </span>
                 </div>
                 <Link
@@ -160,9 +159,9 @@ export default async function NewRunPage({
         <input type="hidden" name="date" value={dateKey} />
 
         <div className="flex flex-col gap-[18px]">
-          <Panel title="Stops" aside={`Up to ${MAX_RUN_STOPS}. Order is suggested from the hub, nearest first.`}>
+          <Panel title="Stops" aside={`Up to ${MAX_RUN_STOPS}, nearest first`}>
             {selectable.length === 0 ? (
-              <p className="text-xs text-text-secondary">Nothing in the live pipeline can join a run on this day.</p>
+              <p className="text-xs text-text-secondary">No pickups can join a run on this day.</p>
             ) : (
               <ul className="flex flex-col divide-y divide-console-line">
                 {selectable.map(({ row, eligibility, waitingOn }) => (
@@ -181,6 +180,7 @@ export default async function NewRunPage({
                           <span className="font-mono text-[11px] font-bold text-text-primary">{row.id}</span>
                           <Chip>{isLifecycleStage(row.status) ? STAGE_LABELS[row.status] : row.status}</Chip>
                           {eligibility.ok && eligibility.assigns ? <Chip tone="warning">Needs an agent</Chip> : null}
+                          {eligibility.ok && eligibility.reassigns ? <Chip tone="warning">New collector</Chip> : null}
                           {row.facts.agentName && !(eligibility.ok && eligibility.assigns) ? (
                             <span className="text-[11px] text-text-secondary">{row.facts.agentName}</span>
                           ) : null}
@@ -202,7 +202,7 @@ export default async function NewRunPage({
           </Panel>
 
           {blocked.length > 0 ? (
-            <Panel title="Cannot join a run on this day" aside="And why">
+            <Panel title="Cannot join a run on this day" aside="Reason">
               <ul className="flex flex-col gap-1.5">
                 {blocked.map(({ row, eligibility }) => (
                   <li key={row.id} className="flex flex-wrap items-baseline gap-2 text-xs">
@@ -255,10 +255,7 @@ export default async function NewRunPage({
                 Build run
               </button>
               <p className="text-[11px] leading-relaxed text-text-secondary">
-                Stops that still need an agent are assigned to the one you choose (
-                <span className="font-mono">requested → scheduled</span>, with a status event and an audit row each),
-                at the suggested slots. Jobs already scheduled keep the slot their vendor was given. The agent scans a
-                box to start the run.
+                Unassigned stops go to this agent. Scheduled jobs keep their slot.
               </p>
             </div>
           </Panel>

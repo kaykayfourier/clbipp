@@ -33,10 +33,13 @@ const TONE: Record<Availability, string> = {
 export function AgentSelector({
   agents,
   staleAgentId,
+  markLabel = 'Was on this job',
 }: {
   agents: readonly RankedAgent[]
   /** The agent left on a reactivated pickup — trap 11. Called out, not hidden. */
   staleAgentId: string | null
+  /** The chip on that agent's row. */
+  markLabel?: string
 }) {
   const [selected, setSelected] = useState<string>('')
 
@@ -53,8 +56,7 @@ export function AgentSelector({
           the agents AND understand why none is recommended. */}
       {noneAvailable && (
         <div className="rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-xs text-warning-text">
-          No agents are currently available. The reasons are listed below — you can still assign
-          one if you have a reason to override.
+          No agents available. You can still assign one.
         </div>
       )}
 
@@ -102,7 +104,7 @@ export function AgentSelector({
 
                   {a.agentId === staleAgentId && (
                     <span className="rounded-full bg-warning-bg px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-warning-text">
-                      Was on this job
+                      {markLabel}
                     </span>
                   )}
                 </span>
@@ -136,9 +138,7 @@ export function AgentSelector({
       </div>
 
       <p className="text-[11px] leading-relaxed text-text-secondary">
-        Ranked by availability, then how much work they already have that day, then distance.
-        Distance is straight-line from the agent&rsquo;s last recorded position, not travel time.
-        The order is a suggestion — assign whoever you judge right.
+        Ranked by availability, then today&rsquo;s workload, then distance. A suggestion only.
       </p>
     </div>
   )

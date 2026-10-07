@@ -82,6 +82,7 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   'run.cancel': 'Collection run cancelled',
   'custody.reconcile': 'Hub check-in recorded by hand',
   'agent.duty': 'Agent duty changed',
+  'pickup.assign_collector': 'Collector assigned',
 }
 
 const SUBJECT_LABELS: Record<AdminAuditSubject, string> = {
@@ -126,7 +127,7 @@ function subjectHref(subjectType: string, subjectId: string, action: string): st
       // the agent roster, not the supplier list.
       return action === 'agent.duty' ? '/agents' : '/suppliers'
     case 'transport_container':
-      return '/containers'
+      return `/containers/${encodeURIComponent(subjectId)}`
     case 'item_tag':
       return '/tags'
     default:
@@ -218,9 +219,7 @@ export default async function AuditPage({
           Audit log
         </h1>
         <p className="mt-1 max-w-[660px] text-xs leading-relaxed text-text-secondary">
-          Every write this console has made: dispatch assignments, config publishes, market
-          overrides, exception resolutions, custody advances, manifest dispatches and confirmations,
-          certifications and margin changes — who, when, and what changed.
+          Every change made in this console — who, when, and what changed.
         </p>
       </div>
 
@@ -284,8 +283,8 @@ export default async function AuditPage({
       {rows.length === 0 ? (
         <Empty>
           {total === 0 && !action && !subject && !actor
-            ? 'Nothing has been written yet. Every admin write in this console lands here.'
-            : 'No rows match this filter. Clear it to see the whole trail.'}
+            ? 'No entries yet.'
+            : 'No entries match this filter.'}
         </Empty>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-console-line bg-surface">
@@ -363,7 +362,7 @@ export default async function AuditPage({
                         // written before the check existed, or around it. Say
                         // so rather than rendering an indistinguishable blank.
                         <p className="mt-1.5 text-[11px] italic text-warning-text">
-                          No reason recorded — this action requires one.
+                          No reason recorded.
                         </p>
                       ) : null}
                     </Td>
@@ -403,15 +402,11 @@ export default async function AuditPage({
       ) : null}
 
       <p className="max-w-[680px] text-xs leading-relaxed text-text-secondary">
-        🟠 This is the log of what an <em>admin</em> did. A vendor accepting an offer or an agent
-        collecting a pickup writes a{' '}
-        <span className="font-mono text-[11px]">status_events</span> row, not an audit row, so those
-        appear on the pickup&rsquo;s own timeline rather than here — that absence is the design, not
-        a gap. Open a pickup from{' '}
+        Admin changes only. Vendor and agent steps are on each pickup&rsquo;s timeline in{' '}
         <Link href="/pickups" className="font-semibold underline underline-offset-2">
           pickups
-        </Link>{' '}
-        to see its full custody trail.
+        </Link>
+        .
       </p>
     </>
   )

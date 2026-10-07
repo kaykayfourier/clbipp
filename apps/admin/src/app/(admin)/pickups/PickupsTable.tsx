@@ -138,7 +138,7 @@ export function PickupsTable({
         initialQuery={initialQuery}
         initialSort={{ key: 'created', direction: 'desc' }}
         emptyHeading="No pickups match this filter"
-        emptyDescription="Try a different stage, or clear the search box."
+        emptyDescription="Try another stage or clear the search."
         rowNounPlural="pickups"
       />
     </div>

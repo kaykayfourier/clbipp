@@ -98,6 +98,13 @@ export const ADMIN_AUDIT_ACTIONS = [
   "custody.reconcile",
   /** An agent marked on or off duty (FV15 · FD19). */
   "agent.duty",
+  /**
+   * An ACCEPTED, not-yet-collected pickup handed to a different agent to
+   * collect (feedback round 2). Status stays `offered`: who inspected is still
+   * on the record; only who collects changes. Written from /dispatch/[id] or by
+   * a collection run that takes the stop.
+   */
+  "pickup.assign_collector",
 ] as const
 
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number]
