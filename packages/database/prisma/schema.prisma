@@ -765,9 +765,18 @@ model Offer {
   pathway           RecoveryPathway
   // PAISE. 18450000 = ₹1,84,500. See packages/core formatOfferPrice().
   estimatedPrice    Int             @map("estimated_price")
+  // Shown to the vendor, so it never names the engine's figure.
   rationale         String
   materialBreakdown Json            @default("[]") @map("material_breakdown")
   deductions        Json            @default("[]")
+
+  // INTERNAL, never rendered on a vendor screen. The engine is recommendation-
+  // only for the pilot and the price is agreed by phone with the office, so
+  // these keep the comparison: what the engine suggested (sum of the priced
+  // lines) against `estimatedPrice`, what was actually offered, and the agent's
+  // note on how it was agreed. Null on offers made before they existed.
+  recommendedPricePaise Int?    @map("recommended_price_paise")
+  priceNote             String? @map("price_note")
 
   // D7, the cross-app seam. The VENDOR accepting an offer sets this and nothing
   // else — status stays `offered`. Only the AGENT can move a pickup to

@@ -8,6 +8,7 @@ import { Badge } from "@clbipp/ui";
 import { Banner } from "@clbipp/ui";
 import { pathwayLabel, formatOfferPrice } from "@clbipp/core";
 import { AcceptOfferButton } from "../handover/AcceptOfferButton";
+import { DeclineOfferButton } from "./DeclineOfferButton";
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 // Reads the REAL Offer row for ?id= via the RLS-scoped server client (a vendor
@@ -15,9 +16,9 @@ import { AcceptOfferButton } from "../handover/AcceptOfferButton";
 // missing/foreign id, for a pickup that's already past the offer stage, or before
 // an offer has been priced.
 //
-// The offer is a sub-state of `scheduled` (an Offer row exists). Locked rule:
-// never render materialBreakdown / deductions (₹) — price + qualitative
-// rationale + pathway only.
+// Locked rule: never render materialBreakdown / deductions (₹), and never the
+// engine's recommended price — the price shown is the one agreed for this
+// vendor, and `rationale` is vendor-safe text written for this screen.
 
 interface PageProps {
   // `error` is set by acceptOfferAndConfirm when the accept is refused — it
@@ -96,20 +97,19 @@ export default async function OfferPage({ searchParams }: PageProps) {
           </Badge>
         </div>
 
-        {/* Price hero */}
+        {/* Price hero. This is the amount paid on collection — not an estimate. */}
         <Card variant="elevated" className="flex flex-col items-center gap-1 py-6">
-          <SectionLabel>Estimated Offer</SectionLabel>
-          <p className="text-4xl font-semibold text-text-primary mt-2">
+          <SectionLabel>Our offer</SectionLabel>
+          <p className="text-4xl font-semibold text-text-primary mt-2 break-all text-center">
             {formatOfferPrice(offer.estimated_price)}
           </p>
-          <p className="text-xs text-text-secondary mt-1 text-center max-w-[220px] leading-relaxed">
-            Estimated — final value confirmed after processing.
+          <p className="text-xs text-text-secondary mt-1 text-center">
+            Paid to you after collection.
           </p>
         </Card>
 
-        {/* Rationale — single qualitative string per schema */}
         <Card variant="tinted" className="flex flex-col gap-3">
-          <SectionLabel>Why this price?</SectionLabel>
+          <SectionLabel>About this offer</SectionLabel>
           <p className="text-sm text-text-primary leading-relaxed">
             {offer.rationale}
           </p>
@@ -119,23 +119,16 @@ export default async function OfferPage({ searchParams }: PageProps) {
         <div className="flex flex-col gap-3 pt-1">
           <Link href={`/offer-breakdown?id=${pickup.id}`} className="block">
             <Button variant="secondary" fullWidth>
-              View full breakdown
+              Offer details
             </Button>
           </Link>
 
           <AcceptOfferButton pickupId={pickup.id} />
 
-          <Link href={`/scheduled?id=${pickup.id}`} className="block">
-            <Button variant="ghost" fullWidth>
-              Decline
-            </Button>
-          </Link>
+          <DeclineOfferButton pickupId={pickup.id} />
 
-          {/* FV6 · M2 — the human step, on the screen where a vendor is most
-              likely to want one: a price they weren't expecting, and otherwise
-              only Accept or Decline to choose between. Always shown so the
-              step is visible; with no number configured it renders disabled
-              and says so, because a live `tel:` link to nowhere is worse. */}
+          {/* FV6 — the human step. Always shown; with no number configured it
+              renders disabled and says so, never a `tel:` link to nowhere. */}
           {officePhone ? (
             <a href={`tel:${officePhone.replace(/\s+/g, "")}`} className="block">
               <Button variant="ghost" fullWidth>

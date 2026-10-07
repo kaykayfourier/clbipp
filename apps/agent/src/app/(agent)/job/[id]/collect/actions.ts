@@ -151,7 +151,7 @@ export async function confirmCollection(formData: FormData) {
           actorRole: 'agent',
           // FV10 — the tags the load left with, on the chain-of-custody record
           // itself, so the timeline names what the hub will scan.
-          notes: `Collected — signed and confirmed with vendor. Agent fee ₹${(agentFeePaise / 100).toFixed(2)} credited. Tags: ${tagCodes.length > 0 ? tagCodes.join(', ') : 'none'}${untaggedCount > 0 ? ` (${untaggedCount} line${untaggedCount === 1 ? '' : 's'} untagged — reason recorded; the hub tags on receipt)` : ''}.`,
+          notes: `Collected — signed and confirmed with vendor. Tags: ${tagCodes.length > 0 ? tagCodes.join(', ') : 'none'}${untaggedCount > 0 ? ` (${untaggedCount} line${untaggedCount === 1 ? '' : 's'} untagged — reason recorded; the hub tags on receipt)` : ''}.`,
           lat,
           lng,
           photoUrls: photoPaths,

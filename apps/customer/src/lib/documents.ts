@@ -196,7 +196,6 @@ async function invoiceDoc(pickupId: string, vendorId: string): Promise<InvoiceDo
               quantity: true,
               weightKg: true,
               confirmedWeightKg: true,
-              linePricePaise: true,
             },
           },
         },
@@ -207,35 +206,18 @@ async function invoiceDoc(pickupId: string, vendorId: string): Promise<InvoiceDo
 
   const categoryLabel = CATEGORY_LABELS[invoice.pickup.category]
 
-  // Per-item pricing is the agent's job and is null until they price on site
-  // (BatteryItem.linePricePaise). Until then the invoice carries ONE line for
-  // the whole consignment at the settled amount, rather than inventing a split
-  // — an invoice that apportions money we never apportioned would be a fiction
-  // on a financial document.
-  const priced = invoice.pickup.items.filter((i) => i.linePricePaise !== null)
-  const lines =
-    priced.length > 0
-      ? priced.map((item) => ({
-          description: `${categoryLabel} batteries`,
-          quantity: item.quantity,
-          weightKg: optionalNum(item.confirmedWeightKg ?? item.weightKg),
-          amountPaise: item.linePricePaise!,
-        }))
-      : [
-          {
-            // Description carries no quantity: `quantity` is its own field, the
-            // PDF renders it as its own column, and /invoices/[id] renders it
-            // alongside the label — so a "— N units" suffix here printed the
-            // same number twice on both surfaces.
-            description: `${categoryLabel} batteries`,
-            quantity: invoice.pickup.items.reduce((sum, i) => sum + i.quantity, 0),
-            weightKg: invoice.pickup.items.reduce(
-              (sum, i) => sum + num(i.confirmedWeightKg ?? i.weightKg),
-              0,
-            ),
-            amountPaise: invoice.subtotalPaise,
-          },
-        ]
+  // ONE line for the whole consignment at the settled amount. Per-item prices
+  // (BatteryItem.linePricePaise) are the engine's recommendation, internal for
+  // the pilot: the agreed total can differ, so listing them would show the
+  // vendor the engine's figure and lines that do not add up to the total.
+  const lines = [
+    {
+      description: `${categoryLabel} batteries`,
+      quantity: invoice.pickup.items.reduce((sum, i) => sum + i.quantity, 0),
+      weightKg: invoice.pickup.items.reduce((sum, i) => sum + num(i.confirmedWeightKg ?? i.weightKg), 0),
+      amountPaise: invoice.subtotalPaise,
+    },
+  ]
 
   const payment = await prisma.payment.findUnique({
     where: { pickupId },

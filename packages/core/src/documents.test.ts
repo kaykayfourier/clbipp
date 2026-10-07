@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { certificateNumber, invoiceNumber, formatPaise } from "./documents";
 import { formatOfferPrice } from "./offer";
-import { rupeesToPaise, manifestNumber } from "./documents"
+import { rupeesToPaise, manifestNumber, MAX_PAISE, isStorablePaise } from "./documents"
 
 describe("certificateNumber", () => {
   it("follows the CERT-{YEAR}-{pickupId}-{CATEGORY} format from Plan v2 §5", () => {
@@ -110,3 +110,19 @@ describe("manifestNumber", () => {
     expect(withHyphens).toBe("MFT-2026-f6a7b8")
   })
 })
+
+describe("isStorablePaise", () => {
+  it("accepts whole amounts up to the int4 ceiling", () => {
+    expect(isStorablePaise(0)).toBe(true);
+    expect(isStorablePaise(5_125_760)).toBe(true);
+    expect(isStorablePaise(MAX_PAISE)).toBe(true);
+  });
+
+  it("refuses what Postgres would reject or what is not money", () => {
+    expect(isStorablePaise(MAX_PAISE + 1)).toBe(false);
+    expect(isStorablePaise(-1)).toBe(false);
+    expect(isStorablePaise(10.5)).toBe(false);
+    expect(isStorablePaise(Number.NaN)).toBe(false);
+    expect(isStorablePaise(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+});

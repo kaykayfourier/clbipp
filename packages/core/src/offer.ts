@@ -4,7 +4,7 @@
 
 import type { RecoveryPathway } from "@clbipp/database";
 
-import { formatPaise } from "./documents";
+import { formatPaise, isStorablePaise, rupeesToPaise } from "./documents";
 
 // `Offer.estimatedPrice` is stored as an integer number of PAISE (see seed:
 // 18450000 = ₹1,84,500).
@@ -53,4 +53,76 @@ export function parseMaterialWeights(raw: unknown): MaterialWeight[] {
     }
   }
   return rows;
+}
+
+// ─── Pricing an offer (feedback round 2) ─────────────────────────────────────
+// The engine is RECOMMENDATION-ONLY for the pilot. The price is agreed on a
+// call to the office; the engine's total is kept internally beside it and never
+// shown to the vendor.
+
+/** A typed offer more than this many times the recommendation is a typo. */
+export const MAX_OFFER_MULTIPLE = 10;
+export const MIN_PRICE_NOTE_CHARS = 10;
+export const MAX_PRICE_NOTE_CHARS = 500;
+
+export type ResolvedOfferPrice = {
+  /** What the vendor is offered, and paid on collection. */
+  offeredPaise: number;
+  /** The engine / rate-card total. Internal only. */
+  recommendedPaise: number;
+  note: string | null;
+};
+
+/**
+ * Decide the offered amount from the recommendation and what the agent typed.
+ * A blank price means "offer the recommendation". A typed price that differs
+ * from it needs a note saying how it was agreed.
+ */
+export function resolveOfferPrice(input: {
+  recommendedPaise: number;
+  agreedRupees: string | null | undefined;
+  note: string | null | undefined;
+}): { value: ResolvedOfferPrice; error: null } | { value: null; error: string } {
+  const { recommendedPaise } = input;
+  if (!isStorablePaise(recommendedPaise)) {
+    return { value: null, error: "This load's price is too large to record. Check the readings on each item." };
+  }
+
+  const note = (input.note ?? "").trim().slice(0, MAX_PRICE_NOTE_CHARS) || null;
+  const raw = (input.agreedRupees ?? "").trim().replace(/,/g, "");
+  if (raw === "") {
+    return { value: { offeredPaise: recommendedPaise, recommendedPaise, note }, error: null };
+  }
+
+  const rupees = Number(raw);
+  if (!Number.isFinite(rupees) || rupees <= 0) {
+    return { value: null, error: "Enter the agreed price as an amount in rupees, greater than zero." };
+  }
+  const offeredPaise = rupeesToPaise(rupees);
+  if (!isStorablePaise(offeredPaise)) {
+    return { value: null, error: "That price is too large. Check the amount." };
+  }
+  if (recommendedPaise > 0 && offeredPaise > recommendedPaise * MAX_OFFER_MULTIPLE) {
+    return {
+      value: null,
+      error: `That is more than ${MAX_OFFER_MULTIPLE} times the recommended price. Check the amount.`,
+    };
+  }
+  if (offeredPaise !== recommendedPaise && (note === null || note.length < MIN_PRICE_NOTE_CHARS)) {
+    return { value: null, error: "Add a short note on how this price was agreed, e.g. who you spoke to." };
+  }
+  return { value: { offeredPaise, recommendedPaise, note }, error: null };
+}
+
+/**
+ * The one sentence the VENDOR reads under the offer. Never names the engine,
+ * a recommendation or an adjustment.
+ */
+export function vendorOfferRationale(includedLines: number, totalLines: number): string {
+  const lines = (n: number) => `${n} battery line${n === 1 ? "" : "s"}`;
+  if (includedLines >= totalLines) {
+    return `Based on our on-site inspection of ${lines(includedLines)}.`;
+  }
+  const left = totalLines - includedLines;
+  return `Based on our on-site inspection. Covers ${includedLines} of your ${lines(totalLines)}; ${left === 1 ? "the other line needs" : `the other ${left} need`} a closer look and ${left === 1 ? "is" : "are"} not included.`;
 }

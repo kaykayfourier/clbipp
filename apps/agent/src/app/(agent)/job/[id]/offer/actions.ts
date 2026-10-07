@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 
 import { createClient } from '@clbipp/auth/server'
 import { createAdminClient } from '@clbipp/auth/admin'
+import { resolveOfferPrice, vendorOfferRationale } from '@clbipp/core'
 
 // ─── presentOffer (D7: arrived → offered) — Batch 5a · Ali ───────────────────
 // The multi-item consequence the wireframe never modelled: per-item prices
@@ -21,19 +22,15 @@ import { createAdminClient } from '@clbipp/auth/admin'
 // happen at all: an unpriced item means the agent hasn't finished the job.
 export async function presentOffer(
   pickupId: string,
-  // ─── FV6 · FD5: the human step ────────────────────────────────────────────
-  // The company wants a person in the loop for the pilot, and may not trust the
-  // engine's number yet. So the agent may present a DIFFERENT total, with a
-  // reason.
+  // ─── The agreed price (FV6, feedback round 2) ─────────────────────────────
+  // The engine is recommendation-only for the pilot: the price is agreed on a
+  // call to the office and typed here. Blank means "offer the recommendation".
   //
-  // 🔴 THIS IS NOT A SECOND PRICING PATH. The engine still runs, every item is
-  // still priced, and every one of those numbers is still written — to
-  // `BatteryItem.unitPricePaise` / `linePricePaise`, to `material_breakdown`
-  // below, and to each item's `quote_data`. The override changes only the TOTAL
-  // that goes to the vendor, and the engine's own figure stays recoverable
-  // beside it. That is what makes the pilot comparison possible at the end:
-  // what we would have paid, against what we did.
-  override?: { totalPaise: number; reason: string } | null,
+  // 🔴 NOT A SECOND PRICING PATH. Every item is still priced and stored; this
+  // changes only the total offered. The recommendation and the agent's note are
+  // kept on the offer's internal columns, never in `rationale`, which the
+  // vendor reads.
+  agreed?: { rupees: string | null; note: string | null } | null,
 ): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const {
@@ -62,7 +59,10 @@ export async function presentOffer(
     .select('id, category, chemistry, quantity, weight_kg, confirmed_weight_kg, pathway, unit_price_paise, line_price_paise, quote_data')
     .eq('pickup_id', pickupId)
 
-  if (itemsError) return { error: itemsError.message }
+  if (itemsError) {
+    console.error('[presentOffer] items read failed:', itemsError)
+    return { error: 'Could not load the items. Try again.' }
+  }
   if (!items || items.length === 0) return { error: 'This job has no items to offer.' }
 
   const unpriced = items.filter((i) => i.unit_price_paise === null || i.line_price_paise === null)
@@ -80,62 +80,35 @@ export async function presentOffer(
     return { error: 'Every item on this job is on HOLD — nothing to present. Escalate each item first.' }
   }
 
-  const enginePrice = included.reduce((sum, i) => sum + (i.line_price_paise ?? 0), 0)
+  const recommendedPaise = included.reduce((sum, i) => sum + (i.line_price_paise ?? 0), 0)
 
-  // ── The override, validated server-side (the form is not the boundary) ──
-  let estimatedPrice = enginePrice
-  let overrideNote = ''
-  if (override) {
-    if (!Number.isInteger(override.totalPaise) || override.totalPaise <= 0) {
-      return { error: 'An adjusted offer must be a whole amount greater than zero.' }
-    }
-    // A rail, not a policy: catches a misplaced decimal on a screen where the
-    // agent is typing rupees in front of a waiting vendor. Ten times the
-    // engine's figure is not a negotiation, it is a typo.
-    if (enginePrice > 0 && override.totalPaise > enginePrice * 10) {
-      return { error: 'That is more than ten times the calculated price — check the amount.' }
-    }
-    if (override.reason.trim().length < 10) {
-      return { error: 'Say briefly why you adjusted the price.' }
-    }
-    estimatedPrice = override.totalPaise
-    overrideNote = ` Price adjusted by agent from ${enginePrice} paise: ${override.reason.trim()}`
-  }
+  // Validated server-side; the form is not the boundary.
+  const price = resolveOfferPrice({
+    recommendedPaise,
+    agreedRupees: agreed?.rupees ?? null,
+    note: agreed?.note ?? null,
+  })
+  if (price.error !== null) return { error: price.error }
 
-  // ⚠ Per-item prices here are always the ENGINE's, never the override. An
-  // adjusted total is a commercial decision about the load as a whole; spreading
-  // it back across items would invent per-battery numbers nobody calculated and
-  // would corrupt the very comparison the override exists to enable.
+  // ⚠ Per-item prices stay the engine's. An agreed total is a decision about the
+  // load as a whole; spreading it across items would invent per-battery numbers
+  // nobody calculated. Weights only here: this JSON sits on the vendor's offer
+  // row, so it carries no prices.
   const materialBreakdown = included.map((i) => ({
     itemId: i.id,
     category: i.category,
     chemistry: i.chemistry,
     pathway: i.pathway,
     weight_kg: Number(i.confirmed_weight_kg ?? i.weight_kg ?? 0),
-    price_paise: i.line_price_paise,
   }))
 
   // Offer.pathway is one value for the whole pickup even though items can
-  // differ. Pick the pathway of the highest-value included item — the pathway
-  // that actually drives most of the price — and fall back to `recycle` when
-  // nothing has one (an all-non-lithium job: D1's "essentially all of it is
-  // recycled").
+  // differ: the pathway of the highest-value included item, or `recycle` when
+  // nothing has one (an all-non-lithium job).
   const byValue = [...included].sort((a, b) => (b.line_price_paise ?? 0) - (a.line_price_paise ?? 0))
   const overallPathway = byValue[0]?.pathway ?? 'recycle'
 
-  const pathwayCounts = included.reduce<Record<string, number>>((acc, i) => {
-    const key = i.pathway ?? 'recycle'
-    acc[key] = (acc[key] ?? 0) + 1
-    return acc
-  }, {})
-  const mixSummary = Object.entries(pathwayCounts)
-    .map(([pathway, count]) => `${count} ${pathway}`)
-    .join(', ')
-  const excludedNote = items.length > included.length ? ` ${items.length - included.length} item(s) excluded (HOLD).` : ''
-  // 🔴 `rationale` carries the override because it IS the answer to "why this
-  // price" — which is the column's whole purpose. The engine's own total is
-  // named in it explicitly, so the adjustment is never silent.
-  const rationale = `Combined offer across ${included.length} item(s): ${mixSummary}.${excludedNote}${overrideNote}`
+  const rationale = vendorOfferRationale(included.length, items.length)
 
   if (!alreadyOffered) {
     const { error: upsertError } = await admin.from('offers').upsert(
@@ -143,16 +116,18 @@ export async function presentOffer(
         pickup_id: pickupId,
         vendor_id: pickup.vendor_id,
         pathway: overallPathway,
-        estimated_price: estimatedPrice,
+        estimated_price: price.value.offeredPaise,
         rationale,
         material_breakdown: materialBreakdown,
         deductions: [],
+        recommended_price_paise: price.value.recommendedPaise,
+        price_note: price.value.note,
       },
       { onConflict: 'pickup_id' },
     )
     if (upsertError) {
       console.error('[presentOffer] offer upsert failed:', upsertError)
-      return { error: upsertError.message }
+      return { error: 'Could not save the offer. Try again.' }
     }
 
     const { error: statusError } = await admin
@@ -169,14 +144,18 @@ export async function presentOffer(
       })
       .eq('id', pickupId)
       .eq('status', 'arrived') // guards the same race markArrived guards against
-    if (statusError) return { error: statusError.message }
+    if (statusError) {
+      console.error('[presentOffer] status update failed:', statusError)
+      return { error: 'Could not update the job. Try again.' }
+    }
 
     const { error: eventError } = await admin.from('status_events').insert({
       pickup_id: pickupId,
       status: 'offered',
       actor_id: user.id,
       actor_role: 'agent',
-      notes: `Offer presented: ${included.length} item(s), ${rationale}`,
+      // No amounts: the vendor's token can read this table.
+      notes: `Offer presented for ${included.length} of ${items.length} line(s)`,
     })
     if (eventError) console.error('[presentOffer] status_events insert failed:', eventError)
   }
@@ -187,25 +166,15 @@ export async function presentOffer(
 }
 
 export async function presentOfferAndRedirect(pickupId: string, formData?: FormData): Promise<void> {
-  // The adjusted-price fields are optional: the plain "Present offer" button
-  // posts no override and the engine's total stands.
-  const rawTotal = formData?.get('overrideRupees')
-  const rawReason = formData?.get('overrideReason')
-  const rupees = rawTotal === null || rawTotal === undefined ? NaN : Number(String(rawTotal).trim())
-  const override =
-    Number.isFinite(rupees) && rupees > 0
-      ? {
-          // 🔴 Rupees in the form, PAISE in the database. Every money value in
-          // this repo is an integer paise; rounding here is the one conversion
-          // point, and it happens on the server.
-          totalPaise: Math.round(rupees * 100),
-          reason: String(rawReason ?? ''),
-        }
-      : null
-
-  const result = await presentOffer(pickupId, override)
+  // Both fields are optional: a blank price presents the recommendation.
+  const rupees = formData?.get('agreedRupees')
+  const note = formData?.get('priceNote')
+  const result = await presentOffer(pickupId, {
+    rupees: rupees === null || rupees === undefined ? null : String(rupees),
+    note: note === null || note === undefined ? null : String(note),
+  })
   if (result.error) {
     redirect(`/job/${pickupId}/offer?error=${encodeURIComponent(result.error)}`)
   }
-  redirect(`/job/${pickupId}`)
+  redirect(`/job/${pickupId}/offer`)
 }

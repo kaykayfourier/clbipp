@@ -128,7 +128,7 @@ export async function acceptOffer(
 
   if (updateError) {
     console.error('[acceptOffer] offer acceptance failed:', updateError)
-    return { error: updateError.message }
+    return { error: 'Could not accept the offer. Please try again.' }
   }
 
   // Audit event. The status is unchanged, so this is a SECOND `offered` row —
@@ -186,12 +186,59 @@ export async function acceptOfferAndConfirm(formData: FormData) {
   redirect(`/handover?id=${encodeURIComponent(pickupId)}`)
 }
 
-// ─── cancelPickup ────────────────────────────────────────────────────────────
-// Vendor cancelled from the /scheduled screen. Only allowed pre-collection —
-// once in the recovery pipeline it can't be pulled back. Writes the cancelled
-// audit event too.
+// ─── cancelPickup / declineOffer ─────────────────────────────────────────────
+// Vendor cancelled from /scheduled, or declined an offer from /offer. Both stop
+// the pickup (`cancelled`, which is re-enterable through reschedule) and differ
+// only in what the timeline says, so the office can tell a declined price from
+// a called-off pickup. Only allowed pre-collection.
 export async function cancelPickup(
   pickupId: string
+): Promise<{ error: string | null }> {
+  return stopPickup(pickupId, 'Pickup cancelled by vendor')
+}
+
+// A decline is NOT a cancellation: there may be a back-and-forth on price.
+// It records the decision on the timeline (status stays `offered`, a fact, not
+// a stage) so the office can follow up; the vendor can still accept later.
+export async function declineOffer(
+  pickupId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+  if (userError || !user) return { error: 'Not authenticated.' }
+
+  const admin = createAdminClient()
+  const { data: pickup, error: readError } = await admin
+    .from('pickups')
+    .select('id, vendor_id, status, offers(accepted_at)')
+    .eq('id', pickupId)
+    .single()
+  if (readError || !pickup) return { error: 'Pickup not found.' }
+  if (pickup.vendor_id !== user.id) return { error: 'Not authorised for this pickup.' }
+  const offer = Array.isArray(pickup.offers) ? pickup.offers[0] : pickup.offers
+  if (pickup.status !== 'offered' || !offer) return { error: 'There is no offer to decline.' }
+  if (offer.accepted_at) return { error: 'You have already accepted this offer.' }
+
+  const { error: eventError } = await admin.from('status_events').insert({
+    pickup_id: pickupId,
+    status: 'offered',
+    actor_id: user.id,
+    actor_role: 'vendor',
+    notes: 'Vendor declined the offer. Office to follow up.',
+  })
+  if (eventError) {
+    console.error('[declineOffer] status_events insert failed:', eventError)
+    return { error: 'Could not record that. Please try again.' }
+  }
+  return { error: null }
+}
+
+async function stopPickup(
+  pickupId: string,
+  note: string
 ): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const {
@@ -223,24 +270,24 @@ export async function cancelPickup(
     .eq('id', pickupId)
 
   if (updateError) {
-    console.error('[cancelPickup] status update failed:', updateError)
-    return { error: updateError.message }
+    console.error('[stopPickup] status update failed:', updateError)
+    return { error: 'Could not cancel the pickup. Please try again.' }
   }
 
   // Void any acceptance. Since Batch 5b the agent app gates collection on
   // `Offer.acceptedAt`, so an acceptance that outlives its pickup is an agent
   // being told to collect a load the vendor has called off. Non-fatal and
   // unconditional — a pickup with no offer just updates zero rows.
-  await voidOfferAcceptance(admin, pickupId, 'cancelPickup')
+  await voidOfferAcceptance(admin, pickupId, 'stopPickup')
 
   const { error: eventError } = await admin.from('status_events').insert({
     pickup_id: pickupId,
     status: 'cancelled',
     actor_id: user.id,
     actor_role: 'vendor',
-    notes: 'Pickup cancelled by vendor',
+    notes: note,
   })
-  if (eventError) console.error('[cancelPickup] status_events insert failed:', eventError)
+  if (eventError) console.error('[stopPickup] status_events insert failed:', eventError)
 
   return { error: null }
 }
@@ -317,7 +364,7 @@ export async function reschedulePickup(
 
   if (updateError) {
     console.error('[reschedulePickup] update failed:', updateError)
-    return { error: updateError.message }
+    return { error: 'Could not reschedule the pickup. Please try again.' }
   }
 
   // Reactivation only. A cancelled pickup coming back as `requested` is the

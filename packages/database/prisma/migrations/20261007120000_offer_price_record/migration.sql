@@ -1,0 +1,33 @@
+-- ============================================================================
+-- offer_price_record (2026-10-07). Feedback round 2.
+--
+--   offers + recommended_price_paise (integer, NULL)
+--   offers + price_note              (text, NULL)
+--
+-- WHY. The decision engine is recommendation-only for the pilot: the company
+-- agrees the price on a call to the office, and the vendor must never see the
+-- engine's figure. Until now the agent's adjustment was written into
+-- `offers.rationale` ("Price adjusted by agent from 5125760 paise: ..."), which
+-- is the one offer field the vendor's /offer screen prints. These two columns
+-- give the engine's total and the agent's note an internal home, and
+-- `rationale` goes back to being vendor-safe text only.
+--
+-- `recommended_price_paise` is the sum of the priced lines at the moment the
+-- offer was presented; `estimated_price` stays the amount actually offered (and
+-- paid). Comparing the two is the pilot's record of engine vs office pricing.
+--
+-- Both nullable, no default, no backfill: a catalogue-only change, safe with
+-- the dev servers up, and every existing row reads exactly as before. Offers
+-- made before this have NULL here; their old note is still in `rationale`.
+--
+-- NO PRICE MOVES. Nothing here is an engine input.
+--
+-- RLS / GRANTS: no change. `offers` keeps its vendor SELECT policy, so like
+-- `pickups.indicative_quote_paise` these columns are internal by convention
+-- (no vendor screen reads them), not by grant. Hiding them from the vendor's
+-- own API token as well would be a column-grant change in supabase/grants.sql.
+-- ============================================================================
+
+-- AlterTable
+ALTER TABLE "offers" ADD COLUMN     "price_note" TEXT,
+ADD COLUMN     "recommended_price_paise" INTEGER;

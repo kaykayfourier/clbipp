@@ -74,9 +74,8 @@ export function InvoiceTemplate({ doc }: { doc: InvoiceDoc }) {
 
         <View style={styles.callout}>
           <Text>
-            Amounts are based on the weights and condition recorded at
-            collection. Where the on-site assessment differed from the booking
-            estimate, the on-site figure is the one invoiced.
+            The amount is the offer you accepted for the batteries we
+            collected.
           </Text>
         </View>
 

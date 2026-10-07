@@ -59,6 +59,18 @@ export function rupeesToPaise(rupees: number): number {
   return Math.round(Math.round(rupees * 1000) / 10)
 }
 
+/**
+ * The largest amount a money column can hold. Every paise column is a Postgres
+ * `integer` (int4), so ₹2,14,74,836.47 is the ceiling; one paise more and the
+ * write fails with a raw "out of range for type integer" error.
+ */
+export const MAX_PAISE = 2_147_483_647
+
+/** True when `paise` is a whole, non-negative amount a money column can store. */
+export function isStorablePaise(paise: number): boolean {
+  return Number.isSafeInteger(paise) && paise >= 0 && paise <= MAX_PAISE
+}
+
 export function custodyBatchNumber(input: {
   batchId: string
   handedOffAt: Date

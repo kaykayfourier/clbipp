@@ -81,12 +81,13 @@ export default async function Page({
     return (
       <AppShell title="Offer" showBack backHref={`/job/${id}`} hideNav>
         <PagePadding className="flex flex-col gap-4">
+          {error && <Banner variant="error">{error}</Banner>}
           {timing.state === 'awaiting_vendor' ? (
             <Banner variant={timing.expired ? 'warning' : 'info'}>
               Offer presented — {formatPaise(pickup.offer.estimatedPrice)},{' '}
               {timing.expired
-                ? 'and the 7-day validity has now lapsed. The office will re-confirm the price before collection.'
-                : `awaiting the vendor's decision. Valid for ${timing.daysRemaining} more day${timing.daysRemaining === 1 ? '' : 's'}.`}
+                ? 'expired after 7 days. The office will re-confirm the price.'
+                : `waiting for the vendor. Valid ${timing.daysRemaining} more day${timing.daysRemaining === 1 ? '' : 's'}.`}
             </Banner>
           ) : timing.state === 'collection_scheduled' ? (
             <>
@@ -129,11 +130,6 @@ export default async function Page({
                 label="Or book it for a later date"
                 cta="Schedule collection"
               />
-              <p className="text-[11px] leading-relaxed text-text-secondary">
-                Book a date when the van is full, the load needs a bigger vehicle, or the site
-                isn&rsquo;t ready. The vendor sees the date on their own screen, and the job
-                stays yours.
-              </p>
             </>
           )}
           <Link href={`/job/${id}`}>
@@ -156,10 +152,8 @@ export default async function Page({
 
   const canPresent = unpriced.length === 0 && included.length > 0
 
-  // FV6 · M2. Configured, not hardcoded — the company has not told us the
-  // number yet (open question M1), and a wrong number in a `tel:` link is worse
-  // than no link. Absent → the button simply does not render, the same rule the
-  // vendor `tel:` link on the job screen already follows.
+  // Configured, not hardcoded: the company has not given us the number yet.
+  // Unset → the button renders disabled and says so, never a dead `tel:` link.
   const officePhone = process.env.NEXT_PUBLIC_OFFICE_PHONE ?? null
 
   return (
@@ -186,82 +180,30 @@ export default async function Page({
 
         {unpriced.length > 0 && (
           <Banner variant="warning">
-            {unpriced.length} item{unpriced.length === 1 ? '' : 's'} still need pricing —
-            finish those from the item list before you can present.
+            {unpriced.length} item{unpriced.length === 1 ? '' : 's'} still need pricing.
           </Banner>
         )}
 
         {holdItems.length > 0 && (
           <Banner variant="error">
-            {holdItems.length} item{holdItems.length === 1 ? '' : 's'} on HOLD, excluded from
-            this offer. Escalate {holdItems.length === 1 ? 'it' : 'each'} from its own result
-            screen if you haven&rsquo;t already.
+            {holdItems.length} item{holdItems.length === 1 ? '' : 's'} on hold, left out.
+            Escalate from the item&rsquo;s price screen.
           </Banner>
         )}
 
+        {/* The engine's figure is a recommendation only (pilot). The vendor
+            never sees it; it is stored on the offer for internal comparison. */}
         <div className="flex flex-col gap-1 rounded-[10px] bg-primary-black px-4 py-3.5 text-white">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-              Total offer
+              Recommended total
             </span>
-            <span className="font-serif text-xl font-semibold text-primary-green">
-              {formatPaise(total)}
-            </span>
+            <span className="font-serif text-xl font-semibold text-primary-green">{formatPaise(total)}</span>
           </div>
+          <span className="text-[11px] text-white/60">Internal. The vendor never sees this.</span>
         </div>
 
-        {/* 🔴 FV6 · FD5 — the human step. One form, two buttons' worth of
-            behaviour: leave the adjustment blank and the engine's total is
-            presented unchanged; fill it in and yours is, with the reason
-            recorded and the engine's figure kept beside it. */}
-        <form action={presentOfferAndRedirect.bind(null, id)} className="flex flex-col gap-3">
-          <Button type="submit" variant="primary" fullWidth disabled={!canPresent}>
-            Present offer to vendor
-          </Button>
-
-          <details className="rounded-[10px] border border-border px-3 py-2">
-            <summary className="cursor-pointer text-xs font-semibold text-text-primary">
-              Adjust the price before presenting
-            </summary>
-            <div className="mt-2 flex flex-col gap-2">
-              <p className="text-[11px] leading-relaxed text-text-secondary">
-                Use this when the office has agreed a different number, or when something about
-                this load isn&rsquo;t in the calculation. Leave it blank to present{' '}
-                {formatPaise(total)}.
-              </p>
-              <label htmlFor="overrideRupees" className="text-xs font-medium text-text-primary">
-                Agreed total (₹)
-              </label>
-              <input
-                type="number"
-                id="overrideRupees"
-                name="overrideRupees"
-                min="1"
-                step="0.01"
-                inputMode="decimal"
-                placeholder={String(Math.round(total / 100))}
-                className="h-11 w-full rounded-[10px] border border-border bg-background px-3 text-base text-text-primary"
-              />
-              <label htmlFor="overrideReason" className="text-xs font-medium text-text-primary">
-                Why
-              </label>
-              <textarea
-                id="overrideReason"
-                name="overrideReason"
-                rows={2}
-                placeholder="e.g. Office agreed ₹48,000 with the vendor by phone"
-                className="w-full rounded-[10px] border border-border bg-background px-3 py-2 text-sm text-text-primary"
-              />
-            </div>
-          </details>
-        </form>
-
-        {/* FV6 · M2. The office, one tap away, on the screen where an agent is
-            most likely to need it — standing in front of a vendor who disagrees
-            with a number. */}
-        {/* FV6 — always shown so the human step is visible; with no number
-            configured it renders disabled and says so (a live `tel:` link to
-            nowhere is worse than a visibly unconnected one). */}
+        <SectionLabel>Agree the price</SectionLabel>
         {officePhone ? (
           <a href={`tel:${officePhone.replace(/\s+/g, '')}`}>
             <Button variant="secondary" fullWidth>
@@ -277,11 +219,40 @@ export default async function Page({
           </div>
         )}
 
-        <p className="text-[11px] leading-relaxed text-text-secondary">
-          This moves the job to <b>Offered</b> and the vendor sees this total on
-          their own screen. They accept it there — you&rsquo;ll see that reflected
-          here once they do.
-        </p>
+        <form action={presentOfferAndRedirect.bind(null, id)} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="agreedRupees" className="text-xs font-medium text-text-primary">
+              Agreed price (₹)
+            </label>
+            <input
+              type="number"
+              id="agreedRupees"
+              name="agreedRupees"
+              min="1"
+              step="0.01"
+              inputMode="decimal"
+              placeholder={String(Math.round(total / 100))}
+              className="h-11 w-full rounded-[10px] border border-border bg-background px-3 text-base text-text-primary"
+            />
+            <p className="text-[11px] text-text-secondary">Leave blank to offer {formatPaise(total)}.</p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="priceNote" className="text-xs font-medium text-text-primary">
+              Note (needed if the price changed)
+            </label>
+            <textarea
+              id="priceNote"
+              name="priceNote"
+              rows={2}
+              maxLength={500}
+              placeholder="e.g. Agreed with Rahul at the office"
+              className="w-full rounded-[10px] border border-border bg-background px-3 py-2 text-sm text-text-primary"
+            />
+          </div>
+          <Button type="submit" variant="primary" fullWidth disabled={!canPresent}>
+            Present offer to vendor
+          </Button>
+        </form>
       </PagePadding>
     </AppShell>
   )

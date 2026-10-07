@@ -59,7 +59,7 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
 
   return (
     <AppShell
-      title="How we valued it"
+      title="Offer details"
       showBack
       backHref={`/offer?id=${pickup.id}`}
       hideNav
@@ -69,7 +69,7 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
         {/* Estimate + pathway */}
         <Card variant="default" className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <SectionLabel>Estimated Value</SectionLabel>
+            <SectionLabel>Our offer</SectionLabel>
             <Badge variant="success" className="text-[11px] px-2.5 py-0.5 uppercase tracking-wider">
               {pathway}
             </Badge>
@@ -81,7 +81,7 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
 
         {/* Full rationale */}
         <Card variant="tinted" className="flex flex-col gap-3">
-          <SectionLabel>Why this valuation?</SectionLabel>
+          <SectionLabel>About this offer</SectionLabel>
           <p className="text-sm text-text-primary leading-relaxed">
             {offer.rationale}
           </p>
@@ -110,11 +110,11 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
           </Card>
         )}
 
-        {/* Explanation */}
+        {/* True since Admin Batch 4: the payout is exactly this amount, raised
+            when the agent collects. Nothing is re-priced after processing. */}
         <Card variant="outline">
           <p className="text-sm text-text-secondary leading-relaxed">
-            The final price is confirmed after your batteries are collected,
-            tested, and processed. Estimates may vary by up to ±8%.
+            You are paid this amount after our agent collects the batteries.
           </p>
         </Card>
 

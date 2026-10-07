@@ -62,5 +62,5 @@ export const STEP_TITLES = [
   'What are we collecting?',
   'Tell us how much',
   'Where and when',
-  'Your indicative quote',
+  'Review and submit',
 ] as const
