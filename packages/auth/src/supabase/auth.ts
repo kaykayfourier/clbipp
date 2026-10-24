@@ -11,9 +11,10 @@ export type SignUpInput = {
   password: string
   fullName: string
   vendorType: 'individual' | 'fleet'
-  // Stored now, verified later: phone_verified stays false until SMS OTP ships
-  // (that needs a paid provider + Indian DLT registration — Plan v2 D2).
-  phone?: string
+  // Required at signup since the additional feedback round (FD20). Stored
+  // unverified: phone_verified stays false until SMS OTP ships (that needs a
+  // paid provider + Indian DLT registration — Plan v2 D2).
+  phone: string
   // For a fleet account, fullName holds the contact person's name and
   // companyName the business — the profiles table has no separate contact_name.
   companyName?: string

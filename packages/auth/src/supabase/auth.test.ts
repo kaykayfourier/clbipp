@@ -61,6 +61,7 @@ describe('signUpWithProfile', () => {
     email: 'vendor@example.com',
     password: 'hunter2',
     fullName: 'Vendor One',
+    phone: '+919812345678',
     vendorType: 'fleet' as const,
   }
 
@@ -76,6 +77,7 @@ describe('signUpWithProfile', () => {
       vendor_type: 'fleet',
       full_name: 'Vendor One',
       email: 'vendor@example.com',
+      phone: '+919812345678',
     })
     expect(result.error).toBeNull()
   })
@@ -96,6 +98,7 @@ describe('signUpWithProfile — Batch 6 columns', () => {
     email: 'vendor@example.com',
     password: 'hunter2',
     fullName: 'Vendor One',
+    phone: '+919812345678',
     vendorType: 'individual' as const,
   }
 
@@ -167,7 +170,7 @@ describe('signInWithOAuth', () => {
 })
 
 describe('createProfileForCurrentUser', () => {
-  const details = { fullName: 'Vendor One', vendorType: 'individual' as const }
+  const details = { fullName: 'Vendor One', phone: '+919812345678', vendorType: 'individual' as const }
 
   function signedInAs(user: unknown) {
     mockGetUser.mockResolvedValue({ data: { user } })
@@ -198,6 +201,7 @@ describe('createProfileForCurrentUser', () => {
 
     await createProfileForCurrentUser({
       fullName: 'Riya Sharma',
+      phone: '+919812345678',
       vendorType: 'fleet',
       companyName: 'Acme Batteries',
       gstNumber: '22AAAAA0000A1Z5',

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { AppShell, Button, Card, CardDescription, CardTitle, PagePadding } from '@clbipp/ui'
 import { getCurrentUser } from '@clbipp/auth'
-import { Field } from '../field'
+import { Field, PhoneField } from '../field'
 import { abandonOnboarding, completeOnboarding } from './actions'
 
 /**
@@ -116,24 +116,15 @@ export default async function OnboardingPage({
               defaultValue={suggestedName}
               placeholder="Your name"
             />
-            {/* Optional and unverified, exactly as at signup — phone_verified
-                stays false until SMS OTP ships (Plan v2 D2). Collected so the
-                field agent has a number to call on the doorstep. */}
-            <Field
-              label="Mobile (optional)"
-              name="phone"
-              type="tel"
-              autoComplete="tel"
-              placeholder="98765 43210"
-            />
+            {/* Required, exactly as at signup (FD20). */}
+            <PhoneField />
 
             {vendorType === 'fleet' ? (
               <>
                 <Field
-                  label="EPR registration ID"
+                  label="EPR registration ID (optional)"
                   name="eprRegId"
                   type="text"
-                  required
                   placeholder="EPR/…"
                 />
                 <Field

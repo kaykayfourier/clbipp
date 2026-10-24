@@ -44,17 +44,17 @@ export async function updatePhone(
   const raw = formData.get('phone')
   const input = typeof raw === 'string' ? raw.trim() : ''
 
-  // Clearing the field is a legitimate answer — phone is nullable and optional
-  // at signup, so "I'd rather not give you one" has to stay expressible.
-  let phone: string | null = null
-  if (input !== '') {
-    // The SAME normaliser signup uses, so a number saved here and one saved at
-    // signup are stored in identical form (+91XXXXXXXXXX). Two formats for one
-    // column is how a later SMS integration breaks on half the rows.
-    phone = normaliseIndianPhone(input)
-    if (phone === null) {
-      return { error: 'Enter a valid 10-digit Indian mobile number.', ok: false }
-    }
+  // Clearing is refused: a phone is required at signup since FD20 (the agent
+  // calls it on the doorstep), so removing it here would undo that rule. The
+  // column stays nullable only for accounts made before it was required.
+  if (input === '') return { error: 'Enter your mobile number.', ok: false }
+
+  // The SAME normaliser signup uses, so a number saved here and one saved at
+  // signup are stored in identical form (+91XXXXXXXXXX). Two formats for one
+  // column is how a later SMS integration breaks on half the rows.
+  const phone = normaliseIndianPhone(input)
+  if (phone === null) {
+    return { error: 'Enter a valid 10-digit Indian mobile number.', ok: false }
   }
 
   // RLS scopes this to the caller's own row; the eq() is belt-and-braces so the

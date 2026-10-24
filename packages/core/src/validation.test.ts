@@ -255,24 +255,25 @@ describe("normaliseIndianPhone", () => {
 });
 
 describe("signup schemas", () => {
-  const individual = {
+  const noPhone = {
     email: "vendor@example.com",
     password: "hunter2",
     fullName: "Vendor One",
   };
+  const individual = { ...noPhone, phone: "9876543210" };
 
-  it("accepts an individual signup with no phone at all", () => {
-    const result = signupIndividualSchema.safeParse(individual);
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.phone).toBeUndefined();
+  it("requires a phone (FD20)", () => {
+    const result = signupIndividualSchema.safeParse(noPhone);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]?.message).toBe("Enter your mobile number.");
   });
 
-  it("treats a blank phone field as absent, not invalid", () => {
-    // An untouched optional input posts "" through FormData, which must not
-    // read as a failed validation.
+  it("reads a blank phone field as missing, not malformed", () => {
+    // An untouched input posts "" through FormData; the message should say
+    // "enter it", not "that's not a number".
     const result = signupIndividualSchema.safeParse({ ...individual, phone: "   " });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.phone).toBeUndefined();
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]?.message).toBe("Enter your mobile number.");
   });
 
   it("normalises a supplied phone rather than storing it as typed", () => {
@@ -297,6 +298,20 @@ describe("signup schemas", () => {
     expect(signupFleetSchema.safeParse(individual).success).toBe(false);
   });
 
+  it("accepts a fleet signup without an EPR registration ID, stored as absent", () => {
+    const result = signupFleetSchema.safeParse({
+      ...individual,
+      companyName: "Acme Batteries Pvt Ltd",
+      eprRegId: "",
+      gstNumber: "22AAAAA0000A1Z5",
+      panNumber: "AAAAA0000A",
+      businessAddress: "12 Industrial Area, New Delhi",
+    });
+    expect(result.success).toBe(true);
+    // undefined, never "" — signUpWithProfile then leaves epr_reg_id null.
+    if (result.success) expect(result.data.eprRegId).toBeUndefined();
+  });
+
   it("accepts a complete fleet signup", () => {
     const result = signupFleetSchema.safeParse({
       ...individual,
@@ -315,7 +330,7 @@ describe("signup schemas", () => {
 // no second. Both sets are built from one shared shape in validation.ts, so
 // these tests plus the signup ones above are what stop the two drifting.
 describe("onboarding schemas", () => {
-  const details = { fullName: "Vendor One" };
+  const details = { fullName: "Vendor One", phone: "9876543210" };
 
   it("accepts details with neither an email nor a password", () => {
     // The whole reason this schema exists. Reusing signupIndividualSchema here
@@ -330,10 +345,8 @@ describe("onboarding schemas", () => {
     if (result.success) expect(result.data.phone).toBe("+919876543210");
   });
 
-  it("treats a blank phone field as absent", () => {
-    const result = onboardingIndividualSchema.safeParse({ ...details, phone: "" });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.phone).toBeUndefined();
+  it("requires a phone, exactly as signup does (FD20)", () => {
+    expect(onboardingIndividualSchema.safeParse({ ...details, phone: "" }).success).toBe(false);
   });
 
   it("rejects a malformed phone", () => {

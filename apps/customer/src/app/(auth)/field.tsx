@@ -56,3 +56,22 @@ export function Field({ label, name, type, ...props }: FieldProps) {
     </label>
   )
 }
+
+// The mobile field, identical on both signup forms and onboarding. Required
+// since FD20; the pattern is a loose first check (digits, spaces, +, -) and the
+// server's normaliseIndianPhone is the real one. Unverified — no OTP (Plan v2 D2).
+export function PhoneField() {
+  return (
+    <Field
+      label="Mobile"
+      name="phone"
+      type="tel"
+      required
+      inputMode="tel"
+      autoComplete="tel"
+      pattern="[0-9 +\-]{10,16}"
+      title="A 10-digit Indian mobile number"
+      placeholder="98765 43210"
+    />
+  )
+}

@@ -74,12 +74,13 @@ export function PhoneForm({ phone }: { phone: string | null }) {
         type="tel"
         inputMode="tel"
         autoComplete="tel"
+        required
         defaultValue={phone ?? ''}
         placeholder="98765 43210"
         className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-green"
       />
       <span className="text-[11px] text-text-secondary">
-        Our agent uses this to reach you. Leave blank to remove.
+        Our agent uses this to reach you.
       </span>
 
       {state.error && <span className="text-[11px] text-error-text">{state.error}</span>}

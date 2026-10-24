@@ -240,14 +240,21 @@ export function normaliseIndianPhone(raw: string): string | null {
  * settled both. One shape means the two paths cannot drift into validating the
  * same field differently.
  */
+// A blank input posts "" through FormData. Read it as "not given" so an empty
+// required field fails with the "enter it" message, not the "malformed" one,
+// and an empty optional field is stored as null rather than "".
+const blankAsAbsent = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
+
 export const profileDetailsBaseSchema = z.object({
     fullName: z.string().trim().min(2, "Enter your full name.").max(100),
+    // Required since the additional feedback round (FD20): the agent calls this
+    // number on the doorstep. Format-checked only — no OTP, for the reason in
+    // Plan v2 D2 (paid SMS provider + DLT), so phone_verified stays false.
     phone: z.preprocess(
-        (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-        z.string()
+        blankAsAbsent,
+        z.string({ error: "Enter your mobile number." })
             .transform((v) => normaliseIndianPhone(v))
-            .refine((v): v is string => v !== null, "Enter a valid 10-digit Indian mobile number.")
-            .optional(),
+            .refine((v): v is string => v !== null, "Enter a valid 10-digit Indian mobile number."),
     ),
 });
 
@@ -256,7 +263,9 @@ export const profileDetailsBaseSchema = z.object({
 // on top of, so this deliberately stops at "not blank".
 const fleetFieldsShape = {
     companyName: z.string().trim().min(2, "Enter the company name."),
-    eprRegId: z.string().trim().min(1, "EPR registration ID is required."),
+    // Optional since the additional feedback round: a fleet can register before
+    // its EPR registration comes through. Saved when given.
+    eprRegId: z.preprocess(blankAsAbsent, z.string().trim().max(100).optional()),
     gstNumber: z.string().trim().min(1, "GST number is required."),
     panNumber: z.string().trim().min(1, "PAN number is required."),
     businessAddress: z.string().trim().min(5, "Enter the registered address."),
