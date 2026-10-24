@@ -380,6 +380,47 @@ enum MarginTier {
   generous
 }
 
+// ── Additional feedback (additional_feedback · AF0–AF5) ──────────────────────
+
+// Where a vehicle number was entered (AF2 · FD25).
+enum VehicleStage {
+  collection
+  dropoff
+}
+
+// An agent's request to collect a line without a tag (AF4 · FD22). `pending`
+// BLOCKS collection; `approved` writes BatteryItem.untaggedReason; `rejected`
+// means "tag it"; `withdrawn` is the agent tagging it after all, or asking again.
+enum TagExceptionStatus {
+  pending
+  approved
+  rejected
+  withdrawn
+}
+
+// Where an offer round's price came from (AF5 · FD23/FD24).
+enum OfferRoundBasis {
+  engine
+  office
+  agent
+}
+
+// How a round ended. Null = the round the vendor is looking at now.
+enum OfferRoundOutcome {
+  accepted
+  declined
+  superseded
+}
+
+// What an in-app agent notice is about (AF3 · FD21). In-app only — web push is
+// deliberately not built (§12.5 of docs/PLAN_FEEDBACK_V2.md).
+enum AgentNoticeKind {
+  job_reassigned_to_you
+  job_reassigned_away
+  office_price_set
+  tag_exception_decided
+}
+
 // ── Models ───────────────────────────────────────────────────────────────────
 
 model Profile {
@@ -455,6 +496,12 @@ model Profile {
   adminAudits        AdminAudit[]
   resolvedExceptions ItemException[]
   marketOverrides    MarketPrices[]
+
+  // additional_feedback (AF0). Named because TagException points at Profile twice.
+  agentNotices           AgentNotice[]
+  officePricesSet        OfficePrice[]
+  tagExceptionsRequested TagException[] @relation("TagExceptionRequester")
+  tagExceptionsDecided   TagException[] @relation("TagExceptionDecider")
 
   @@index([role])
   @@map("profiles")
@@ -573,6 +620,13 @@ model Pickup {
   collectionRunId String? @map("collection_run_id")
   runSequence     Int?    @map("run_sequence")
 
+  // ── The vehicle the batteries left the vendor's site in (AF2 · FD25) ──
+  // Normalised registration (`normaliseVehicleReg` in @clbipp/core/vehicle),
+  // written by `confirmCollection`. Null on pickups collected before it existed.
+  // Prefilled from the run, then the agent's profile; a difference from that
+  // prefill is a VehicleCorrection row, never a silent overwrite.
+  collectionVehicle String? @map("collection_vehicle")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -589,6 +643,13 @@ model Pickup {
   receipt         PickupReceipt?
   invoice         Invoice?
   safetyChecklist SafetyChecklist?
+
+  // additional_feedback (AF0)
+  vehicleCorrections VehicleCorrection[]
+  tagExceptions      TagException[]
+  officePrices       OfficePrice[]
+  offerRounds        OfferRound[]
+  agentNotices       AgentNotice[]
 
   @@index([vendorId])
   @@index([agentId])
@@ -697,10 +758,11 @@ model BatteryItem {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  pickup       Pickup            @relation(fields: [pickupId], references: [id], onDelete: Cascade)
-  exceptions   ItemException[]
-  tag          ItemTag?
-  custodyCheck CustodyItemCheck?
+  pickup        Pickup            @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  exceptions    ItemException[]
+  tag           ItemTag?
+  custodyCheck  CustodyItemCheck?
+  tagExceptions TagException[]
 
   @@index([pickupId])
   // /quotes and /trace/[traceId] both look an item up by its engine run id.
@@ -1048,13 +1110,19 @@ model CustodyBatch {
   // Rendered lazily on first download, same as PickupReceipt.pdfUrl (Batch 7b).
   pdfUrl String? @map("pdf_url")
 
+  // AF2 · FD25. The vehicle that brought this hand-off to the hub, normalised.
+  // Prefilled from the pickups' `collectionVehicle`; a pickup whose collection
+  // vehicle differs gets a VehicleCorrection row. Null on batches before AF2.
+  vehicle String?
+
   handedOffAt DateTime @default(now()) @map("handed_off_at")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  agent      Profile            @relation(fields: [agentId], references: [id])
-  facility   Facility           @relation(fields: [facilityId], references: [id])
-  pickups    Pickup[]
-  itemChecks CustodyItemCheck[]
+  agent              Profile             @relation(fields: [agentId], references: [id])
+  facility           Facility            @relation(fields: [facilityId], references: [id])
+  pickups            Pickup[]
+  itemChecks         CustodyItemCheck[]
+  vehicleCorrections VehicleCorrection[]
 
   @@index([agentId, handedOffAt(sort: Desc)])
   @@map("custody_batches")
@@ -1352,4 +1420,152 @@ model CustodyItemCheck {
 
   @@index([custodyBatchId])
   @@map("custody_item_checks")
+}
+
+// ── Additional feedback (additional_feedback · AF0) ──────────────────────────
+// docs/CLBIPP_Additional_Feedback_Changes_Short.docx, decisions FD20–FD25 in §12
+// of docs/PLAN_FEEDBACK_V2.md — OURS and provisional.
+//
+// 🔴 NONE OF THIS IS A LIFECYCLE STAGE (FD0). A correction, an untagged-battery
+// request, an office price, an offer round and a notice are FACTS about a pickup.
+//
+// 🔴 RLS: all six tables are closed (AD3) — enabled with ZERO policies, in the
+// migration itself and in supabase/policies.sql. Readers and writers are Prisma
+// (agent/admin) or the service role (the customer app's accept/decline marks an
+// offer round); the vendor's own token reads none of it.
+
+// A vehicle number that differed from what the app prefilled (AF2 · FD25).
+// Written only on a difference, so an empty table means "every prefill held".
+model VehicleCorrection {
+  id             String       @id @default(uuid())
+  pickupId       String       @map("pickup_id")
+  custodyBatchId String?      @map("custody_batch_id")
+  stage          VehicleStage
+  // The prefill (normalised) and what the agent entered (normalised).
+  fromReg        String       @map("from_reg")
+  toReg          String       @map("to_reg")
+  correctedBy    String       @map("corrected_by") @db.Uuid
+  correctedAt    DateTime     @default(now()) @map("corrected_at")
+
+  pickup       Pickup        @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  custodyBatch CustodyBatch? @relation(fields: [custodyBatchId], references: [id], onDelete: SetNull)
+
+  @@index([pickupId])
+  @@map("vehicle_corrections")
+}
+
+// An agent asking the office to let a line leave WITHOUT a tag (AF4 · FD22).
+//
+// 🔴 Reverses FD13's "never a hard stop": while a line's request is `pending`
+// the pickup cannot be collected. Approval writes BatteryItem.untaggedReason,
+// so every downstream reader (receipt, hub check-in, verify-seed) is unchanged.
+// One pending row per line, enforced in the action — no partial index (Prisma
+// cannot express one; same posture as EngineConfig.isActive).
+model TagException {
+  id            String             @id @default(uuid())
+  batteryItemId String             @map("battery_item_id")
+  pickupId      String             @map("pickup_id")
+  reason        String
+  requestedBy   String             @map("requested_by") @db.Uuid
+  requestedAt   DateTime           @default(now()) @map("requested_at")
+  status        TagExceptionStatus @default(pending)
+  decidedBy     String?            @map("decided_by") @db.Uuid
+  decidedAt     DateTime?          @map("decided_at")
+  // Required to reject (it is what the agent reads); optional to approve.
+  decisionNote  String?            @map("decision_note")
+
+  batteryItem BatteryItem @relation(fields: [batteryItemId], references: [id], onDelete: Cascade)
+  pickup      Pickup      @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  requester   Profile     @relation("TagExceptionRequester", fields: [requestedBy], references: [id])
+  decider     Profile?    @relation("TagExceptionDecider", fields: [decidedBy], references: [id])
+
+  @@index([batteryItemId])
+  @@index([pickupId])
+  @@index([status])
+  @@map("tag_exceptions")
+}
+
+// A price the OFFICE set for a pickup (AF5 · FD23). Append-only; the latest row
+// per pickup is the current office price.
+//
+// 🔴 Setting one does NOT touch Offer — the agent applies it (presents it, or
+// re-offers it), which is what records the acknowledgement. The vendor never
+// sees this table, the engine figure or the reason.
+model OfficePrice {
+  id             String    @id @default(uuid())
+  pickupId       String    @map("pickup_id")
+  // The engine's recommendation when this was set (recommendedOfferTotal).
+  enginePaise    Int       @map("engine_paise")
+  // The price on the offer at that moment; null when nothing was offered yet.
+  previousPaise  Int?      @map("previous_paise")
+  pricePaise     Int       @map("price_paise")
+  reason         String
+  setBy          String    @map("set_by") @db.Uuid
+  setAt          DateTime  @default(now()) @map("set_at")
+  acknowledgedBy String?   @map("acknowledged_by") @db.Uuid
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  agentNote      String?   @map("agent_note")
+
+  pickup Pickup       @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  setter Profile      @relation(fields: [setBy], references: [id])
+  rounds OfferRound[]
+
+  @@index([pickupId, setAt(sort: Desc)])
+  @@map("office_prices")
+}
+
+// Every price put in front of the vendor, first offer to final (AF5 · FD24).
+//
+// `Offer.estimatedPrice` stays the CURRENT price — a cache of the latest round,
+// the way pickups.status caches status_events. Round 1 was backfilled for every
+// offer that existed when this table was created.
+model OfferRound {
+  id            String             @id @default(uuid())
+  pickupId      String             @map("pickup_id")
+  roundNo       Int                @map("round_no")
+  pricePaise    Int                @map("price_paise")
+  basis         OfferRoundBasis
+  officePriceId String?            @map("office_price_id")
+  note          String?
+  presentedBy   String?            @map("presented_by") @db.Uuid
+  presentedAt   DateTime           @default(now()) @map("presented_at")
+  outcome       OfferRoundOutcome?
+  outcomeAt     DateTime?          @map("outcome_at")
+
+  pickup      Pickup       @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  officePrice OfficePrice? @relation(fields: [officePriceId], references: [id], onDelete: SetNull)
+
+  @@unique([pickupId, roundNo])
+  @@map("offer_rounds")
+}
+
+// An in-app notice to one agent (AF3 · FD21). There is no push: the agent sees
+// it on the day view the next time it renders. "Unread" is `readAt IS NULL`.
+model AgentNotice {
+  id        String          @id @default(uuid())
+  agentId   String          @map("agent_id") @db.Uuid
+  pickupId  String?         @map("pickup_id")
+  kind      AgentNoticeKind
+  message   String
+  createdAt DateTime        @default(now()) @map("created_at")
+  readAt    DateTime?       @map("read_at")
+
+  agent  Profile @relation(fields: [agentId], references: [id])
+  pickup Pickup? @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, readAt])
+  @@map("agent_notices")
+}
+
+// Operational settings an admin can change (AF5 · FD24). ONE row, id 'default'.
+// 🔴 A missing row FAILS CLOSED to a 0% band (every price change goes through
+// the office) — `getNegotiationBandBp()` in @clbipp/core, never a silent 10%.
+model OpsSettings {
+  id                String   @id @default("default")
+  // Basis points above the sanctioned price an agent may re-offer. 1000 = 10%.
+  negotiationBandBp Int      @default(1000) @map("negotiation_band_bp")
+  updatedBy         String?  @map("updated_by") @db.Uuid
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("ops_settings")
 }

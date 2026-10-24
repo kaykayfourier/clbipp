@@ -153,7 +153,9 @@ async function main() {
     // first one that happened to.
     ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin","item.pathway",
      // feedback_logistics (FV10–FV15)
-     "tag.issue","container.register","container.status","run.create","run.cancel","custody.reconcile","agent.duty","pickup.assign_collector"].includes(a.action)),
+     "tag.issue","container.register","container.status","run.create","run.cancel","custody.reconcile","agent.duty","pickup.assign_collector",
+     // additional_feedback (AF3–AF5)
+     "pickup.reassign","price.office_set","tag_exception.decide","settings.update"].includes(a.action)),
     `${audits.length} rows`)
 
   // 12 — FV2/FV1 evidence rules, made a fixture rather than a hope.
@@ -273,6 +275,63 @@ async function main() {
     "FV15: agent@test on duty, ≥1 other agent off duty",
     agents.some((a) => a.email === "agent@test" && a.dutyStatus === "on_duty") && agents.some((a) => a.dutyStatus === "off_duty"),
     agents.map((a) => `${a.email}=${a.dutyStatus}`).join(" "),
+  )
+
+  // 14 — additional_feedback (AF0, 2026-10-24). One check per fixture §12.3 of
+  // docs/PLAN_FEEDBACK_V2.md asks for, plus the RLS posture of the six tables.
+
+  // AF5 · FD24 — the settings row, at the decided default. Missing fails closed
+  // to 0% in code, which would make every re-offer go through the office.
+  const ops = await prisma.opsSettings.findUnique({ where: { id: "default" } })
+  check("AF5: ops_settings 'default' row at a 10% negotiation band", ops?.negotiationBandBp === 1000, String(ops?.negotiationBandBp ?? "missing"))
+
+  // AF5 · FD24 — every offer has its round 1, at the offer's price, and an
+  // accepted offer's round says so. Offer.estimatedPrice caches the latest round.
+  const offersWithRounds = await prisma.offer.findMany({
+    select: { pickupId: true, estimatedPrice: true, acceptedAt: true, pickup: { select: { offerRounds: { orderBy: { roundNo: "desc" } } } } },
+  })
+  const roundDrift = offersWithRounds.filter((o) => {
+    const latest = o.pickup.offerRounds[0]
+    return !latest || latest.pricePaise !== o.estimatedPrice || (o.acceptedAt !== null) !== (latest.outcome === "accepted")
+  })
+  check(
+    "AF5: every offer's latest round matches its price and acceptance",
+    offersWithRounds.length > 0 && roundDrift.length === 0,
+    roundDrift.map((o) => o.pickupId).join(",") || `${offersWithRounds.length} offers`,
+  )
+
+  // AF4 · FD22 — PKP-105's untagged line was APPROVED by the office, and
+  // nothing in a fresh seed is waiting on one.
+  const untaggedLine = await prisma.batteryItem.findFirst({
+    where: { pickupId: "PKP-2026-000105", untaggedReason: { not: null } },
+    select: { tagExceptions: { select: { status: true, decidedBy: true } } },
+  })
+  check(
+    "AF4: PKP-2026-000105's untagged line has an APPROVED request",
+    !!untaggedLine && untaggedLine.tagExceptions.some((t) => t.status === "approved" && t.decidedBy !== null),
+    untaggedLine ? untaggedLine.tagExceptions.map((t) => t.status).join(",") : "no untagged line",
+  )
+  check("AF4: no pending untagged-battery request in a fresh seed", (await prisma.tagException.count({ where: { status: "pending" } })) === 0)
+
+  // AF2 · FD25 — every collected load records its vehicle; so does the drop-off.
+  const noVehicle = await prisma.pickup.count({
+    where: { status: { in: ["collected", "tested", "processed", "recovered", "certified"] }, collectionVehicle: null },
+  })
+  check("AF2: every collected pickup records its collection vehicle", noVehicle === 0, `${noVehicle} without`)
+  const batchVehicle = await prisma.custodyBatch.findUnique({ where: { id: "00000000-0000-4000-8000-000000000301" }, select: { vehicle: true } })
+  check("AF2: CB-2026-000301 records its drop-off vehicle", !!batchVehicle?.vehicle, batchVehicle?.vehicle ?? "null")
+
+  // 🔴 AD3 posture: RLS on, ZERO policies, on all six. grants.sql hands anon
+  // SELECT on every future table, so RLS off here would make them public.
+  const AF_TABLES = ["vehicle_corrections", "tag_exceptions", "office_prices", "offer_rounds", "agent_notices", "ops_settings"]
+  const rls = await prisma.$queryRaw<Array<{ relname: string; relrowsecurity: boolean }>>`
+    select relname, relrowsecurity from pg_class where relkind = 'r' and relname = any(${AF_TABLES})`
+  const policyCount = await prisma.$queryRaw<Array<{ n: bigint }>>`
+    select count(*)::bigint as n from pg_policies where tablename = any(${AF_TABLES})`
+  check(
+    "AF0: the six new tables are RLS-on with zero policies",
+    rls.length === AF_TABLES.length && rls.every((r) => r.relrowsecurity) && Number(policyCount[0].n) === 0,
+    `${rls.filter((r) => r.relrowsecurity).length}/${AF_TABLES.length} on, ${policyCount[0].n} policies`,
   )
 
   console.log("")

@@ -403,3 +403,23 @@ alter table collection_runs enable row level security;
 alter table run_containers enable row level security;
 alter table item_tags enable row level security;
 alter table custody_item_checks enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Additional feedback (additional_feedback, 2026-10-24 · AF0–AF5)
+-- ---------------------------------------------------------------------------
+-- Vehicle corrections, untagged-battery requests, office prices, offer rounds,
+-- agent notices and the one ops-settings row. Same posture as the two blocks
+-- above: readers and writers are Prisma (table owner) in the agent and admin
+-- apps, plus the customer app's SERVICE-ROLE accept/decline marking an offer
+-- round — so RLS on with ZERO policies keeps all six closed to PostgREST, and
+-- the vendor's own token reads none of them (the office's figures and reasons
+-- must never reach a vendor).
+--
+-- ⚠ The migration runs these six lines too, so there is no window. Idempotent.
+-- ---------------------------------------------------------------------------
+alter table vehicle_corrections enable row level security;
+alter table tag_exceptions enable row level security;
+alter table office_prices enable row level security;
+alter table offer_rounds enable row level security;
+alter table agent_notices enable row level security;
+alter table ops_settings enable row level security;

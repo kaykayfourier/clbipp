@@ -124,6 +124,16 @@ const DROPPED_OFF: PickupStatus[] = ["tested", "processed", "recovered", "certif
  */
 const agentFee = (quotePaise: number) => Math.round(quotePaise * 0.1)
 
+/**
+ * AF2 · FD25 — the registration agent@test collects and drops off in, as
+ * `normaliseVehicleReg()` (@clbipp/core/vehicle) stores it: uppercase, no
+ * spaces or dashes, district padded to two digits. It is the reg inside that
+ * agent's profile vehicle, "Tata Ace · DL 1LR 4471".
+ * 🔴 RESTATED, not imported (database must not import core); verify-seed checks
+ * the seeded pickups carry it.
+ */
+const SEED_VEHICLE_REG = "DL01LR4471"
+
 // Delhi NCR, roughly — the demo pickups all sit in this area.
 const GEO = { lat: 28.5355, lng: 77.391 }
 
@@ -177,6 +187,14 @@ async function ensureAuthUser(
  * schema only cascades from Pickup to BatteryItem.
  */
 async function wipe() {
+  // additional_feedback (AF0). All five pickup children cascade from `pickups`
+  // anyway; stated first because three of them also hold FKs to `profiles`,
+  // which this function never wipes. offer_rounds before office_prices (FK).
+  await prisma.agentNotice.deleteMany()
+  await prisma.offerRound.deleteMany()
+  await prisma.officePrice.deleteMany()
+  await prisma.tagException.deleteMany()
+  await prisma.vehicleCorrection.deleteMany()
   // feedback_logistics (FV10–FV12). Tags and hub checks point at battery items,
   // box loads at runs and boxes; all four go before the items and pickups they
   // reference. Runs and boxes themselves go after the pickups (which hold the
@@ -387,6 +405,14 @@ function demoTraceId(pickupId: string, index: number): string {
 
 /** @returns the seeded hub facility — CustodyBatch needs its id. */
 async function seedReferenceData(adminId: string) {
+  // AF5 · FD24 — the one settings row, back at the decided 10% band. Upserted,
+  // not wiped: the migration inserts it, and a missing row fails closed to 0%.
+  await prisma.opsSettings.upsert({
+    where: { id: "default" },
+    update: { negotiationBandBp: 1000, updatedBy: null },
+    create: { id: "default", negotiationBandBp: 1000 },
+  })
+
   await prisma.marketPrices.create({
     data: {
       ...MARKET_PRICES,
@@ -1085,6 +1111,8 @@ async function seed() {
         0,
       ),
       receivingStaffName: "Sunita Rao",
+      // AF2 — the van that brought it, the same one the pickups left in.
+      vehicle: SEED_VEHICLE_REG,
       // Agent-attested, no signature or PDF yet — Batches 7a and 7b fill those
       // in. GPS is the hub's own coordinates, which is where the hand-off is.
       lat: facility.lat,
@@ -1193,6 +1221,8 @@ async function seed() {
         agentFeePaise,
         // Null on `collected` is the derived "pending drop-off" state (D5).
         custodyBatchId: DROPPED_OFF.includes(spec.status) ? CUSTODY_BATCH_ID : null,
+        // AF2 · FD25 — every collected load records the vehicle it left in.
+        collectionVehicle: reachedIndex >= LIFECYCLE.indexOf("collected") ? SEED_VEHICLE_REG : null,
         conditionFlags: [...new Set(spec.items.map((i) => i.condition))],
         // The agent's LIVE jobs sit on today's slate; everything past `offered`
         // keeps its historical slot. This is what makes the Field Agent day
@@ -1225,8 +1255,13 @@ async function seed() {
             // seeded line with none would contradict the screen that enforces
             // it. Falls back to the first available image rather than nothing.
             photoUrls: itemPhotos[idx] ? [itemPhotos[idx]] : itemPhotos.filter(Boolean).slice(0, 1) as string[],
-            // Agent-confirmed half is only filled once collection has happened.
-            ...(reachedIndex >= LIFECYCLE.indexOf("collected")
+            // Agent-confirmed half: filled once the agent has PRICED the load,
+            // i.e. from `offered` — presentOffer refuses while any line is
+            // unpriced, so an offer over unpriced items is a state the app
+            // cannot produce (AF5: the admin Price panel on the seeded offer
+            // read ₹0 until this changed). The reactivated fixture keeps its
+            // old shape — fixture 8 is about the stale agent, not the items.
+            ...(reachedIndex >= LIFECYCLE.indexOf("offered") && !spec.reactivatedFrom
               ? {
                   chemistry: item.chemistry,
                   confirmedWeightKg: item.weightKg,
@@ -1560,6 +1595,8 @@ async function seed() {
           // FV13 — an all-second-life load is offered as refurbish.
           pathway: spec.items.every((i) => i.pathway === "refurbish") ? "refurbish" : "recycle",
           estimatedPrice: quote,
+          // Presented at the engine's figure (round 1 below says `engine`).
+          recommendedPricePaise: quote,
           rationale: spec.items.every((i) => i.pathway === "refurbish")
             ? "Healthy packs retired on range, not failure — fit for second-life stationary storage."
             : "Material recovery is the best route for this load — chemistry and condition both support full recycling.",
@@ -1585,6 +1622,23 @@ async function seed() {
           // from the stage index can't drift, because it is the same arithmetic
           // the status-event loop below uses.
           createdAt: day(Math.max(spec.daysAgo - LIFECYCLE.indexOf("offered"), 0)),
+        },
+      })
+
+      // AF5 · FD24 — round 1, exactly as presentOffer writes it: the engine's
+      // figure, presented by the agent, accepted when the offer was. Every
+      // seeded offer is a one-round negotiation; the demo makes round 2.
+      const offerRow = await prisma.offer.findUniqueOrThrow({ where: { pickupId: spec.id }, select: { createdAt: true, acceptedAt: true } })
+      await prisma.offerRound.create({
+        data: {
+          pickupId: spec.id,
+          roundNo: 1,
+          pricePaise: quote,
+          basis: "engine",
+          presentedBy: agentId,
+          presentedAt: offerRow.createdAt,
+          outcome: offerRow.acceptedAt ? "accepted" : null,
+          outcomeAt: offerRow.acceptedAt,
         },
       })
     }
@@ -2044,6 +2098,35 @@ async function seedLogistics({ adminId, agentId }: { adminId: string; agentId: s
       const itemId = demoItemId(spec.id, idx)
       if (spec.id === UNTAGGED_FIXTURE.pickupId && idx === UNTAGGED_FIXTURE.index) {
         await prisma.batteryItem.update({ where: { id: itemId }, data: { untaggedReason: UNTAGGED_FIXTURE.reason } })
+        // AF4 · FD22 — since AF4 a line leaves untagged only once the office
+        // approves the agent's request, and the approval is what writes the
+        // reason above. Seeded as that approved request, with its audit row.
+        const requestedAt = day(Math.max(spec.daysAgo - collectedIdx, 0) + 0.02)
+        const decidedAt = day(Math.max(spec.daysAgo - collectedIdx, 0) + 0.01)
+        const request = await prisma.tagException.create({
+          data: {
+            batteryItemId: itemId,
+            pickupId: spec.id,
+            reason: UNTAGGED_FIXTURE.reason,
+            requestedBy: agentId,
+            requestedAt,
+            status: "approved",
+            decidedBy: adminId,
+            decidedAt,
+          },
+        })
+        await prisma.adminAudit.create({
+          data: {
+            actorId: adminId,
+            // 🔴 Literal from ADMIN_AUDIT_ACTIONS (packages/core/src/audit.ts).
+            action: "tag_exception.decide",
+            subjectType: "tag_exception",
+            subjectId: request.id,
+            before: { status: "pending" },
+            after: { status: "approved", batteryItemId: itemId, pickupId: spec.id },
+            createdAt: decidedAt,
+          },
+        })
         continue
       }
       await prisma.itemTag.update({
