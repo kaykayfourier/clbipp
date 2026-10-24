@@ -20,12 +20,12 @@ The screens are kept short on purpose; the explanations live here.
 | 3 | Agent app · agent | Taps **Arrived on site** | arrived |
 | 4 | Agent app · agent | Safety checklist | |
 | 5 | Agent app · agent | Checks each line: chemistry, weight, condition, photos | |
-| 6 | Agent app · agent | Calls the office, agrees the price, presents the offer | offered |
-| 7 | Vendor app · vendor | Accepts (or declines) the offer | |
+| 6 | Agent app · agent | Presents the offer: the office's price if it set one, else the recommendation | offered |
+| 7 | Vendor app · vendor | Accepts or declines. A decline is not final: the agent can re-offer, the office can set a new price | |
 | 8 | Agent app · agent | Collects now, or books a collection date | |
-| 9 | Agent app · agent | Tags each line, vendor signs, confirms collection | collected |
+| 9 | Agent app · agent | Tags each line (or the office approves one without a tag), enters the vehicle number, vendor signs, confirms | collected |
 | 10 | Vendor app · vendor | Chooses UPI or bank; gets paid, receipt and invoice | |
-| 11 | Agent app · agent | Drops the load at the hub | |
+| 11 | Agent app · agent | Drops the load at the hub, with the vehicle number | |
 | 12 | Admin · hub | Hub check-in: scans each tag in | |
 | 13 | Admin · office | Lifecycle: advances the hub batch | tested |
 | 14 | Admin · office | Manifests: builds one per recycler and dispatches it | |
@@ -49,7 +49,10 @@ extra stages.
   booking: the price comes after the agent's inspection.
 - **The offer.** Shows the price we will pay. **Accept** it, **Decline** it
   (this does not cancel: the agent or the office can come back with another
-  price, and you can still accept), or **Talk to us**.
+  price, and you can still accept the one you declined), or **Talk to us**. If
+  the price changes while the screen is open, **Accept** stops and shows the new
+  price, so you never agree to a figure you did not see. A new price shows as
+  "We have updated our offer".
 - **Getting paid.** After the agent collects, choose UPI or bank. The amount is
   exactly the offer you accepted. Receipt and invoice are on the payment screen.
 - **Tracking.** Every pickup has a timeline you can share with a link.
@@ -70,15 +73,31 @@ button at the bottom; it always takes you to the next step.
    pack** (capacity, health, age, cycles). The app works out a recommended price.
    Other batteries are priced from the rate card.
 5. **Offer.** The recommended total is for you only; the vendor never sees it.
-   **Call the office**, agree the price, type it in, and add a short note if it
-   is different from the recommendation (for example "Agreed with Rahul"). Leave
-   the price blank to offer the recommendation as it is. Then **Present offer**.
+   You do **not** type a price. If the price should change, **Call the office**:
+   they set it on their screen and it appears on yours by itself ("Office price
+   ₹X · set by … · reason"). Add a note if you like, then **Present ₹X**. With no
+   office price, **Present recommended ₹Y**.
 6. After you present, the items are **locked**. If something is wrong, call the
    office.
-7. When the vendor accepts: **Collect today**, or book a later date.
-8. **Collection:** put one tag from your sheet on each line (or say why there is
-   none), take the vendor's signature and photos, then confirm.
-9. **Drop off at the hub** at the end of the day.
+7. **If the vendor declines** (or wants more), the offer screen shows every
+   round. **Re-offer** a new price with a note, up to the limit shown ("You can
+   offer up to ₹… (10% above ₹…)"). Above that, call the office; their new price
+   appears on the screen to present. The vendor's **Accept** is final: after it,
+   nobody can change the price.
+8. When the vendor accepts: **Collect today**, or book a later date.
+9. **Collection:** put one tag from your sheet on each line. No tag for a line?
+   **Ask the office**, with the reason; collection stays blocked until they
+   approve (the screen updates by itself, and there is a call button). If they
+   say "tag it", tag it. Enter the **vehicle number** (filled in from your run or
+   your profile; change it if you came in a different vehicle). Then the vendor's
+   signature and photos, and confirm.
+10. **Drop off at the hub** at the end of the day. The vehicle number is filled in
+    from the collection; change it if the load came in a different one.
+
+**Notices.** Messages from the office appear at the top of your day view: a job
+moved to you or away from you, a new office price, a decision on an untagged
+battery. Tap **Got it** to clear one. A job moved away from you disappears from
+your list.
 
 **Runs.** If the office gave you a run, it is on your day view: open it, scan a
 box to start, then visit the stops in order. Every tag you stick goes into the
@@ -89,9 +108,18 @@ box you scanned.
 - **Dispatch.** New requests, newest first. Open one and pick an agent; the list
   is ranked by who is free, how busy they are that day, then distance. Nothing
   is assigned automatically.
-- **Who collects.** After a vendor accepts an offer, the same dispatch page lets
-  you hand the collection to a different agent. The agent who inspected stays on
-  the record. (Pilot option — see section 7.)
+- **Reassign.** A scheduled job, or one with an offer that is not collected yet,
+  can be moved to another agent from its dispatch page: pick from the ranked list
+  and give a reason (kept in the audit log, never shown to the vendor). Both
+  agents get a notice in their app. Not possible once the agent has arrived, or
+  for a stop on an open run (cancel the run first). **Assignment history** on the
+  dispatch and pickup pages lists every assignment with who and why.
+- **Price** (on a pickup's page). The engine's recommendation, the price offered
+  now and the vendor's response, every office price (who set it, why, and when
+  the agent presented it), and every negotiation round from the first offer to
+  the final one. **Change price** sets the office price: amount and reason. It
+  does not change the offer by itself; the agent presents it. Not possible once
+  the vendor has accepted.
 - **Runs.** A same-day route for one agent and one van. Pick the stops; requests
   get assigned to that agent, and accepted collections inspected by someone else
   get that agent as their collector.
@@ -107,8 +135,16 @@ box you scanned.
   kg from the recycler's report (a refurbisher gets an outcome note instead).
 - **Certify** (from Lifecycle) once a pickup is *recovered*. The certificate is
   created and the vendor can download it.
-- **Exceptions** are items an agent escalated; **Config** and **Market** hold the
-  engine's settings and metal prices; **Audit** lists every office action.
+- **Exceptions.** At the top, **Untagged batteries**: agents asking to collect a
+  line without a tag. **Approve no tag** (the hub tags it on arrival) or **Reject
+  — tag it** with a note the agent reads. Below, the items the engine flagged.
+- **Config** holds the engine's settings and the **Negotiation band** (how far
+  above the office or engine price an agent may re-offer; 10% by default, 0%
+  sends every change to the office). **Market** holds metal prices; **Audit**
+  lists every office action.
+- **Vehicles.** A pickup's page shows the vehicle it was collected in and dropped
+  off in, and any change the agent made to the filled-in number. The hub check-in
+  page shows the batch's vehicle.
 
 ## 5. Prices: where each number comes from
 
@@ -118,14 +154,15 @@ box you scanned.
 | Dispatch page "Internal estimate" | rough guide | rate card × the vendor's declared weight |
 | Agent item result, lithium | recommended price and its breakdown | decision engine (Config, Market prices, vendor's margin tier) |
 | Agent item result, other batteries | rate × weight | rate card, with the agent's measured weight |
-| Agent offer screen | recommended total, and the agreed price | sum of the lines; the agreed price comes from the call to the office |
-| Vendor offer, payout, receipt, invoice | one amount | the price offered (agreed or recommended) |
-| Admin pickup page | offered, engine recommended, agent's note | the offer; the last two are internal |
+| Agent offer screen | recommended total; the office price; the re-offer limit | sum of the lines (lines on hold left out); the office's Change price; the band on Config |
+| Vendor offer, payout, receipt, invoice | one amount | the latest price presented (recommended, office or re-offer) |
+| Admin pickup page, Price panel | engine recommended, offered now, office prices, rounds | all internal |
 | Agent's own fee | ₹150 + ₹20 per line | a fixed placeholder |
 | Certificate | no money | kg recovered (recycler's figures, or the engine's estimate) |
 
-For the pilot the engine only **recommends**. The office agrees the real price
-by phone. The vendor never sees the recommendation.
+For the pilot the engine only **recommends**. Only the office enters a different
+price; the agent can move it only inside the negotiation band. The vendor never
+sees the recommendation, the office price or the reasons.
 
 ## 6. Tags, boxes and runs
 
@@ -152,6 +189,19 @@ These are built as options or left open until the company decides:
    Today only run collections use boxes.
 3. **Recycler paperwork.** Should the office upload the recycler's report (and
    the weight the recycler received) when reconciling a manifest?
+4. **Phone verification.** The mobile number is required but not checked by SMS
+   (that needs a paid SMS service and DLT registration). Is that enough?
+5. **Notices on the phone.** Agents see office notices when they open the app.
+   Should they get a push notification on the phone instead? (Possible for an
+   installed app; on iPhone only from iOS 16.4.)
+6. **Negotiation band.** Is 10% above the office or engine price the right limit
+   for an agent's re-offer? It can be changed on Config.
+7. **Untagged batteries.** Collection now waits for the office to approve a line
+   without a tag. Is a hard stop right, or should the agent be able to proceed and
+   the office review afterwards?
+8. **Reassigning.** Allowed before the agent arrives, and for an offer not yet
+   collected. Should the office also be able to reassign a job the agent is
+   standing at, or a whole run?
 
 ## 8. Testing with the demo data
 
@@ -174,9 +224,9 @@ day view read 0.
 |---|---|---|
 | 101 | requested | Dispatch a request; also groups with 115 into a run |
 | 102 | scheduled | Arrived → safety → intake, as Ravi |
-| 103 | arrived | Intake and pricing (checklist already done) |
-| 104 | offered | Vendor accepts or declines; agent sees "View offer" |
-| 105 | collected | Hub drop-off; one line untagged; its tagged line is in box BX-A001W |
+| 103 | arrived | Intake and pricing (checklist already done); the offer screen before presenting; Reassign says why it cannot |
+| 104 | offered | Vendor accepts or declines; agent re-offers; office sets a price (admin Price panel); Reassign |
+| 105 | collected | Hub drop-off with the vehicle number; one line left untagged with the office's approval; its tagged line is in box BX-A001W |
 | 106, 113 | tested | Hub batch, manifests |
 | 107 | processed | Reconcile a received manifest |
 | 108 | recovered | Certify |
@@ -186,6 +236,15 @@ day view read 0.
 | 114 | requested | A rebooked pickup still carrying its old agent |
 | 115 | requested | Same-day group with 101 |
 | 116 | tested | Second life (see below) |
+
+**To try a negotiation (104):** Admin → Pickups → 104 → Change price (a new
+amount and a reason) → agent@test → 104 → Offer: the office price appears;
+present it → vendor declines → agent re-offers inside the limit → vendor
+accepts. The Price panel then shows every round.
+
+**To try an untagged battery:** take a job to *offered* and have the vendor
+accept, then on the agent's collect screen → "No tag available? Ask the office"
+→ Admin → Exceptions → Untagged batteries → Approve (or Reject with a note).
 
 **To see a second-life certificate (116):** Manifests → New → pick the
 refurbisher (Evergreen) and 116's line → Dispatch → Confirm received → Reconcile

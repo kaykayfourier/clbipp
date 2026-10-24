@@ -358,21 +358,51 @@ prices one pack (🔴 price-moving for multi-unit lithium lines); every typed
 number is bounded and `isStorablePaise`/`MAX_PAISE` (`@clbipp/core/format`)
 guard the int4 money columns; raw database errors no longer reach screens;
 **Decline** records a decline; an admin can hand an accepted collection to a
-different agent (`pickup.assign_collector`, also via runs) — an OPTION pending
-the company; `/containers/[id]` shows what is in a box; certificates show
+different agent (`pickup.assign_collector`, still written by runs; on
+`/dispatch/[id]` it became AF3's **Reassign**); `/containers/[id]` shows what is in a box; certificates show
 second-life kg on screen; on-screen text was cut and moved into
 **`docs/USER_GUIDE.md`** (the explanations now live there, not on screens).
 
-🎯 **ADDITIONAL FEEDBACK (AF0–AF6) — IN PROGRESS since 2026-10-24.** Source:
-`docs/CLBIPP_Additional_Feedback_Changes_Short.docx` (six changes). Plan, status
-and decisions **FD20–FD25** (ours, provisional) are in **§12 of
-`docs/PLAN_FEEDBACK_V2.md` — read it before touching any of this.** AF1 (phone
-required at signup, EPR optional) is built and pushed. Still to build: AF0 one
-additive migration `additional_feedback` (🔴 shared DB — announce first), AF2
-vehicle number at collection + drop-off, AF3 admin reassignment + in-app agent
-notices, AF4 untagged battery blocks collection until an admin approves (🔴
-reverses FD13), AF5 office-entered price + recorded negotiation rounds within an
-admin-set band (🔴 the agent no longer types a price), AF6 docs + smoke.
+🎯 **ADDITIONAL FEEDBACK (AF0–AF6) — BUILT 2026-10-24.** Source:
+`docs/CLBIPP_Additional_Feedback_Changes_Short.docx` (six changes). Plan,
+decisions **FD20–FD25** (ours, provisional) and the as-built notes (**§12.7**)
+are in **§12 of `docs/PLAN_FEEDBACK_V2.md` — read it before touching any of
+this.** One additive migration, `additional_feedback` (six RLS-closed tables).
+The rules it put in place, which new code must not undo:
+
+- 🔴 **Only the office enters a changed price** (AF5 · FD23). The agent's typed
+  "Agreed price" is gone. `setOfficePrice` (admin `/pickups/[id]`, Price panel)
+  appends an `office_prices` row and **never touches the Offer** — the agent
+  presents it, and `presentOffer` reads it server-side and refuses a stale
+  `officePriceId`. With no office price the agent presents the recommendation.
+- 🔴 **`recommendedOfferTotal()` (`@clbipp/core`) is the ONE reading of the
+  engine's total** — offer page, `presentOffer`, Price panel. HOLD = lithium
+  AND flagged (`isHeldItem`). Don't re-derive it in a screen.
+- 🔴 **Every price the vendor sees is an `offer_rounds` row** (FD24);
+  `Offer.estimatedPrice` caches the latest, like `status` vs `status_events`. A
+  re-offer is checked by `checkReoffer()` (`@clbipp/core/negotiation`) against
+  the band on `/config` (`ops_settings`, default 10%; **a missing row fails
+  closed to 0%** via `getNegotiationBandBp`). Status events say "Offer revised"
+  and carry **no amount** (the vendor's token reads that table).
+- 🔴 **The vendor accepts the price they SAW**: `AcceptOfferButton` posts
+  `pricePaise`, and `acceptOffer` matches it AND `accepted_at IS NULL`. An
+  accepted price is fixed (FD7) — agent re-offer and office price both refuse.
+- 🔴 **An untagged line BLOCKS collection until the office approves** (AF4 ·
+  FD22, reverses FD13). The agent requests (`requestTagExceptionAction`); the
+  admin decides on `/exceptions` (`decideTagException`), and approval is what
+  writes `untaggedReason` — so `confirmCollection`'s gate (tag OR reason) and
+  every reader after it are unchanged. Never write `untaggedReason` from the
+  agent app again.
+- 🔴 **Reassign only through `reassignEligibility()`** (`@clbipp/core/assignment`,
+  AF3 · FD21): `scheduled` or `offered`, not `arrived`, not a stop on an open
+  run; reason required (`pickup.reassign`, on the audit row only — the status
+  event names both agents and no reason). Both agents get an `agent_notices`
+  row; the day view shows unread ones. No push (§12.5).
+- ⚠ **Vehicle numbers are compared only through `normaliseVehicleReg`**
+  (`@clbipp/core/vehicle`, AF2 · FD25), which pads district/number so a
+  re-typed prefill is not a correction. A `vehicle_corrections` row is written
+  only when a prefill existed and differs; the prefill is recomputed
+  server-side, never taken from the form.
 
 **Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV16, decisions
 **FD0–FD19**, an as-built section per batch (§10 for FV9–FV16), and §8 (the
@@ -453,7 +483,9 @@ letter+number means different things in each. **Quote the decision with its set.
 - 🔴 **A run, a box, a tag and a hub check-in are FACTS, not stages.** The nine
   stages stay locked (FD0). No migration in this round added a `PickupStatus`.
 - 🔴 **Every collected line carries a tag OR a recorded reason** (FD13),
-  enforced in `confirmCollection`, not only by the disabled button. One tag per
+  enforced in `confirmCollection`, not only by the disabled button. ⚠ Since AF4
+  the reason is written only by the OFFICE's approval (FD22), never by the
+  agent. One tag per
   `BatteryItem` (a line IS the lot). Tags are **pre-issued** rows in
   `item_tags` — a code nobody issued is refused, never created on the fly.
 - 🔴 **`parseCode()` in `@clbipp/core/tags` is the ONE reader of a scanned or
@@ -544,9 +576,9 @@ letter+number means different things in each. **Quote the decision with its set.
   "the engine's VERDICT was wrong" and changes where the battery physically
   goes. Both need a typed reason; they are different verbs on purpose.
 - 🔴 **The agreed price is NOT a second pricing path** (FV6 · FD10, round 2).
-  The engine is **recommendation-only for the pilot**: the agent calls the
-  office, types the agreed price (blank = offer the recommendation) and a note
-  when it differs. The engine still runs and every item is still priced and
+  The engine is **recommendation-only for the pilot**: since AF5 · FD23 the
+  OFFICE sets a different price and the agent presents it (the agent's typed
+  price is gone — see the AF rules above). The engine still runs and every item is still priced and
   stored; only the TOTAL changes. The recommendation and the note live on
   **`Offer.recommendedPricePaise` / `Offer.priceNote` — internal, never on a
   vendor screen.** 🔴 **`Offer.rationale` is vendor-facing** (it is printed on
@@ -813,7 +845,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 438 (core 371, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 475 (core 408, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.
@@ -840,14 +872,18 @@ cd packages/core && npx vitest run src/booking.test.ts
 # 🔴 `prisma migrate deploy` DOES NOT WORK ON THIS PROJECT and never has — the
 # shared database has no `_prisma_migrations` table, so deploy fails P3005.
 # Every migration in this repo was in fact applied with `db execute`. The real
-# procedure (corrected 2026-09-10 after FV2):
+# procedure (corrected 2026-09-10 after FV2, and again 2026-10-24 after AF0):
 #   1. edit schema.prisma
-#   2. npx prisma migrate diff --from-migrations prisma/migrations \
+#   2. git show HEAD:packages/database/prisma/schema.prisma > /tmp/head.prisma
+#      npx prisma migrate diff --from-schema-datamodel /tmp/head.prisma \
 #        --to-schema-datamodel prisma/schema.prisma --script
+#      Two schema FILES in, SQL out — no database touched. ⚠ `--from-migrations`
+#      does NOT work here: it refuses to run without --shadow-database-url
+#      (this doc claimed otherwise until AF0 hit it).
 #      🔴 NEVER pass a real database URL as --shadow-database-url. The shadow
 #      database is scratch space Prisma DROPS AND RECREATES. Doing that wiped
 #      the shared project on 2026-09-10 — every row, all 19 policies, all 124
-#      grants. `--from-migrations` needs no shadow database at all.
+#      grants.
 #   3. save it as prisma/migrations/<ts>_<name>/migration.sql, hand-annotated
 #      the way every migration here is
 #   4. npx prisma db execute --file <that file> --schema prisma/schema.prisma
@@ -856,7 +892,7 @@ cd packages/core && npx vitest run src/booking.test.ts
 npm run db:migrate --workspace=@clbipp/database        # Apply schema changes (LOCAL/new DB)
 npm run reset-demo                                     # Wipe + reseed the demo data
 # Assert the seeded FIXTURES still have the shape the next batch is built
-# against — 38 checks, read-only, non-zero exit. `smoke` proves a route renders
+# against — 45 checks, read-only, non-zero exit. `smoke` proves a route renders
 # and `test` proves pure logic; neither can catch a fixture quietly vanishing.
 # 🔴 Run it after every reseed, and add a check when you add a fixture.
 # ⚠ Dispatching a seeded request from /dispatch legitimately BREAKS two of its

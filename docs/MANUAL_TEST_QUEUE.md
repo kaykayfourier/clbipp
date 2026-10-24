@@ -777,14 +777,11 @@ first; the pickups named are seed fixtures.
    capacity `100000` → ✅ "Capacity per pack must be … at most 1000 kWh", no
    database text anywhere. On `/market`, type Li `145000` → ✅ refused as a
    >10× move.
-4. **Decline.** As `business@test` on `104` press **Decline**, cancel the browser
-   prompt (nothing happens), press again and confirm → ✅ the pickup shows
-   cancelled; the admin timeline says "Vendor declined the offer"; rebook works.
-5. **Hand a collection to another agent.** Accept `104` as the vendor. As admin,
-   `/dispatch/PKP-2026-000104` → **Who collects** → pick Neha (`agent2@test`) →
-   ✅ "Neha Verma will collect this load"; `/pickups/…104` shows **Inspected by**
-   Ravi. As `agent2@test` the job is on the day view and **Collect** works end to
-   end. Mohit (`agent3@test`) is off duty and refused.
+4. ~~**Decline.**~~ ⚠ Superseded — a decline never cancelled (the code wrote an
+   `offered` event; this line was wrong), and since AF5 it is a negotiation
+   round. See AF item 6 below.
+5. ~~**Hand a collection to another agent.**~~ ⚠ Superseded by AF3's
+   **Reassign** — see AF item 3 below.
 6. **Box contents.** `/containers/BX-A001W` → ✅ `105`'s tagged line under **In
    this box now**. `/tags?code=BX-A001W` links there.
 7. **Confirmations.** On a manifest, **Dispatch**, **Confirm received** and
@@ -793,3 +790,40 @@ first; the pickups named are seed fixtures.
    vendor's certificate page and admin `/compliance` both show 180 kg second
    life and no metals; the header reads "Second life".
 9. **Read every screen once on a phone** for text that spills out of its box.
+
+## Additional feedback AF0–AF6 (2026-10-24)
+
+Every server action below was driven over HTTP in verification (§12.7 of
+`docs/PLAN_FEEDBACK_V2.md`). What is left is what a script cannot do: two
+devices at once, a real phone keyboard and camera, and whether the screens read
+right. **Reseed first** (announced) — 104 and 105 are the fixtures.
+
+1. **Auto-refresh while waiting on the office.** Agent phone on a collect screen
+   with a line waiting for no-tag approval; admin approves on a laptop. ✅ The
+   phone's line turns "No tag · approved" within ~10 s with no tap, and a
+   half-drawn vendor signature survives the refresh.
+2. **Two-device negotiation.** Vendor phone on `/offer?id=PKP-2026-000104`, agent
+   phone on `/job/PKP-2026-000104/offer`. Vendor declines → the agent's screen
+   shows "The vendor declined" within ~10 s. Agent re-offers inside the limit →
+   the vendor reloads and sees "We have updated our offer". Vendor taps
+   **Accept** on a page loaded BEFORE the re-offer → ✅ "The offer was updated.
+   Check the new price." and nothing is accepted.
+3. **Reassign.** Admin `/dispatch/PKP-2026-000104` → **Reassign** to Neha with a
+   reason. ✅ Ravi's day view shows the "moved to Neha Verma" notice and no job
+   row; Neha's shows "is now yours" and the job. **Got it** clears each.
+4. **Office price on a phone.** Admin sets a price on `/pickups/PKP-2026-000104`
+   → the agent's offer screen shows "New price from the office" by itself;
+   present it; the Price panel shows it as presented, with the agent's note.
+5. **Vehicle entry on a phone.** Collect and drop off with the on-screen
+   keyboard: the field opens in capitals, the prefill can be edited, a bad value
+   shows "Use the format DL 1LR 4471", a different vehicle shows "Changed from …
+   The change is recorded." ✅ The admin pickup page lists the change.
+6. **Decline as a vendor.** Press **Decline**, cancel the prompt (nothing
+   happens), press again and confirm → ✅ "You declined this offer. You can still
+   accept it…", no second Decline button, and the pickup is NOT cancelled.
+7. **Band at 0%.** `/config` → Negotiation band 0 → the agent's re-offer screen
+   says "up to" the sanctioned price; anything higher is refused. Put it back
+   to 10.
+8. **Read the new screens once** — Price panel, Untagged batteries, the agent's
+   rounds list — for text that spills out of its box.
+

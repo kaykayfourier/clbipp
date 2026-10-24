@@ -1192,5 +1192,9 @@ do-it-and-note-it:
 | Batch | Nominal owner | Actually done by | Notes |
 |---|---|---|---|
 | AF1 — phone required, EPR optional at signup | A (signup/auth) + B (`validation.ts`) | Aamir | ✅ `63eeded`, pushed. |
-| AF0 — `additional_feedback` migration + seed | B | — | Planned. |
-| AF2–AF5 — vehicle, reassignment, untagged approval, office price + negotiation | A (writes) + B (core, PDF) + C (screens) | — | Planned. |
+| AF0 — `additional_feedback` migration + seed + `verify-seed` | B | Aamir | Applied to the shared project with `db execute` (announced), reseeded. Generated schema-to-schema; `--from-migrations` needs a shadow DB. |
+| AF2 — vehicle number (`@clbipp/core/vehicle`, collect, drop-off, custody PDF, admin pickup/custody) | A (writes) + B (core, PDF) + C (admin reads) | Aamir | |
+| AF3 — `reassignPickup`, `@clbipp/core/assignment`, assignment history, agent notices | A | Aamir | Replaces `assignCollector` on `/dispatch/[id]`; runs still write `pickup.assign_collector`. |
+| AF4 — untagged-battery requests and `/exceptions` decisions | A (writes) + C (`/exceptions` screen) | Aamir | 🔴 Reverses FD13. |
+| AF5 — office price, Price panel, negotiation band, re-offer, accept-at-seen-price | A (writes) + B (`offer.ts`, `negotiation.ts`, `/config`) + C (Price panel) | Aamir | 🔶 Price-capable, no engine price moves. `presentOffer` (Ali's Batch 5a) rewritten on a Prisma transaction; `resolveOfferPrice` (round 2) removed. |
+| AF6 — docs + smoke | A | Aamir | |

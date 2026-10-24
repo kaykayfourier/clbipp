@@ -1055,19 +1055,20 @@ answer open questions, so Aamir made the calls on 2026-10-24 as **FD20–FD25** 
 | Batch | What | State |
 |---|---|---|
 | AF1 | Signup: phone required, EPR optional | ✅ **built + pushed** (`63eeded`, 2026-10-24). Production smoke not yet run after the push. |
-| AF0 | One migration `additional_feedback` + seed | ⏳ next. 🔴 Shared DB: Aamir announces to the team before `db execute` + `reset-demo`. |
-| AF2 | Vehicle number at collection + drop-off | ⏳ |
-| AF3 | Reassignment + in-app agent notices | ⏳ |
-| AF4 | Untagged battery needs admin approval | ⏳ |
-| AF5 | Office price + agent↔vendor negotiation rounds | ⏳ 🔶 price-capable (no engine price moves) |
-| AF6 | Docs + smoke assertions | ⏳ |
+| AF0 | One migration `additional_feedback` + seed | ✅ built 2026-10-24 — applied to the shared project with `db execute`, reseeded (announced), `verify-seed` all pass |
+| AF2 | Vehicle number at collection + drop-off | ✅ built 2026-10-24 |
+| AF3 | Reassignment + in-app agent notices | ✅ built 2026-10-24 |
+| AF4 | Untagged battery needs admin approval | ✅ built 2026-10-24 — 🔴 reverses FD13 |
+| AF5 | Office price + agent↔vendor negotiation rounds | ✅ built 2026-10-24 — 🔶 price-capable, no engine price moves |
+| AF6 | Docs + smoke assertions | ✅ built 2026-10-24 |
 
-⚠ **The shared seed was walked through a demo on 2026-10-08** (102 is
-`arrived` on a run, 103 `offered`, 104 `collected`), so `npm run smoke` reports
-7/48 customer failures on `/dashboard`, `/track/103`, `/track/104`, `/offer` and
-`/offer-breakdown` until AF0's reseed. Those are fixture drift, not regressions.
+All six built in one session by Aamir + Claude; as-built notes and every
+deviation from 12.4 are in **12.7**. Not pushed at the time of writing — see
+12.7 for the verification run.
+
 Smoke against the remote DB takes ~7 min: redirect it to a file, never pipe it
-through `head`.
+through `head`. (The 2026-10-08 demo drift that failed 7 customer routes is
+cleared by AF0's reseed.)
 
 ### 12.2 Decisions FD20–FD25 (ours, provisional)
 
@@ -1152,3 +1153,159 @@ used on both signup forms and onboarding; EPR labelled "(optional)".
 ### 12.6 Verification
 
 Per batch: `npm run test`, typecheck the touched app (`npx tsc --noEmit -p apps/<app>`), lint. After AF0: reseed (announced) → `npm run verify-seed`; each new table returns 0 rows to a real vendor JWT. Drive each new action through the real HTTP path (`$ACTION_ID`): reassign (A's day view loses it, B's shows it + notice, audit has the reason) · untagged (collect refused while pending, allowed after approval, reject forces a tag) · office price (stale `officePriceId` refused) · re-offer (refused above the band; vendor accept refused at a stale price) · vehicle (correction row on a change). At the end: `lsof -ti:3000,3001,3002` → `npm run build` (`ƒ Proxy (Middleware)` × 3) → the three smokes + six wrong-role pairings → after the push, the three production smokes.
+
+### 12.7 As built (2026-10-24, Aamir + Claude)
+
+Everything in 12.4 shipped. Where the build differs from it, the difference and
+the reason are below — read these before changing any of it.
+
+**AF0 — migration and seed.**
+- `20261024120000_additional_feedback` adds exactly 12.3's columns and six
+  tables, five new enum TYPES (no existing enum gains a value), backfills round
+  1 for every existing offer (10 offers → 10 rounds on the shared project) and
+  inserts the `ops_settings` row at 1000 bp. RLS is enabled inside the file and
+  mirrored in `supabase/policies.sql`; zero policies. A vendor JWT reads 0 rows
+  from all six tables (checked against the live project; the control read of
+  `offers` returned the vendor's 9).
+- 🔴 **Deviation — how it was generated.** `prisma migrate diff
+  --from-migrations` REFUSES to run without `--shadow-database-url`, so the
+  procedure in CLAUDE.md could not work as written. It was generated the way
+  `feedback_logistics` was: `--from-schema-datamodel <HEAD's schema.prisma>
+  --to-schema-datamodel prisma/schema.prisma --script` — two files in, SQL out,
+  no database. CLAUDE.md's procedure is corrected to say so.
+- New tables point at Profile only where a name is displayed
+  (`OfficePrice.setter`, `TagException.requester/decider`, `AgentNotice.agent`);
+  other actor columns are bare uuids, as `CollectionRun.createdBy` is.
+- Seed: the approved `tag_exceptions` row for 105's untagged line carries its
+  `tag_exception.decide` audit row; round 1 per offer; `collectionVehicle` on
+  every collected pickup and `vehicle` on CB-2026-000301. **Deviation:** the
+  agent half of the items (chemistry, confirmed weight, prices, trace id) is now
+  seeded from `offered`, not from `collected`, for non-reactivated pickups —
+  `presentOffer` refuses while any line is unpriced, so the seeded offer (104)
+  sat over unpriced lines, a state the app cannot produce, and the Price panel
+  read ₹0. Seeded offers also record `recommendedPricePaise`.
+- `verify-seed` gains seven checks (ops row at 10%, latest round matches every
+  offer, 105's approved request, no pending request, vehicles on collected
+  pickups and the batch, RLS-on/zero-policy on the six tables) and the four new
+  audit verbs in its restated list.
+
+**AF2 — vehicle number.**
+- `@clbipp/core/vehicle` (18 tests). **Deviation:** `normaliseVehicleReg` also
+  pads the district to two digits and the number to four (`DL 1LR 4471` →
+  `DL01LR4471`), beyond "strip spaces/dashes". Without it a re-typed prefill
+  ("DL 01 LR 4471" against the profile's "DL 1LR 4471") would log a spurious
+  correction. Every comparison normalises both sides (`isVehicleCorrection`), so
+  a legacy unpadded value still compares equal. `vehicleRegFromText` reads the
+  reg out of the profile/run free text ("Tata Ace · DL 1LR 4471").
+- A correction is written only when a prefill EXISTED and differs; no prefill →
+  entry, not a correction (so `from_reg` is NOT NULL). At drop-off the prefill is
+  the most common collection vehicle across the batch (`dropoffPrefill`, profile
+  as a fallback); corrections are judged per pickup against its own collection
+  vehicle.
+- `confirmCollection` writes `collectionVehicle` in the existing `updateMany`;
+  the correction is the only extra round trip (nine with it).
+- One shared `VehicleField` client component (`apps/agent/src/components`).
+
+**AF3 — reassignment and notices.**
+- `reassignEligibility()` in `@clbipp/core/assignment` (4 tests) is the panel's
+  and the action's rule. Reason ≥ 8 characters (`MIN_REASSIGN_REASON_CHARS`).
+- `reassignPickup` guards its `updateMany` on the old agent AND the status read,
+  so the agent tapping Arrived during a reassignment wins. The slot is kept; the
+  fee and run fields are cleared. The availability day checked is the slot (for
+  `scheduled`) or the booked collection day (for `offered`).
+- `pickup.assign_collector` is kept for old rows and for runs. Assignment
+  history reads `pickup.assign` / `.reassign` / `.assign_collector` audit rows.
+- Notices: `markNoticeRead` is a POST scoped to the session's agent in the
+  WHERE (a forged id for another agent's notice changes nothing — tested). A job
+  moved away has no link (every job screen would 404 for that agent).
+
+**AF4 — untagged battery approval.**
+- `requestTagExceptionAction` replaces `skipItemTagAction`; only at `offered`.
+  After a rejection the agent may ask again ("Ask the office again") — still
+  gated by the office. Binding a tag withdraws a pending request in the same
+  transaction.
+- `decideTagException` notifies whoever has the job NOW (it may have been
+  reassigned since the request). Reject note ≥ 4 characters. It advances
+  nothing, like `resolveException`.
+- `RefreshWhile` (`apps/agent/src/components/refresh-while.tsx`) refreshes the
+  collect screen every 10 s while a request is pending; `CallOfficeButton`
+  (same folder) is the shared call button, used by AF4 and AF5.
+- The receipt keeps `'Untagged — hub tags on receipt'` (smoke asserts it; still
+  true). The custody PDF callout now says the line was approved by the office.
+
+**AF5 — office price and negotiation (🔶 price-capable, no engine price moves).**
+- `recommendedOfferTotal()` / `isHeldItem()` in `@clbipp/core` (offer.ts) are
+  the one reading for the agent page, `presentOffer` and the Price panel. 🔶
+  **The two HOLD rules are unified on the page's** (`isLithium && HOLD`): the
+  action used to leave out ANY HOLD-flagged line, so in the one case they
+  differed (a non-lithium line with a stale engine quote) the vendor was offered
+  less than the total the agent saw. No engine price moves; that edge case now
+  offers what the screen showed.
+- `resolveOfferPrice` (the agent's typed price) is removed with its tests;
+  `parsePriceRupees` and `checkOfficePrice` (×10 typo guard) replace it.
+- `@clbipp/core/negotiation` (11 tests): `sanctionedPricePaise`,
+  `reofferCeilingPaise` (integer, rounded down), `checkReoffer`,
+  `getNegotiationBandBp(db)` (takes the client so the module stays pure; a
+  missing row → 0%). A re-offer must be > 0, storable, ≤ the ceiling and
+  different from the current price. It is allowed any time before acceptance,
+  not only after a decline.
+- **Deviation — `presentOffer` now runs in a Prisma transaction** instead of
+  service-role PostgREST calls: the offer, round, office-price acknowledgement
+  and status change must land together. Same reasoning as `confirmCollection`;
+  ownership is still in every WHERE. Both offer forms carry `pickupId` as a
+  hidden field instead of `.bind()` so each has a `$ACTION_ID_…` and can be
+  driven over HTTP.
+- "A newer office price to present" means **not yet acknowledged** — the first
+  build compared timestamps with the last round and hid an office price whenever
+  the agent re-offered after it was set (caught by the HTTP run).
+- The agent's acknowledgement note is optional. `Offer.priceNote` keeps a
+  readable summary ("Office: … · Agent: …", "Agent re-offer: …") for existing
+  readers; the Price panel still shows it for pre-AF5 offers.
+- Customer: `acceptOffer(pickupId, seenPricePaise)` matches `estimated_price`
+  AND `accepted_at IS NULL` (`.select()` to count), else "The offer was updated.
+  Check the new price."; `AcceptOfferButton` carries `pricePaise` on both
+  `/offer` and `/offer-breakdown`. Accept and decline mark the LATEST round
+  (accepting after a decline turns that round's outcome to `accepted`; the
+  decline stays on the timeline). A second decline of the same price is a no-op.
+  `/offer`'s "You declined … / We have updated our offer" is read from the
+  vendor's own `status_events` (notes `Vendor declined…` / `Offer revised`), so
+  no internal table reaches a vendor screen; Decline hides after a decline.
+- `/config` "Negotiation band" is a plain upsert with `settings.update`, not an
+  append-only publish: it moves no quote.
+
+**AF6 — docs and smoke.** USER_GUIDE (journey, each app, prices, open questions
+4–8, seed map and two demo recipes), CLAUDE.md headline rules,
+LANE_OWNERSHIP, MANUAL_TEST_QUEUE. Smoke: Price panel (`/pickups/104`),
+vehicle + approved request (`/pickups/105`), Reassign and its refusal
+(`/dispatch/104`, `/dispatch/103`), Untagged batteries (`/exceptions`),
+Negotiation band (`/config`), vehicle on `/custody/<batch>`, job 102 and the
+drop-off form, the agent's rounds/re-offer and pre-present screens,
+`pricePaise` on the vendor's accept form, and two absent-content guards: the
+vendor offer screens show no Recommended/Office price/Negotiation, and the
+agent's pre-present screen has no `agreedRupees` field.
+
+**Verification.** `npm run test`: core 408, auth 40, engine 27. Typecheck clean
+in all three apps and `packages/database`/`pdf`; lint clean on every touched
+file. Driven through the real HTTP path (`$ACTION_ID` forms, plus the RSC
+protocol for the client-invoked `declineOffer`), against the shared project:
+AF2 12/12 (blank/malformed vehicle refused, correction rows at collection and
+drop-off, legacy value compares equal) · AF3 22/22 (A's day view loses the job
+and 404s, B's shows it + notice, audit has the reason, the status event has
+none, forged reassigns of an arrived job and a run stop refused, notice scoping)
+· AF4 23/23 (collect refused while pending and after reject, reject needs a
+note, bind withdraws, approve writes the reason, collect then succeeds) · AF5
+46/46 (stale `officePriceId` refused, re-offer refused above the band at 10% and
+5%, vendor accept at a stale price refused, rounds `office:declined →
+agent:superseded → office:accepted`, FD7 holds for agent and office after
+acceptance, no amount on any status event). Final run, after a fresh reseed
+(announced): `verify-seed` 45/45 · `lsof -ti:3000,3001,3002` empty · `npm run
+build` green with `ƒ Proxy (Middleware)` × 3 · smokes against the production
+builds (`next start`): customer 48/48, agent 35/35, admin 37/37 · all six
+wrong-role pairings bounce. Production smokes: after the push.
+
+**Left as it is.**
+- Offer expiry still counts from the offer row's creation (12.5).
+- `RefreshWhile` polls every 10 s while waiting; there is still no push (12.5).
+- A vendor's own token could already read `offers.recommended_price_paise`
+  (§11); the new tables are closed to it.
+

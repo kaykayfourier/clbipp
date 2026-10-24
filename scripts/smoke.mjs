@@ -234,8 +234,10 @@ const APP_CONTENT = {
   // half is sufficient alone: this one would still pass if the row were deleted
   // outright, and that one would still pass if the screen 307'd away.
   '/submitted?id=PKP-2026-000101': ['Your price', "After the agent's inspection"],
-  '/offer?id=PKP-2026-000104': ['Our offer', 'About this offer'],
-  '/offer-breakdown?id=PKP-2026-000104': ['About this offer', 'You are paid this amount after our agent collects'],
+  // AF5 · FD24 — the Accept form carries the price it was rendered next to, so
+  // a re-offer that lands while the page is open is never accepted blind.
+  '/offer?id=PKP-2026-000104': ['Our offer', 'About this offer', 'name="pricePaise"'],
+  '/offer-breakdown?id=PKP-2026-000104': ['About this offer', 'You are paid this amount after our agent collects', 'name="pricePaise"'],
   // Batch 7B. `token=` on the img src is the part worth asserting: it only
   // appears if createSignedUrl actually minted a URL for a stored object, so it
   // proves the private-bucket read path end to end rather than just proving the
@@ -330,6 +332,13 @@ const APP_CONTENT = {
 // copies none of them — a photo is evidence of one specific consignment.
 // `token=` is the tell: it appears in the HTML only if a signed URL was minted
 // for a stored object, so its ABSENCE here proves no old photo rode along.
+// 🔴 AF5 · FD23/FD24 — the vendor never sees the engine's figure, the office's
+// price or the negotiation record. Absent-content, on the one seeded offer.
+const OFFER_PRICE_ISOLATION = {
+  '/offer?id=PKP-2026-000104': ['Recommended', 'Office price', 'Negotiation', 'recommended_price'],
+  '/offer-breakdown?id=PKP-2026-000104': ['Recommended', 'Office price', 'Negotiation', 'recommended_price'],
+}
+
 const BOOK_PREFILL_ISOLATION = {
   '/book?from=PKP-2026-000109': ['token='],
 }
@@ -507,6 +516,8 @@ const AGENT_ROUTES = [
   `/job/${AGENT_PICKUP}/offer`,
   // ...and 104, which is `offered` and has a checklist, is the render half.
   `/job/${AGENT_OFFERED}/offer`,
+  // AF5 — the pre-present screen (103 is `arrived` with a passing checklist).
+  `/job/${AGENT_ARRIVED}/offer`,
   // Feedback round 2: job detail follows the job's state, and intake CLOSES
   // once the offer is presented. 104's item list must not render.
   `/job/${AGENT_OFFERED}`,
@@ -557,6 +568,10 @@ const AGENT_APP_CONTENT = {
     'Arrived on site',
     'Your fee for this job',
     'Declared load',
+    // AF2 · FD25 — 102 is a stop on the seeded run, so the prefill is the RUN
+    // vehicle ("Tata Ace · DL 1LR 4471"), read and normalised.
+    'Vehicle',
+    'DL 01 LR 4471',
   ],
   // ── Batch 8 — real screens. Every string below is chosen the same way the
   // Batch 3 ones were: it can only render if the agent-scoped Prisma read ran
@@ -711,7 +726,11 @@ const AGENT_APP_CONTENT = {
   // it can only render off the real Prisma read, unlike the bare 'Offer' title
   // this used to assert, which was the AppShell heading and would have passed
   // on an empty screen.
-  [`/job/${AGENT_OFFERED}/offer`]: ['Offer presented', '₹'],
+  // AF5 · FD24 — the rounds and the band-limited re-offer render off real rows.
+  [`/job/${AGENT_OFFERED}/offer`]: ['Offer presented', '₹', 'Rounds', 'Round 1', 'Re-offer', 'You can offer up to', '10%'],
+  // AF5 · FD23 — no office price on 103, so the agent presents the
+  // recommendation and is pointed at the office for anything else.
+  [`/job/${AGENT_ARRIVED}/offer`]: ['Present recommended', 'Call the office', 'Recommended total'],
   [`/job/${AGENT_OFFERED}`]: ['View offer', 'Declared load'],
   // Batch 7a. The vendor name and the running totals come from the batch read;
   // the agent-attested wording is the honesty requirement in step 5 of the
@@ -720,6 +739,10 @@ const AGENT_APP_CONTENT = {
     'Confirm hand-off',
     'Receiving staff',
     'Agent-attested only',
+    // AF2 · FD25 — mandatory, prefilled from 105's collection vehicle.
+    'Vehicle number',
+    'name="vehicle"',
+    'DL 01 LR 4471',
   ],
 }
 
@@ -816,6 +839,12 @@ const AGENT_BATCH8_REJECTS = {
   ],
 }
 
+// 🔴 AF5 · FD23 — the agent no longer types a price. The field that did must
+// not come back on the pre-present screen.
+const AGENT_PRICE_ISOLATION = {
+  [`/job/${AGENT_ARRIVED}/offer`]: ['name="agreedRupees"', 'Agreed price'],
+}
+
 const AGENT_PUBLIC_ROUTES = ['/login']
 
 const AGENT_CONTENT = {
@@ -888,6 +917,13 @@ const ADMIN_ROUTES = [
   // demo. See the note on this key in ADMIN_APP_CONTENT.
   '/pickups?q=PKP-2026-000102',
   `/pickups/${ADMIN_PICKUP}`,
+  // AF5 — the Price panel on the seeded offer; AF2/AF4 — the collected one.
+  `/pickups/${AGENT_OFFERED}`,
+  `/pickups/${AGENT_COLLECTED}`,
+  // AF3 — the Reassign panel (104 is `offered`, on no run) and its refusal
+  // wording on the job the agent is standing at (103, `arrived`).
+  `/dispatch/${AGENT_OFFERED}`,
+  `/dispatch/${AGENT_ARRIVED}`,
   // FV11 — collection runs
   '/runs',
   '/runs/new',
@@ -1030,11 +1066,19 @@ const ADMIN_APP_CONTENT = {
     // FV11 — 102 is a stop on the seeded run.
     'Collection run',
   ],
+  // ── additional_feedback (AF2–AF5) ──────────────────────────────────────────
+  // The Price panel: the engine figure from the priced lines, the round the
+  // seed wrote, and the office's Change price form (104 is offered, unaccepted).
+  [`/pickups/${AGENT_OFFERED}`]: ['Engine recommended', 'Offered now', 'Negotiation rounds', 'Round 1', 'Change price'],
+  // 105: collected in the seeded van, and its untagged line's APPROVED request.
+  [`/pickups/${AGENT_COLLECTED}`]: ['Collected in', 'DL 01 LR 4471', 'No-tag request', 'approved'],
+  [`/dispatch/${AGENT_OFFERED}`]: ['Reassign', 'Kept in the audit log. Not shown to the vendor.', 'Has this job'],
+  [`/dispatch/${AGENT_ARRIVED}`]: ['A job cannot be reassigned once the agent has arrived'],
   // ── feedback_logistics (FV10–FV12) ─────────────────────────────────────────
   '/runs': ['Collection runs', '5EED', 'On the road'],
   '/runs/new': ['Plan a collection run', 'Suggested same-day groups', 'PKP-2026-000115', 'Use this group'],
   [`/runs/${ADMIN_RUN}`]: ['5EED', SEED_BOX, AGENT_COLLECTED, 'Suggested order'],
-  [`/custody/${ADMIN_BATCH}`]: ['Hub check-in', 'CB-2026-000301', SEED_TAG_106, 'Scan a tag', 'Scanned'],
+  [`/custody/${ADMIN_BATCH}`]: ['Hub check-in', 'CB-2026-000301', SEED_TAG_106, 'Scan a tag', 'Scanned', 'Vehicle', 'DL 01 LR 4471'],
   '/containers': ['Transport boxes', SEED_BOX, 'Blue crate 60 L #1', 'Register a box'],
   '/tags': ['Battery tags', '-SEED', 'Issue a sheet'],
   // 105 is collected and not handed in, so its tagged line is still in the box.
@@ -1114,6 +1158,9 @@ const ADMIN_APP_CONTENT = {
     'Tier 3 — not configurable',
     'NMC622',
     'Publish history',
+    // AF5 · FD24 — read off the ops_settings row the seed writes.
+    'Negotiation band',
+    'Now 10%',
   ],
   // '83.2' is the seeded fxRateUsdInr and 'seed' is the seeded `source`, so
   // together they prove the MarketPrices row was read rather than a placeholder
@@ -1155,6 +1202,11 @@ const ADMIN_APP_CONTENT = {
     'PKP-2026-000106',
     'no trace',
     'Resolve',
+    // AF4 · FD22 — the section leads the page. A fresh seed has nothing
+    // pending (verify-seed asserts it), so its empty line is what renders.
+    'Untagged batteries',
+    'No agent is waiting on a no-tag approval',
+    'Engine flags',
   ],
   // 🔴 'CPCB/EPR/PROD/2024/0091' is the seeded `Profile.eprRegId`, and asserting
   // it is how W11's half-wrong premise stays fixed: §3 called for a NEW
@@ -1194,6 +1246,8 @@ const ADMIN_APP_CONTENT = {
     'manifest.dispatch',
     'exception.resolve',
     'entries',
+    // AF4 — the seeded approval of 105's untagged line.
+    'tag_exception.decide',
   ],
 }
 
@@ -1249,7 +1303,7 @@ const APPS = {
     defaultUser: ['business@test', 'businesstest'],
     routes: ROUTES,
     appContent: APP_CONTENT,
-    appIsolation: (route) => BOOK_PREFILL_ISOLATION[route] ?? ONBOARDING_ISOLATION[route] ?? [],
+    appIsolation: (route) => BOOK_PREFILL_ISOLATION[route] ?? ONBOARDING_ISOLATION[route] ?? OFFER_PRICE_ISOLATION[route] ?? [],
     publicRoutes: PUBLIC_ROUTES,
     content: CONTENT,
     publicIsolation: {},
@@ -1285,7 +1339,7 @@ const APPS = {
     defaultUser: ['agent@test', 'demo1234'],
     routes: AGENT_ROUTES,
     appContent: AGENT_APP_CONTENT,
-    appIsolation: (route) => AGENT_ITEMS_GATE[route] ?? AGENT_BATCH8_REJECTS[route] ?? [],
+    appIsolation: (route) => AGENT_ITEMS_GATE[route] ?? AGENT_BATCH8_REJECTS[route] ?? AGENT_PRICE_ISOLATION[route] ?? [],
     publicRoutes: AGENT_PUBLIC_ROUTES,
     content: AGENT_CONTENT,
     publicIsolation: AGENT_LOGIN_ISOLATION,
