@@ -157,6 +157,10 @@ pushing — see [Before you push](docs/BEFORE_YOU_PUSH.md).
 
 ## Team
 
-Built as a three-person internship project by **Aamir** (auth, security and
-lifecycle workflows), **Khalid** (database, decision engine, PDFs and
-deployment) and **Ali** (UI component kit and read screens).
+Built as a three-person internship project:
+
+| | Role |
+|---|---|
+| [**Aamir**](https://github.com/OkayWheresAamir) · `@OkayWheresAamir` | Auth and security, the decision engine, and the lifecycle workflows |
+| [**Khalid**](https://github.com/kaykayfourier) · `@kaykayfourier` | Database schema and seed, PDF templates, and deployment |
+| [**Ali**](https://github.com/nigh1wing) · `@nigh1wing` | UI component kit and read screens |
