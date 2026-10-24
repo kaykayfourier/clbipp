@@ -1,76 +1,162 @@
-## Current Architecture Direction
+# CLBIPP — Closed-Loop Battery Intelligence & Pricing Platform
 
-The project is currently structured around a clean separation between the database layer, API layer, engine logic, and frontend UI. The goal is to keep the system deterministic, testable, and maintainable as the platform grows.
+A platform for recovering end-of-life batteries and proving EPR (Extended
+Producer Responsibility) compliance. A vendor books a pickup, a field agent
+inspects and prices the batteries on site, and the office tracks every battery
+from collection through recycling to a downloadable EPR certificate.
 
-The stack currently uses:
-- Next.js App Router
-- TypeScript
-- Prisma ORM
-- PostgreSQL
+## Live apps
 
-The database schema and migrations live inside `prisma/`. Prisma migrations are already being used properly, meaning schema changes should always happen through `schema.prisma` followed by `npx prisma migrate dev`. Direct manual DB editing should generally be avoided unless coordinated.
+| App | For | URL |
+|---|---|---|
+| **Vendor app** | Businesses and individuals handing over batteries (mobile, installable PWA) | https://clbipp-customer.vercel.app |
+| **Field agent app** | Agents who inspect, price and collect (mobile, installable PWA) | https://clbipp-agent.vercel.app |
+| **Admin console** | Office and hub staff (desktop) | https://clbipp-admin.vercel.app |
 
-The most important architectural rule right now is:
+Demo accounts and a step-by-step walkthrough of each app are in the
+[User Guide](docs/USER_GUIDE.md).
 
-`src/engine/` must remain completely isolated from:
-- Prisma
-- database queries
-- fetch/API calls
-- React/frontend code
+## How it works
 
-The engine should only contain pure TypeScript functions. Given inputs, it returns outputs with no side effects. This is intentional because it allows:
-- isolated testing
-- easier debugging
-- deterministic behavior
-- future replacement or extension of engine layers
-- simpler backend integration
+Every pickup moves through nine fixed stages:
 
-The API routes inside `src/app/api/` act as the orchestration layer. Their job is to:
-1. validate requests,
-2. load data from Prisma/Postgres,
-3. convert Prisma data into plain JS values,
-4. call the engine,
-5. save results back into the database,
-6. return JSON responses.
+```
+requested → scheduled → arrived → offered → collected → tested → processed → recovered → certified
+```
 
-The engine itself is intentionally being written in TypeScript instead of Python. The current Layers 1–5 are mostly arithmetic, thresholds, scoring logic, and economic calculations. Using TypeScript keeps the frontend, backend, API routes, and engine inside one runtime and one deployment target. This significantly reduces operational complexity during development and deployment.
+1. **Vendor books** a pickup — battery lines, a photo of each, address and date.
+2. **Office dispatches** it to an agent, picked from a ranked list (availability,
+   workload, then distance), or groups several pickups into a same-day run.
+3. **Agent arrives**, completes a safety checklist, and records each battery's
+   chemistry, weight, condition and photos.
+4. **The decision engine** recommends a recovery pathway (second life or
+   recycling) and a price. For the pilot it is recommendation-only — the office
+   can set a different price, and the agent presents it.
+5. **Vendor accepts** the offer; the agent tags each battery, collects it and
+   the vendor is paid by UPI or bank transfer, with a receipt and invoice.
+6. **Office tracks the load** through hub check-in, dispatch manifests to
+   recyclers or refurbishers, and the recycler's measured recovery.
+7. **Office certifies** the pickup and the vendor downloads an EPR certificate
+   listing the materials recovered.
 
-A major issue everyone must understand early: Prisma Decimal values are NOT normal JavaScript numbers. Financial and measurement fields using `@db.Decimal(...)` return `Prisma.Decimal` objects. These must be converted using `Number(...)` inside API routes before being passed into the engine. The engine should never directly receive Prisma.Decimal objects.
+## Tech stack
 
-Example:
-const laborRate = Number(config.refurbLaborRatePerKg)
-NOT: const laborRate = config.refurbLaborRatePerKg * value
+- **[Next.js](https://nextjs.org) 16** (App Router) + **React 19** + **TypeScript** (strict)
+- **[Supabase](https://supabase.com)** — Postgres, Auth, Realtime, Storage
+- **[Prisma](https://www.prisma.io)** for schema, migrations and queries
+- **[Tailwind CSS](https://tailwindcss.com)** + shadcn/ui
+- **[Turborepo](https://turbo.build)** monorepo · **[Vitest](https://vitest.dev)** · deployed on **[Vercel](https://vercel.com)**
 
-Another important schema decision: pathway decisions now require persistent economic breakdowns. The frontend quote breakdown screens cannot be built using only a single costsTotal field. The schema therefore includes JSON-based breakdown structures such as:
+## Repository layout
 
-- costBreakdown
-- revenueBreakdown
+```
+apps/
+  customer/          Vendor app            (port 3000)
+  agent/             Field agent app       (port 3001)
+  admin/             Admin console         (port 3002)
+packages/
+  core/              Shared business logic: validation, pricing, payments,
+                     dispatch ranking, tags, negotiation, formatting
+  decision-engine/   Pathway and pricing engine (Layers 0–5)
+  database/          Prisma schema, migrations, seed and demo scripts
+  auth/              Supabase clients, session helpers, auth middleware
+  ui/                Shared mobile UI components and design tokens
+  pdf/               EPR certificate, receipt and invoice templates
+  tsconfig/ eslint-config/
+supabase/            Row-level security policies, grants, storage and realtime SQL
+scripts/             Logged-in smoke test across all three apps
+docs/                Plans, task sheets, user guide and demo runbooks
+```
 
-These are intentionally stored as JSON instead of fully normalized tables because the breakdown structure may evolve over time. However, the JSON keys themselves should remain consistent across the project for analytics and frontend reliability.
-Example of preferred structure:
-{
-  "refurbLabor": 2700,
-  "cellReplacement": 1200,
-  "testing": 750
-}
+Packages ship raw TypeScript and are compiled by each app — there is no
+per-package build step.
 
-The project also uses seed data through prisma/seed.ts. This is necessary because the engine depends on at least one active PathwayFactor configuration existing in the database before decisions can be computed. The seed script provides reproducible baseline operational data for development and testing.
+## Getting started
 
-Seed data should remain enabled during:
+**Prerequisites:** Node.js 20+, npm 10, and access to a Supabase project.
 
-local development,
-demos,
-testing,
-onboarding new contributors.
+```bash
+git clone https://github.com/kaykayfourier/clbipp.git
+cd clbipp
+npm install
+```
 
-Later, in production deployment, automatic seeding should usually be disabled or carefully controlled to avoid overwriting or duplicating operational configuration data.
+Create the environment files from their examples and fill in your Supabase
+credentials:
 
-The current direction prioritizes:
+```bash
+cp apps/customer/.env.example    apps/customer/.env.local
+cp apps/agent/.env.example       apps/agent/.env.local
+cp apps/admin/.env.example       apps/admin/.env.local
+cp packages/database/.env.example packages/database/.env
+```
 
-- stable architecture,
-- deterministic engine behavior,
-- clean separation of concerns,
-- easier debugging,
-- and minimizing unnecessary complexity during the MVP phase.
+| Variable | Used for |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase client |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-side writes |
+| `DATABASE_URL`, `DIRECT_URL` | Prisma (pooled and direct connections) |
+| `NEXT_PUBLIC_OFFICE_PHONE` | Optional — enables the "call the office" buttons |
 
-The focus now should shift toward implementing engine layers, API routes, and end-to-end workflow integration rather than repeatedly redesigning architecture.
+All three apps read the same Supabase project; they are separated by user role.
+
+Generate the Prisma client and seed demo data:
+
+```bash
+npm run db:generate
+npm run reset-demo      # ⚠ wipes and reseeds — announce first on a shared database
+npm run verify-seed
+```
+
+Then start an app:
+
+```bash
+npm run dev             # vendor app      → http://localhost:3000
+npm run dev:agent       # field agent app → http://localhost:3001
+npm run dev:admin       # admin console   → http://localhost:3002
+```
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run build` | Build every app and package |
+| `npm run lint` | ESLint across the workspace |
+| `npm run test` | All unit tests (Vitest) |
+| `npm run smoke` | Logs in and renders every route (`-- --app=agent` / `--app=admin` for the others) |
+| `npm run reset-demo` | Wipe and reseed the demo data |
+| `npm run verify-seed` | Check the seeded fixtures are intact |
+| `npm run demo-stage` | Show every pickup's stage and what is blocking it |
+| `npm run assign-job` | CLI fallback for dispatching a pickup to an agent |
+
+To run the smoke test against production instead of localhost:
+
+```bash
+SMOKE_BASE_URL=https://clbipp-customer.vercel.app npm run smoke
+SMOKE_BASE_URL=https://clbipp-agent.vercel.app    npm run smoke -- --app=agent
+SMOKE_BASE_URL=https://clbipp-admin.vercel.app    npm run smoke -- --app=admin
+```
+
+## Deployment
+
+All three apps deploy to Vercel automatically on every push to `main`. There is
+no CI, so run `npm run build` and the relevant `npm run smoke` **before**
+pushing — see [Before you push](docs/BEFORE_YOU_PUSH.md).
+
+## Documentation
+
+| Doc | Read it for |
+|---|---|
+| [User Guide](docs/USER_GUIDE.md) | Using the three apps, demo accounts, where every price comes from |
+| [Before you push](docs/BEFORE_YOU_PUSH.md) | Pre-push checklist and known traps |
+| [Feedback plan](docs/PLAN_FEEDBACK_V2.md) | Current work: the company's feedback rounds and decisions |
+| [Demo runbook](docs/DEMO_RUNBOOK.md) | Click path for presenting the platform |
+| [Admin plan](docs/PLAN_ADMIN_APP.md) · [Field agent plan](docs/PLAN_FIELD_AGENT_APP.md) · [Vendor plan](docs/PLAN_V2_CUSTOMER_APP.md) | Design decisions behind each app |
+| [Native app handover](docs/NATIVE_APP_HANDOVER.md) | Why PWAs, and what a native rebuild would reuse |
+| [CLAUDE.md](CLAUDE.md) | Detailed engineering notes and conventions |
+
+## Team
+
+Built as a three-person internship project by **Aamir** (auth, security and
+lifecycle workflows), **Khalid** (database, decision engine, PDFs and
+deployment) and **Ali** (UI component kit and read screens).
