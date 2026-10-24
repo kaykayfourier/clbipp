@@ -15,10 +15,14 @@ import { acceptOfferAndConfirm } from './actions'
  * Shared by /offer and /offer-breakdown so the two entry points can't drift
  * into posting different things.
  */
-export function AcceptOfferButton({ pickupId }: { pickupId: string }) {
+export function AcceptOfferButton({ pickupId, pricePaise }: { pickupId: string; pricePaise: number }) {
+  // AF5 — the price this button was rendered next to. acceptOffer accepts only
+  // that price, so a re-offer that lands while the page is open is never
+  // accepted blind.
   return (
     <form action={acceptOfferAndConfirm}>
       <input type="hidden" name="pickupId" value={pickupId} />
+      <input type="hidden" name="pricePaise" value={pricePaise} />
       <Button type="submit" variant="primary" fullWidth>
         Accept offer
       </Button>

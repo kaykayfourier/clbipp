@@ -24,6 +24,7 @@ import { prisma } from "@clbipp/database"
 import { renderCustodyPdf } from "@clbipp/pdf"
 import { custodyBatchNumber } from "@clbipp/core"
 import { categoryLabel } from "@clbipp/core/intake"
+import { formatVehicleReg } from "@clbipp/core/vehicle"
 import type { CustodyDoc } from "@clbipp/pdf"
 
 // @react-pdf needs Node streams and Buffer (packages/pdf/src/render.tsx).
@@ -48,6 +49,7 @@ export async function GET(
       batchNo: true,
       handedOffAt: true,
       receivingStaffName: true,
+      vehicle: true,
       lat: true,
       lng: true,
       pdfUrl: true,
@@ -130,6 +132,7 @@ export async function GET(
     lng: batch.lng ? Number(batch.lng) : null,
     totalWeightKg: Math.round(pickups.reduce((s, p) => s + p.weightKg, 0) * 10) / 10,
     receivingStaffName: batch.receivingStaffName,
+    vehicle: batch.vehicle ? formatVehicleReg(batch.vehicle) : null,
     runNos: [...new Set(batch.pickups.map((p) => p.collectionRun?.runNo).filter((r): r is string => Boolean(r)))],
     containers: [...containers.values()],
     pickups,

@@ -109,8 +109,8 @@ export function CustodyTemplate({ doc }: { doc: CustodyDoc }) {
         {untagged > 0 && (
           <View style={styles.callout}>
             <Text>
-              {untagged} line{untagged === 1 ? '' : 's'} left the vendor&apos;s site without a tag, with a
-              reason recorded at collection. The receiving hub tags {untagged === 1 ? 'it' : 'them'} on
+              {untagged} line{untagged === 1 ? '' : 's'} left the vendor&apos;s site without a tag, approved
+              by the office at collection. The receiving hub tags {untagged === 1 ? 'it' : 'them'} on
               check-in before the batch can be tested.
             </Text>
           </View>
@@ -118,7 +118,8 @@ export function CustodyTemplate({ doc }: { doc: CustodyDoc }) {
 
         {/* ── Receiving staff ─────────────────────────────────────────── */}
         <Text style={styles.sectionLabel}>RECEIVING STAFF</Text>
-        <Row label="Name (agent-recorded)" value={doc.receivingStaffName} last />
+        <Row label="Name (agent-recorded)" value={doc.receivingStaffName} last={!doc.vehicle} />
+        {doc.vehicle ? <Row label="Vehicle" value={doc.vehicle} last /> : null}
 
         {/* ── Attestation callout ─────────────────────────────────────── */}
         <View style={styles.callout}>

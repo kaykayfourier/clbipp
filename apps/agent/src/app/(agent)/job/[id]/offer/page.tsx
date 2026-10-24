@@ -1,21 +1,29 @@
-// /job/[id]/offer  —  Batch 5a · Ali
+// /job/[id]/offer  —  Batch 5a · Ali, reworked for AF5 (2026-10-24)
 //
 // The multi-item consequence (plan §2, D5/D7): every item's own price, summed
-// into ONE Offer for the pickup. Not in the wireframe at all — the wireframe
-// assumed one battery per job.
+// into ONE Offer for the pickup by recommendedOfferTotal(). Not in the
+// wireframe at all — the wireframe assumed one battery per job.
+//
+// 🔴 AF5 · FD23 — the agent types no price before presenting. The office sets
+// one on /pickups/[id] (it appears here by itself — RefreshWhile), or the agent
+// presents the engine's recommendation. After presenting, FD24: the agent may
+// re-offer inside the band; above it, the office sets the price again.
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
-import { isLithium } from '@clbipp/core/intake'
+import { recommendedOfferTotal } from '@clbipp/core'
 import { formatPaise } from '@clbipp/core/format'
 import { offerState } from '@clbipp/core/collection'
+import { formatBandBp, getNegotiationBandBp, reofferCeilingPaise, sanctionedPricePaise } from '@clbipp/core/negotiation'
 import { AppShell, Banner, Button, Card, CardContent, DetailRow, PagePadding, SectionLabel } from '@clbipp/ui'
 
+import { CallOfficeButton } from '@/components/call-office'
+import { RefreshWhile } from '@/components/refresh-while'
 import { requireSafetyChecklist } from '@/lib/safety-gate'
-import { presentOfferAndRedirect } from './actions'
+import { presentOfferAndRedirect, reofferPriceAndRedirect } from './actions'
 import { CollectionDateForm } from './CollectionDateForm'
 
 const PATHWAY_LABEL: Record<string, string> = {
@@ -25,15 +33,20 @@ const PATHWAY_LABEL: Record<string, string> = {
   dispose: 'Dispose',
 }
 
+const BASIS_LABEL: Record<string, string> = { engine: 'Recommended', office: 'Office price', agent: 'Your re-offer' }
+const OUTCOME_LABEL: Record<string, string> = { accepted: 'Accepted', declined: 'Declined', superseded: 'Replaced' }
+
+const fieldClass = 'w-full rounded-[10px] border border-border bg-background px-3 text-base text-text-primary'
+
 export default async function Page({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; ok?: string }>
 }) {
   const { id } = await params
-  const { error } = await searchParams
+  const { error, ok } = await searchParams
 
   const supabase = await createClient()
   const {
@@ -63,14 +76,24 @@ export default async function Page({
           quoteData: true,
         },
       },
+      officePrices: {
+        orderBy: { setAt: 'desc' },
+        take: 1,
+        select: { id: true, pricePaise: true, reason: true, acknowledgedAt: true, setter: { select: { fullName: true } } },
+      },
+      offerRounds: {
+        orderBy: { roundNo: 'asc' },
+        select: { roundNo: true, pricePaise: true, basis: true, outcome: true },
+      },
     },
   })
   if (!pickup) redirect('/')
 
-  // Already past this stage — the offer exists, show it read-only rather than
-  // re-render a "Present" button that would just be an idempotent no-op click.
-  // 🔴 FV3 · FD0. `offered` carries THREE sub-states now and no screen works
-  // them out for itself — `offerState` in @clbipp/core is the one reading.
+  const rec = recommendedOfferTotal(pickup.items)
+  const office = pickup.officePrices[0] ?? null
+
+  // 🔴 FV3 · FD0. `offered` carries THREE sub-states and no screen works them
+  // out for itself — `offerState` in @clbipp/core is the one reading.
   const timing = offerState({
     offerCreatedAt: pickup.offer?.createdAt,
     acceptedAt: pickup.offer?.acceptedAt,
@@ -78,18 +101,121 @@ export default async function Page({
   })
 
   if (pickup.status !== 'arrived' && pickup.offer) {
+    if (timing.state === 'awaiting_vendor') {
+      const latest = pickup.offerRounds[pickup.offerRounds.length - 1] ?? null
+      const declined = latest?.outcome === 'declined'
+      // An office price no agent has presented yet (presenting acknowledges it).
+      const freshOffice = office && office.acknowledgedAt === null ? office : null
+      const bandBp = await getNegotiationBandBp(prisma)
+      const sanctioned = sanctionedPricePaise({ enginePaise: rec.totalPaise, officePricePaise: office?.pricePaise })
+      const ceiling = reofferCeilingPaise(sanctioned, bandBp)
+
+      return (
+        <AppShell title="Offer" showBack backHref={`/job/${id}`} hideNav>
+          <PagePadding className="flex flex-col gap-4">
+            <RefreshWhile active />
+            {error && <Banner variant="error">{error}</Banner>}
+            {ok && <Banner variant="success">{ok}</Banner>}
+            {declined ? (
+              <Banner variant="warning">
+                The vendor declined {formatPaise(pickup.offer.estimatedPrice)}. Re-offer below, or call the office.
+              </Banner>
+            ) : (
+              <Banner variant={timing.expired ? 'warning' : 'info'}>
+                Offer presented — {formatPaise(pickup.offer.estimatedPrice)},{' '}
+                {timing.expired
+                  ? 'expired after 7 days. The office will re-confirm the price.'
+                  : `waiting for the vendor. Valid ${timing.daysRemaining} more day${timing.daysRemaining === 1 ? '' : 's'}.`}
+              </Banner>
+            )}
+
+            <SectionLabel>Rounds</SectionLabel>
+            <Card variant="elevated">
+              <CardContent className="flex flex-col">
+                {pickup.offerRounds.map((r, i) => (
+                  <DetailRow
+                    key={r.roundNo}
+                    label={`Round ${r.roundNo} · ${BASIS_LABEL[r.basis] ?? r.basis}`}
+                    value={`${formatPaise(r.pricePaise)}${r.outcome ? ` · ${OUTCOME_LABEL[r.outcome] ?? r.outcome}` : ' · With the vendor'}`}
+                    last={i === pickup.offerRounds.length - 1}
+                  />
+                ))}
+              </CardContent>
+            </Card>
+
+            {freshOffice ? (
+              <>
+                <SectionLabel>New price from the office</SectionLabel>
+                <Card variant="elevated">
+                  <CardContent className="flex flex-col gap-3">
+                    <div>
+                      <p className="font-serif text-xl font-semibold text-text-primary">{formatPaise(freshOffice.pricePaise)}</p>
+                      <p className="text-[11px] text-text-secondary">
+                        Set by {freshOffice.setter.fullName} · {freshOffice.reason}
+                      </p>
+                    </div>
+                    <form action={reofferPriceAndRedirect} className="flex flex-col gap-2">
+                      <input type="hidden" name="pickupId" value={id} />
+                      <input type="hidden" name="mode" value="office" />
+                      <input type="hidden" name="officePriceId" value={freshOffice.id} />
+                      <textarea name="note" rows={2} maxLength={500} placeholder="Your note (optional)" className={`${fieldClass} py-2 text-sm`} />
+                      <Button type="submit" variant="primary" fullWidth>
+                        {`Present ${formatPaise(freshOffice.pricePaise)}`}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
+
+            <SectionLabel>Re-offer</SectionLabel>
+            <Card variant="elevated">
+              <CardContent className="flex flex-col gap-3">
+                <p className="text-[11px] text-text-secondary">
+                  {`You can offer up to ${formatPaise(ceiling)} (${formatBandBp(bandBp)} above ${formatPaise(sanctioned)}). Above that, call the office.`}
+                </p>
+                <form action={reofferPriceAndRedirect} className="flex flex-col gap-2">
+                  <input type="hidden" name="pickupId" value={id} />
+                  <input type="hidden" name="mode" value="agent" />
+                  <label htmlFor="rupees" className="text-xs font-medium text-text-primary">
+                    New price (₹)
+                  </label>
+                  <input type="number" id="rupees" name="rupees" min="1" step="0.01" inputMode="decimal" required className={`${fieldClass} h-11`} />
+                  <label htmlFor="note" className="text-xs font-medium text-text-primary">
+                    Note
+                  </label>
+                  <textarea
+                    id="note"
+                    name="note"
+                    rows={2}
+                    maxLength={500}
+                    required
+                    placeholder="e.g. Vendor asked for ₹52,000; settled at ₹51,000"
+                    className={`${fieldClass} py-2 text-sm`}
+                  />
+                  <Button type="submit" variant="primary" fullWidth>
+                    Re-offer
+                  </Button>
+                </form>
+                <CallOfficeButton />
+              </CardContent>
+            </Card>
+
+            <Link href={`/job/${id}`}>
+              <Button variant="secondary" fullWidth>
+                Back to job
+              </Button>
+            </Link>
+          </PagePadding>
+        </AppShell>
+      )
+    }
+
     return (
       <AppShell title="Offer" showBack backHref={`/job/${id}`} hideNav>
         <PagePadding className="flex flex-col gap-4">
           {error && <Banner variant="error">{error}</Banner>}
-          {timing.state === 'awaiting_vendor' ? (
-            <Banner variant={timing.expired ? 'warning' : 'info'}>
-              Offer presented — {formatPaise(pickup.offer.estimatedPrice)},{' '}
-              {timing.expired
-                ? 'expired after 7 days. The office will re-confirm the price.'
-                : `waiting for the vendor. Valid ${timing.daysRemaining} more day${timing.daysRemaining === 1 ? '' : 's'}.`}
-            </Banner>
-          ) : timing.state === 'collection_scheduled' ? (
+          {timing.state === 'collection_scheduled' ? (
             <>
               {/* FV3. Accepted, but not going in the van today. The date is the
                   headline because it is the only thing the agent needs from
@@ -142,51 +268,39 @@ export default async function Page({
     )
   }
 
-  const holdItems = pickup.items.filter((i) => {
-    const output = (i.quoteData as { output?: { decision?: { flags?: string[] } } } | null)?.output
-    return isLithium(i.chemistry) && Boolean(output?.decision?.flags?.includes('HOLD'))
-  })
-  const unpriced = pickup.items.filter((i) => i.unitPricePaise === null || i.linePricePaise === null)
-  const included = pickup.items.filter((i) => !holdItems.some((h) => h.id === i.id))
-  const total = included.reduce((sum, i) => sum + (i.linePricePaise ?? 0), 0)
-
-  const canPresent = unpriced.length === 0 && included.length > 0
-
-  // Configured, not hardcoded: the company has not given us the number yet.
-  // Unset → the button renders disabled and says so, never a dead `tel:` link.
-  const officePhone = process.env.NEXT_PUBLIC_OFFICE_PHONE ?? null
-
   return (
     <AppShell title="Present offer" showBack backHref={`/job/${id}/items`} hideNav>
       <PagePadding className="flex flex-col gap-4">
+        {/* An office price set while the agent waits appears by itself. */}
+        <RefreshWhile active />
         {error && <Banner variant="error">{error}</Banner>}
 
         <SectionLabel>Items in this offer</SectionLabel>
         <Card variant="elevated">
           <CardContent className="flex flex-col">
-            {included.map((item, i) => (
+            {rec.included.map((item, i) => (
               <DetailRow
                 key={item.id}
                 label={`${item.category}${item.pathway ? ` · ${PATHWAY_LABEL[item.pathway] ?? item.pathway}` : ''}`}
                 value={item.linePricePaise === null ? 'Not priced' : formatPaise(item.linePricePaise)}
-                last={i === included.length - 1}
+                last={i === rec.included.length - 1}
               />
             ))}
-            {included.length === 0 && (
+            {rec.included.length === 0 && (
               <p className="py-2 text-xs text-text-secondary">No items are ready to offer yet.</p>
             )}
           </CardContent>
         </Card>
 
-        {unpriced.length > 0 && (
+        {rec.unpriced.length > 0 && (
           <Banner variant="warning">
-            {unpriced.length} item{unpriced.length === 1 ? '' : 's'} still need pricing.
+            {rec.unpriced.length} item{rec.unpriced.length === 1 ? '' : 's'} still need pricing.
           </Banner>
         )}
 
-        {holdItems.length > 0 && (
+        {rec.held.length > 0 && (
           <Banner variant="error">
-            {holdItems.length} item{holdItems.length === 1 ? '' : 's'} on hold, left out.
+            {rec.held.length} item{rec.held.length === 1 ? '' : 's'} on hold, left out.
             Escalate from the item&rsquo;s price screen.
           </Banner>
         )}
@@ -198,61 +312,50 @@ export default async function Page({
             <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">
               Recommended total
             </span>
-            <span className="font-serif text-xl font-semibold text-primary-green">{formatPaise(total)}</span>
+            <span className="font-serif text-xl font-semibold text-primary-green">{formatPaise(rec.totalPaise)}</span>
           </div>
           <span className="text-[11px] text-white/60">Internal. The vendor never sees this.</span>
         </div>
 
-        <SectionLabel>Agree the price</SectionLabel>
-        {officePhone ? (
-          <a href={`tel:${officePhone.replace(/\s+/g, '')}`}>
-            <Button variant="secondary" fullWidth>
-              Call the office
-            </Button>
-          </a>
+        {office ? (
+          <>
+            <SectionLabel>Office price</SectionLabel>
+            <Card variant="elevated">
+              <CardContent className="flex flex-col gap-3">
+                <div>
+                  <p className="font-serif text-xl font-semibold text-text-primary">{formatPaise(office.pricePaise)}</p>
+                  <p className="text-[11px] text-text-secondary">
+                    Set by {office.setter.fullName} · {office.reason}
+                  </p>
+                </div>
+                <form action={presentOfferAndRedirect} className="flex flex-col gap-2">
+                  <input type="hidden" name="pickupId" value={id} />
+                  <input type="hidden" name="officePriceId" value={office.id} />
+                  <textarea name="note" rows={2} maxLength={500} placeholder="Your note (optional)" className={`${fieldClass} py-2 text-sm`} />
+                  <Button type="submit" variant="primary" fullWidth disabled={!rec.canPresent}>
+                    {`Present ${formatPaise(office.pricePaise)}`}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+            <CallOfficeButton />
+          </>
         ) : (
-          <div className="flex flex-col gap-1">
-            <Button variant="secondary" fullWidth disabled>
-              Call the office
-            </Button>
-            <p className="text-center text-[11px] text-text-secondary">Office line not connected yet</p>
-          </div>
+          <>
+            <SectionLabel>Price</SectionLabel>
+            <p className="px-1 text-[11px] text-text-secondary">
+              To change the price, call the office. Their price appears here.
+            </p>
+            <CallOfficeButton />
+            <form action={presentOfferAndRedirect} className="flex flex-col gap-2">
+              <input type="hidden" name="pickupId" value={id} />
+              <input type="hidden" name="officePriceId" value="" />
+              <Button type="submit" variant="primary" fullWidth disabled={!rec.canPresent}>
+                {`Present recommended ${formatPaise(rec.totalPaise)}`}
+              </Button>
+            </form>
+          </>
         )}
-
-        <form action={presentOfferAndRedirect.bind(null, id)} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="agreedRupees" className="text-xs font-medium text-text-primary">
-              Agreed price (₹)
-            </label>
-            <input
-              type="number"
-              id="agreedRupees"
-              name="agreedRupees"
-              min="1"
-              step="0.01"
-              inputMode="decimal"
-              placeholder={String(Math.round(total / 100))}
-              className="h-11 w-full rounded-[10px] border border-border bg-background px-3 text-base text-text-primary"
-            />
-            <p className="text-[11px] text-text-secondary">Leave blank to offer {formatPaise(total)}.</p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="priceNote" className="text-xs font-medium text-text-primary">
-              Note (needed if the price changed)
-            </label>
-            <textarea
-              id="priceNote"
-              name="priceNote"
-              rows={2}
-              maxLength={500}
-              placeholder="e.g. Agreed with Rahul at the office"
-              className="w-full rounded-[10px] border border-border bg-background px-3 py-2 text-sm text-text-primary"
-            />
-          </div>
-          <Button type="submit" variant="primary" fullWidth disabled={!canPresent}>
-            Present offer to vendor
-          </Button>
-        </form>
       </PagePadding>
     </AppShell>
   )

@@ -120,6 +120,8 @@ export type CustodyDoc = {
   lng: number | null
   totalWeightKg: number
   receivingStaffName: string
+  /** AF2 · FD25 — the vehicle that brought the batch, display-formatted. Null before AF2. */
+  vehicle: string | null
   /** The collection runs these pickups were on, if any (FV11). */
   runNos: string[]
   /** Every transport box a line in this batch travelled in (FV11). */

@@ -13,8 +13,10 @@ import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
 import { chemistryLabel } from '@clbipp/core/intake'
+import { expectedVehicle } from '@clbipp/core/vehicle'
 import { AppShell, Banner, Button, PagePadding } from '@clbipp/ui'
 
+import { RefreshWhile } from '@/components/refresh-while'
 import { requireSafetyChecklist } from '@/lib/safety-gate'
 import { CollectForm } from './CollectForm'
 import { TagLoad } from './TagLoad'
@@ -59,12 +61,19 @@ export default async function Page({
           confirmedWeightKg: true,
           untaggedReason: true,
           tag: { select: { code: true, container: { select: { code: true } } } },
+          // AF4 — the latest request to leave this line untagged.
+          tagExceptions: {
+            orderBy: { requestedAt: 'desc' },
+            take: 1,
+            select: { status: true, decisionNote: true },
+          },
         },
       },
       collectionRun: {
         select: {
           runNo: true,
           agentId: true,
+          vehicle: true,
           containers: {
             where: { unloadedAt: null },
             orderBy: { loadedAt: 'asc' },
@@ -129,22 +138,30 @@ export default async function Page({
     tagCode: i.tag?.code ?? null,
     boxCode: i.tag?.container?.code ?? null,
     untaggedReason: i.untaggedReason,
+    request: i.tagExceptions[0] ?? null,
   }))
-  // 🔴 FD13 — every line tagged OR explained. confirmCollection re-checks.
+  // 🔴 FD13 → FD22 — every line tagged OR approved by the office to go untagged.
+  // confirmCollection re-checks.
   const tagsComplete = lines.length > 0 && lines.every((l) => l.tagCode || l.untaggedReason)
+  const waitingOnOffice = lines.some((l) => !l.tagCode && !l.untaggedReason && l.request?.status === 'pending')
   const run = pickup.collectionRun && pickup.collectionRun.agentId === user.id ? pickup.collectionRun : null
+  // AF2 · FD25 — the prefill. confirmCollection works it out again itself.
+  const profile = await prisma.profile.findUnique({ where: { id: user.id }, select: { agentVehicle: true } })
+  const vehiclePrefill = expectedVehicle({ runVehicle: run?.vehicle, profileVehicle: profile?.agentVehicle })
 
   return (
     <AppShell title="Collect" showBack backHref={`/job/${id}/offer`} hideNav>
       <PagePadding className="flex flex-col gap-4">
         {error && <Banner variant="error">{error}</Banner>}
         {ok && <Banner variant="success">{ok}</Banner>}
+        <RefreshWhile active={waitingOnOffice} />
         <TagLoad
           pickupId={id}
           lines={lines}
           boxes={run ? run.containers.map((c) => c.container) : []}
           runNo={run?.runNo ?? null}
           returnTo={`/job/${id}/collect`}
+          canRequest
         />
         <CollectForm
           pickupId={id}
@@ -152,6 +169,7 @@ export default async function Page({
           vendorName={pickup.vendor.fullName}
           agentFeePaise={computeAgentFeePaise(pickup._count.items)}
           tagsComplete={tagsComplete}
+          vehiclePrefill={vehiclePrefill}
         />
       </PagePadding>
     </AppShell>

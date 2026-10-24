@@ -32,7 +32,8 @@ import type { Config, CostInput } from '@clbipp/decision-engine'
 
 import { requireAdmin } from '@/lib/admin-identity'
 import { formatIstDateTime } from '@/lib/ist'
-import { publishConfig } from './actions'
+import { publishConfig, setNegotiationBand } from './actions'
+import { NEGOTIATION_BAND_MAX_BP, formatBandBp, getNegotiationBandBp } from '@clbipp/core/negotiation'
 
 const INPUT_CLASS =
   'w-full rounded-md border border-border bg-surface px-2 py-1.5 font-mono text-sm text-text-primary'
@@ -109,12 +110,13 @@ function CostField({ name, label, value }: { name: string; label: string; value:
 export default async function ConfigPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; published?: string }>
+  searchParams: Promise<{ error?: string; published?: string; band?: string }>
 }) {
   const auth = await requireAdmin()
   if (!auth.ok) redirect('/login')
 
-  const { error, published } = await searchParams
+  const { error, published, band } = await searchParams
+  const bandBp = await getNegotiationBandBp(prisma)
 
   const [active, history] = await Promise.all([
     prisma.engineConfig.findFirst({
@@ -150,6 +152,37 @@ export default async function ConfigPage({
           Published. {published} field{published === '1' ? '' : 's'} changed.
         </div>
       )}
+
+      {band && (
+        <div className="rounded-md border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {band === 'set' ? `Negotiation band set to ${formatBandBp(bandBp)}.` : 'Negotiation band unchanged.'}
+        </div>
+      )}
+
+      {/* AF5 · FD24 — not engine config: it moves no quote. */}
+      <Section
+        title="Negotiation band"
+        hint="How far above the office or engine price an agent may re-offer after a decline. Above it, the office sets the price."
+      >
+        <form action={setNegotiationBand} className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-xs text-text-secondary">
+            Band (%)
+            <input
+              name="bandPct"
+              type="number"
+              min={0}
+              max={NEGOTIATION_BAND_MAX_BP / 100}
+              step={0.5}
+              defaultValue={bandBp / 100}
+              className="w-[120px] rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary"
+            />
+          </label>
+          <button type="submit" className="rounded-md bg-primary-black px-4 py-2 text-sm font-semibold text-primary-green">
+            Save band
+          </button>
+          <span className="text-xs text-text-secondary">{`Now ${formatBandBp(bandBp)}. 0% sends every change to the office.`}</span>
+        </form>
+      </Section>
 
       {!active ? (
         <p className="text-sm text-text-secondary">

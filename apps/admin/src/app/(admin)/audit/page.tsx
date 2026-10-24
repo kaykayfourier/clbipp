@@ -83,6 +83,11 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   'custody.reconcile': 'Hub check-in recorded by hand',
   'agent.duty': 'Agent duty changed',
   'pickup.assign_collector': 'Collector assigned',
+  // additional_feedback (AF3–AF5)
+  'pickup.reassign': 'Pickup reassigned',
+  'price.office_set': 'Office price set',
+  'tag_exception.decide': 'Untagged battery decided',
+  'settings.update': 'Settings changed',
 }
 
 const SUBJECT_LABELS: Record<AdminAuditSubject, string> = {
@@ -97,6 +102,8 @@ const SUBJECT_LABELS: Record<AdminAuditSubject, string> = {
   item_tag: 'Tag sheet',
   transport_container: 'Transport box',
   collection_run: 'Collection run',
+  tag_exception: 'Untagged battery',
+  ops_settings: 'Settings',
 }
 
 /**
@@ -130,6 +137,10 @@ function subjectHref(subjectType: string, subjectId: string, action: string): st
       return `/containers/${encodeURIComponent(subjectId)}`
     case 'item_tag':
       return '/tags'
+    case 'tag_exception':
+      return '/exceptions'
+    case 'ops_settings':
+      return '/config'
     default:
       return null
   }

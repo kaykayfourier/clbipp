@@ -2,9 +2,10 @@ import { categoryLabel } from '@clbipp/core/intake'
 import { MIN_UNTAGGED_REASON_CHARS } from '@clbipp/core/tags'
 import { Card, CardContent, SectionLabel } from '@clbipp/ui'
 
+import { CallOfficeButton } from '@/components/call-office'
 import { CodeField } from '@/components/qr-scanner'
 
-import { bindItemTagAction, skipItemTagAction, unbindItemTagAction } from './tag-actions'
+import { bindItemTagAction, requestTagExceptionAction, unbindItemTagAction } from './tag-actions'
 
 // ─── "Tag the load" (FV10 · FD12, FD13) ──────────────────────────────────────
 // One card per battery line: scan a tag from the sheet onto it, or say why it
@@ -12,9 +13,9 @@ import { bindItemTagAction, skipItemTagAction, unbindItemTagAction } from './tag
 // ./tag-actions — with only the scan field on the client.
 //
 // 🔴 Mandatory before the vendor signs: `confirmCollection` refuses a load with
-// a line that is neither tagged nor explained. The explanation is the escape
-// hatch (FD13) — never a hard stop in front of a waiting vendor — and the hub
-// tags that line on receipt.
+// a line that is neither tagged nor APPROVED to leave untagged. Since AF4 ·
+// FD22 the agent asks the office and waits; the office's approval writes the
+// reason (`untaggedReason`) and the hub tags that line on receipt.
 
 export type TagLine = {
   id: string
@@ -25,6 +26,8 @@ export type TagLine = {
   tagCode: string | null
   boxCode: string | null
   untaggedReason: string | null
+  /** AF4 — the line's latest request to leave untagged, if any. */
+  request: { status: 'pending' | 'approved' | 'rejected' | 'withdrawn'; decisionNote: string | null } | null
 }
 
 export type LoadedBox = { id: string; code: string; label: string }
@@ -35,6 +38,7 @@ export function TagLoad({
   boxes,
   runNo,
   returnTo,
+  canRequest,
 }: {
   pickupId: string
   lines: TagLine[]
@@ -43,6 +47,8 @@ export function TagLoad({
   runNo: string | null
   /** Where the forms come back to — the collect screen, or the receipt after it. */
   returnTo: string
+  /** AF4 — asking the office is only possible before collection. */
+  canRequest: boolean
 }) {
   const done = lines.filter((l) => l.tagCode || l.untaggedReason).length
 
@@ -76,7 +82,11 @@ export function TagLoad({
                 </span>
               ) : line.untaggedReason ? (
                 <span className="rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold text-text-secondary">
-                  No tag
+                  No tag · approved
+                </span>
+              ) : line.request?.status === 'pending' ? (
+                <span className="rounded-full bg-warning-bg px-2.5 py-1 text-[10px] font-semibold text-warning-text">
+                  Waiting for the office
                 </span>
               ) : null}
             </div>
@@ -97,7 +107,18 @@ export function TagLoad({
               <>
                 {line.untaggedReason ? (
                   <p className="rounded-[10px] bg-background px-3 py-2 text-[11px] text-text-secondary">
-                    {`No tag: “${line.untaggedReason}”. The hub will tag it, or scan one now.`}
+                    {`Office approved no tag: “${line.untaggedReason}”. The hub will tag it, or scan one now.`}
+                  </p>
+                ) : line.request?.status === 'pending' ? (
+                  <div className="flex flex-col gap-2 rounded-[10px] bg-warning-bg px-3 py-2">
+                    <p className="text-[11px] text-warning-text">
+                      Waiting for the office to approve this line without a tag. This screen updates by itself.
+                    </p>
+                    <CallOfficeButton />
+                  </div>
+                ) : line.request?.status === 'rejected' ? (
+                  <p className="rounded-[10px] bg-error-bg px-3 py-2 text-[11px] text-error-text">
+                    {`The office said tag it${line.request.decisionNote ? `: “${line.request.decisionNote}”` : '.'}`}
                   </p>
                 ) : null}
                 <form action={bindItemTagAction} className="flex flex-col gap-2">
@@ -120,12 +141,12 @@ export function TagLoad({
                   ) : null}
                   <CodeField placeholder="TG-…" scanLabel="Scan tag" submitLabel="Bind tag to this line" />
                 </form>
-                {!line.untaggedReason ? (
+                {canRequest && !line.untaggedReason && line.request?.status !== 'pending' ? (
                   <details className="text-[11px]">
                     <summary className="cursor-pointer text-text-secondary underline underline-offset-2">
-                      No tag available?
+                      {line.request?.status === 'rejected' ? 'Ask the office again' : 'No tag available? Ask the office'}
                     </summary>
-                    <form action={skipItemTagAction} className="mt-2 flex flex-col gap-2">
+                    <form action={requestTagExceptionAction} className="mt-2 flex flex-col gap-2">
                       <input type="hidden" name="pickupId" value={pickupId} />
                       <input type="hidden" name="itemId" value={line.id} />
                       <input type="hidden" name="returnTo" value={returnTo} />
@@ -140,7 +161,7 @@ export function TagLoad({
                         type="submit"
                         className="h-10 rounded-[10px] border border-border text-sm font-semibold text-text-primary"
                       >
-                        Collect this line without a tag
+                        Ask to collect without a tag
                       </button>
                     </form>
                   </details>

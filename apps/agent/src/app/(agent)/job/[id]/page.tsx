@@ -15,6 +15,7 @@ import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { createSignedUrls } from '@clbipp/auth/storage-server'
 import { formatPaise } from '@clbipp/core/format'
+import { expectedVehicle, formatVehicleReg } from '@clbipp/core/vehicle'
 import {
   AppShell,
   Badge,
@@ -76,6 +77,8 @@ export default async function Page({
       agentFeePaise: true,
       custodyBatchId: true,
       collectionScheduledAt: true,
+      collectionVehicle: true,
+      collectionRun: { select: { agentId: true, vehicle: true } },
       offer: { select: { acceptedAt: true } },
       vendor: { select: { fullName: true, phone: true, companyName: true } },
       address: {
@@ -102,6 +105,18 @@ export default async function Page({
   // "not yours" message so the screen doesn't confirm that a given pickup id
   // exists to an agent who has no business knowing.
   if (!pickup || pickup.agentId !== user.id) notFound()
+
+  // AF2 · FD25 — the vehicle on record once collected, else what the collect
+  // screen will prefill (the run's, then the agent's own).
+  const agentProfile = pickup.collectionVehicle
+    ? null
+    : await prisma.profile.findUnique({ where: { id: user.id }, select: { agentVehicle: true } })
+  const vehicleReg =
+    pickup.collectionVehicle ??
+    expectedVehicle({
+      runVehicle: pickup.collectionRun?.agentId === user.id ? pickup.collectionRun.vehicle : null,
+      profileVehicle: agentProfile?.agentVehicle,
+    })
 
   const address = pickup.address
   const textAddress = address
@@ -211,6 +226,16 @@ export default async function Page({
             <p className="text-[11px] leading-relaxed text-text-secondary">
               Paid on collection. Not the battery price.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card variant="elevated">
+          <CardContent className="flex flex-col">
+            <DetailRow
+              label={pickup.collectionVehicle ? 'Collected in' : 'Vehicle'}
+              value={vehicleReg ? formatVehicleReg(vehicleReg) : 'Not set — enter it at collection'}
+              last
+            />
           </CardContent>
         </Card>
 

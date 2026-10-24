@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation'
 
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
+import { dropoffPrefill, vehicleRegFromText } from '@clbipp/core/vehicle'
 import { AppShell, Banner, Card, CardContent, PagePadding, SectionLabel } from '@clbipp/ui'
 
 import { ConfirmDropoffForm } from './ConfirmDropoffForm'
@@ -32,6 +33,7 @@ export default async function Page({
       where: { id: { in: pickupIds }, agentId: user.id, status: 'collected', custodyBatchId: null },
       select: {
         id: true,
+        collectionVehicle: true,
         vendor: { select: { fullName: true } },
         items: { select: { confirmedWeightKg: true, weightKg: true } },
         receipt: { select: { itemCount: true } },
@@ -39,6 +41,7 @@ export default async function Page({
     }),
     prisma.facility.findMany({ where: { isActive: true }, select: { id: true, name: true, location: true } }),
   ])
+  const profile = await prisma.profile.findUnique({ where: { id: user.id }, select: { agentVehicle: true } })
 
   if (pickups.length === 0) redirect('/dropoff')
 
@@ -47,6 +50,9 @@ export default async function Page({
     0,
   )
   const itemCount = pickups.reduce((sum, p) => sum + (p.receipt?.itemCount ?? p.items.length), 0)
+  // AF2 · FD25 — the van the loads left in; the profile only when none recorded one.
+  const vehiclePrefill =
+    dropoffPrefill(pickups.map((p) => p.collectionVehicle)) ?? vehicleRegFromText(profile?.agentVehicle)
 
   return (
     <AppShell title="Confirm hand-off" showBack backHref="/dropoff" hideNav>
@@ -69,7 +75,12 @@ export default async function Page({
         {facilities.length === 0 ? (
           <Banner variant="error">No active facility. Contact admin.</Banner>
         ) : (
-          <ConfirmDropoffForm pickupIds={pickups.map((p) => p.id)} userId={user.id} facilities={facilities} />
+          <ConfirmDropoffForm
+            pickupIds={pickups.map((p) => p.id)}
+            userId={user.id}
+            facilities={facilities}
+            vehiclePrefill={vehiclePrefill}
+          />
         )}
       </PagePadding>
     </AppShell>

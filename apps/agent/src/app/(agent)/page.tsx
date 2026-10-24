@@ -18,6 +18,9 @@ import { RUN_STATUS_LABELS } from '@clbipp/core/run-planning'
 import { AppShell, Card, CardContent, InstallPrompt, ListRow, PagePadding, SectionLabel } from '@clbipp/ui'
 
 import { isActiveJob, isTodaysWork, jobHref, jobNextStep, jobSubtitle } from '@/lib/job-nav'
+import { noticeHref, unreadNotices, type AgentNoticeRow } from '@/lib/notices'
+
+import { markNoticeRead } from './actions'
 
 // Stats are scoped to the local day, not a rolling 24h. "Earned today" resetting
 // at 3pm because that is when yesterday's shift started would be wrong on a
@@ -51,6 +54,37 @@ function StatTile({ value, label }: { value: string; label: string }) {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// AF3 — the office's notices to this agent, newest first, until "Got it".
+function Notices({ notices }: { notices: AgentNoticeRow[] }) {
+  return (
+    <div className="flex flex-col gap-2" aria-label="Notices from the office">
+      {notices.map((n) => {
+        const href = noticeHref(n)
+        return (
+          <Card key={n.id} variant="elevated" className="border-l-4 border-l-primary-green">
+            <CardContent className="flex flex-col gap-2">
+              <p className="text-sm text-text-primary">{n.message}</p>
+              <div className="flex items-center gap-3">
+                <form action={markNoticeRead}>
+                  <input type="hidden" name="noticeId" value={n.id} />
+                  <button type="submit" className="text-xs font-bold text-text-primary underline underline-offset-2">
+                    Got it
+                  </button>
+                </form>
+                {href ? (
+                  <Link href={href} className="text-xs font-bold text-text-primary underline underline-offset-2">
+                    Open job
+                  </Link>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
   )
 }
 
@@ -197,6 +231,7 @@ export default async function Page() {
   // First name only — "Good morning, Ravi Kumar" reads like a letter, not a
   // greeting. Falls back to the bare greeting rather than to the email.
   const firstName = profile?.fullName?.trim().split(/\s+/)[0]
+  const notices = await unreadNotices(user.id)
 
   return (
     <AppShell hideNav>
@@ -211,6 +246,8 @@ export default async function Page() {
               : `${active.length} job${active.length === 1 ? '' : 's'} still open.`}
           </p>
         </div>
+
+        {notices.length > 0 ? <Notices notices={notices} /> : null}
 
         {/* Renders only when the browser says the app is installable and the
             agent hasn't dismissed it — see the component. An agent working a

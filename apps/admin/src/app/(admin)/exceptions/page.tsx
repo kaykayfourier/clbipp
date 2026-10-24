@@ -5,7 +5,7 @@ import { categoryLabel, chemistryLabel } from '@clbipp/core/intake'
 
 import { formatAge, formatIstDateTime } from '@/lib/ist'
 
-import { resolveExceptionAction } from './actions'
+import { decideTagExceptionAction, resolveExceptionAction } from './actions'
 
 // D05 · Exception queue — Batch 14, owner A — Aamir.
 //
@@ -84,12 +84,35 @@ export default async function ExceptionsPage({
     error?: string
     resolved?: string
     already?: string
+    tag?: string
   }>
 }) {
   const params = await searchParams
   const state: StateFilter =
     params.state === 'resolved' || params.state === 'all' ? params.state : 'open'
   const kind = params.kind === 'hold' || params.kind === 'review' ? params.kind : null
+
+  // AF4 · FD22 — untagged-battery requests waiting on the office. Collection is
+  // blocked until one is decided, so they lead the page, oldest first.
+  const tagRequests = await prisma.tagException.findMany({
+    where: { status: 'pending' },
+    orderBy: { requestedAt: 'asc' },
+    select: {
+      id: true,
+      reason: true,
+      requestedAt: true,
+      requester: { select: { fullName: true } },
+      batteryItemId: true,
+      batteryItem: { select: { category: true, quantity: true, chemistry: true } },
+      pickup: {
+        select: {
+          id: true,
+          vendor: { select: { fullName: true, companyName: true } },
+          items: { orderBy: { createdAt: 'asc' }, select: { id: true } },
+        },
+      },
+    },
+  })
 
   const [rows, openCount, resolvedCount] = await Promise.all([
     prisma.itemException.findMany({
@@ -149,11 +172,67 @@ export default async function ExceptionsPage({
           Exception queue
         </h1>
         <p className="mt-1 max-w-[660px] text-xs leading-relaxed text-text-secondary">
-          Items the engine flagged. Resolving one does not move the pickup.
+          Untagged batteries waiting on the office, and items the engine flagged. Neither moves the pickup.
         </p>
       </div>
 
       {params.error ? <Banner tone="error">{params.error}</Banner> : null}
+      {params.tag ? <Banner tone="success">{params.tag}</Banner> : null}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.09em] text-text-secondary">
+          Untagged batteries · {tagRequests.length} waiting
+        </h2>
+        {tagRequests.length === 0 ? (
+          <p className="text-xs text-text-secondary">No agent is waiting on a no-tag approval.</p>
+        ) : (
+          tagRequests.map((r) => {
+            const line = r.pickup.items.findIndex((i) => i.id === r.batteryItemId) + 1
+            return (
+              <div key={r.id} className="rounded-xl border border-warning-border bg-surface px-4 py-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-sm text-text-primary">
+                    <Link href={`/pickups/${encodeURIComponent(r.pickup.id)}`} className="font-mono font-bold underline underline-offset-2">
+                      {r.pickup.id}
+                    </Link>
+                    {` · line ${line} · ${categoryLabel(r.batteryItem.category)} × ${r.batteryItem.quantity}`}
+                    {r.batteryItem.chemistry ? ` · ${chemistryLabel(r.batteryItem.chemistry) ?? r.batteryItem.chemistry}` : ''}
+                  </p>
+                  <span className="text-[11px] text-text-secondary">
+                    {r.requester.fullName} · {formatAge(r.requestedAt, now)} ago · {r.pickup.vendor.companyName || r.pickup.vendor.fullName}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-text-primary">“{r.reason}”</p>
+                <div className="mt-3 flex flex-wrap items-start gap-3">
+                  <form action={decideTagExceptionAction} className="flex items-center gap-2">
+                    <input type="hidden" name="requestId" value={r.id} />
+                    <input type="hidden" name="decision" value="approve" />
+                    <button type="submit" className="rounded-lg bg-primary-black px-3 py-1.5 text-xs font-bold text-primary-green">
+                      Approve no tag
+                    </button>
+                  </form>
+                  <form action={decideTagExceptionAction} className="flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="requestId" value={r.id} />
+                    <input type="hidden" name="decision" value="reject" />
+                    <input
+                      name="note"
+                      required
+                      minLength={4}
+                      placeholder="Why it must be tagged"
+                      className="w-[260px] rounded-lg border border-console-line bg-surface px-3 py-1.5 text-xs text-text-primary"
+                    />
+                    <button type="submit" className="rounded-lg border border-console-line px-3 py-1.5 text-xs font-bold text-text-primary">
+                      Reject — tag it
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </section>
+
+      <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.09em] text-text-secondary">Engine flags</h2>
       {params.resolved ? (
         <Banner tone="success">
           Exception resolved. See the{' '}

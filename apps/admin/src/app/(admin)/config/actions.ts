@@ -28,6 +28,7 @@ import {
   validateEngineConfig,
 } from '@clbipp/core/engine-config'
 import type { Chemistry, Config, CostInput, Metal } from '@clbipp/decision-engine'
+import { NEGOTIATION_BAND_MAX_BP } from '@clbipp/core/negotiation'
 
 import { requireAdmin } from '@/lib/admin-identity'
 
@@ -279,3 +280,50 @@ export async function publishConfig(formData: FormData) {
   revalidatePath('/audit')
   redirect(`/config?published=${diff.count}`)
 }
+
+// ─── setNegotiationBand (AF5 · FD24) ─────────────────────────────────────────
+// How far above the sanctioned price (the office's latest, else the engine's)
+// an agent may re-offer without calling the office. 0–50%, stored as basis
+// points on the ONE ops_settings row. NOT engine config: it moves no quote,
+// only what an agent may type after a decline — so it is a plain upsert with
+// its own audit verb, not an append-only publish.
+const SETTINGS_ACTION: AdminAuditAction = 'settings.update'
+const SETTINGS_SUBJECT: AdminAuditSubject = 'ops_settings'
+
+export async function setNegotiationBand(formData: FormData) {
+  const auth = await requireAdmin()
+  if (!auth.ok) redirect('/login')
+
+  const raw = String(formData.get('bandPct') ?? '').trim()
+  const pct = Number(raw)
+  const bp = Math.round(pct * 100)
+  if (raw === '' || !Number.isFinite(pct) || bp < 0 || bp > NEGOTIATION_BAND_MAX_BP) {
+    redirect(`/config?error=${encodeURIComponent(`The band must be between 0 and ${NEGOTIATION_BAND_MAX_BP / 100}%.`)}`)
+  }
+
+  const before = await prisma.opsSettings.findUnique({ where: { id: 'default' }, select: { negotiationBandBp: true } })
+  if (before?.negotiationBandBp === bp) redirect('/config?band=unchanged')
+
+  await prisma.$transaction([
+    prisma.opsSettings.upsert({
+      where: { id: 'default' },
+      update: { negotiationBandBp: bp, updatedBy: auth.admin.id },
+      create: { id: 'default', negotiationBandBp: bp, updatedBy: auth.admin.id },
+    }),
+    prisma.adminAudit.create({
+      data: {
+        actorId: auth.admin.id,
+        action: SETTINGS_ACTION,
+        subjectType: SETTINGS_SUBJECT,
+        subjectId: 'default',
+        before: { negotiationBandBp: before?.negotiationBandBp ?? null },
+        after: { negotiationBandBp: bp },
+      },
+    }),
+  ])
+
+  revalidatePath('/config')
+  revalidatePath('/audit')
+  redirect('/config?band=set')
+}
+

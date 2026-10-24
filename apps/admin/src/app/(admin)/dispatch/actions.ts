@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 
 import { prisma } from '@clbipp/database'
 import type { AdminAuditAction, AdminAuditSubject } from '@clbipp/core/audit'
+import { MIN_REASSIGN_REASON_CHARS, reassignEligibility } from '@clbipp/core/assignment'
 
 import { requireAdmin } from '@/lib/admin-identity'
 import { agentStateAtConfirm } from '@/lib/agent-selection'
@@ -283,60 +284,91 @@ export async function assignPickupAction(formData: FormData) {
   redirect(`${href}?assigned=1`)
 }
 
-// ─── Assign a different agent to COLLECT (feedback round 2) ──────────────────
-// The company wants the option for one agent to inspect and another to collect.
-// For an ACCEPTED, not-yet-collected pickup this moves Pickup.agentId to the
-// chosen collector. Nothing else changes: status stays `offered` (no new stage,
-// FD0), the inspector stays on the record (their item readings and the
-// `arrived` / `offered` events), and the fee is earned at collection by
-// whoever collects. Unused unless an admin chooses it.
-const COLLECTOR_ACTION: AdminAuditAction = 'pickup.assign_collector'
+// ─── Reassign a job to another agent (AF3 · FD21) ────────────────────────────
+// Replaces round 2's "assign a different collector". The company asked for an
+// admin to move a job between agents; FD21 (ours, provisional) allows it before
+// collection only — `scheduled`, or `offered` in any sub-state — and never for
+// a job the agent is standing at (`arrived`) or a stop on an open run.
+// `reassignEligibility()` in @clbipp/core/assignment is that rule; the panel on
+// /dispatch/[id] renders with it and this refuses with it.
+//
+// What moves: Pickup.agentId. What is cleared: the fee (earned at collection by
+// whoever collects) and the run fields. What stays: the status (no stage, FD0),
+// the inspector's readings and their `arrived` / `offered` events, the offer.
+//
+// 🔴 The REASON goes on the audit row only. The status event names both agents
+// and carries no reason, because the vendor's own token reads status_events.
+//
+// Both agents get an in-app notice (agent_notices). There is no push (§12.5);
+// the old agent's queue drops the job by itself because every agent list keys
+// on Pickup.agentId and every agent action re-checks it.
+//
+// ⚠ `pickup.assign_collector` stays in the vocabulary: old rows carry it, and a
+// collection run that takes an accepted stop (runs/actions.ts) still writes it.
+const REASSIGN_ACTION: AdminAuditAction = 'pickup.reassign'
 
-export async function assignCollector(input: { pickupId: string; agentId: string }): Promise<AssignResult> {
+export async function reassignPickup(input: {
+  pickupId: string
+  agentId: string
+  reason: string
+}): Promise<AssignResult> {
   const gate = await requireAdmin()
   if (!gate.ok) return { error: gate.error }
   const admin = gate.admin
 
   const pickupId = input.pickupId.trim()
   const agentId = input.agentId.trim()
+  const reason = input.reason.trim()
   if (!pickupId) return { error: 'No pickup selected.' }
-  if (!agentId) return { error: 'Choose who collects.' }
+  if (!agentId) return { error: 'Choose the agent to give this job to.' }
+  if (reason.length < MIN_REASSIGN_REASON_CHARS) {
+    return { error: `Say why it is being reassigned (at least ${MIN_REASSIGN_REASON_CHARS} characters).` }
+  }
 
   const before = await prisma.pickup.findUnique({
     where: { id: pickupId },
     select: {
       status: true,
       agentId: true,
-      custodyBatchId: true,
+      agentFeePaise: true,
+      scheduledSlot: true,
       collectionScheduledAt: true,
-      offer: { select: { acceptedAt: true } },
+      collectionRunId: true,
+      agent: { select: { fullName: true } },
       collectionRun: { select: { runNo: true, status: true } },
     },
   })
   if (!before) return { error: 'That pickup does not exist.' }
-  if (before.status !== 'offered' || !before.offer?.acceptedAt) {
-    return { error: 'A collector can be assigned only after the vendor accepts the offer, and before collection.' }
-  }
-  if (before.agentId === agentId) return { error: 'That agent is already collecting this pickup.' }
   const run = before.collectionRun
-  if (run && (run.status === 'planned' || run.status === 'in_progress')) {
-    return { error: `This collection is a stop on ${run.runNo}. Change it from the run instead.` }
-  }
+  const eligible = reassignEligibility({
+    status: before.status,
+    openRunNo: run && (run.status === 'planned' || run.status === 'in_progress') ? run.runNo : null,
+  })
+  if (!eligible.ok) return { error: eligible.reason }
+  if (!before.agentId) return { error: 'This job has no agent to reassign from. Assign it instead.' }
+  if (before.agentId === agentId) return { error: 'That agent already has this job.' }
 
-  // Re-verified at the write, never trusted from the form (same checks as dispatch).
+  // Re-verified at the write, never trusted from the form (same checks as
+  // dispatch): role, off duty, safety training. A busy day is not a block.
   const agent = await prisma.profile.findUnique({ where: { id: agentId }, select: { id: true, role: true, fullName: true } })
   if (!agent || agent.role !== 'agent') return { error: 'Choose an agent.' }
-  const confirmState = await agentStateAtConfirm(agentId, before.collectionScheduledAt ?? new Date())
-  if (confirmState.offDuty) return { error: `${agent.fullName} is marked off duty.` }
+  const day = (before.status === 'offered' ? before.collectionScheduledAt : before.scheduledSlot) ?? new Date()
+  const confirmState = await agentStateAtConfirm(agentId, day)
+  if (!confirmState.exists) return { error: 'That agent does not exist.' }
+  if (confirmState.offDuty) {
+    return { error: `${agent.fullName} is marked off duty. Mark them on duty from the agent roster first, or pick another agent.` }
+  }
   if (!confirmState.safetyTrained) {
     return { error: `${agent.fullName} has no safety training on file and cannot handle the batteries.` }
   }
 
+  const fromName = before.agent?.fullName ?? 'the previous agent'
   const moved = await prisma.$transaction(
     async (tx) => {
-      // Guarded on the agent we read, so two admins cannot both win.
+      // Guarded on the agent AND status we read: two admins reassigning at once,
+      // or the agent tapping "Arrived" meanwhile, update zero rows here.
       const updated = await tx.pickup.updateMany({
-        where: { id: pickupId, status: 'offered', agentId: before.agentId },
+        where: { id: pickupId, status: before.status, agentId: before.agentId },
         data: { agentId: agent.id, agentFeePaise: null, collectionRunId: null, runSequence: null },
       })
       if (updated.count === 0) return false
@@ -344,41 +376,62 @@ export async function assignCollector(input: { pickupId: string; agentId: string
       await tx.statusEvent.create({
         data: {
           pickupId,
-          // The CURRENT status: a fact about who collects, not a stage.
-          status: 'offered',
+          // The CURRENT status: a fact about who has the job, not a stage.
+          status: before.status,
           actorId: admin.id,
           actorRole: 'admin',
-          notes: `Collection assigned to ${agent.fullName}.`,
+          notes: `Reassigned from ${fromName} to ${agent.fullName}.`,
         },
       })
       await tx.adminAudit.create({
         data: {
           actorId: admin.id,
-          action: COLLECTOR_ACTION,
+          action: REASSIGN_ACTION,
           subjectType: AUDIT_SUBJECT,
           subjectId: pickupId,
-          before: { status: 'offered', agentId: before.agentId },
-          after: { status: 'offered', agentId: agent.id, agentFeePaise: null },
+          before: { status: before.status, agentId: before.agentId, agentFeePaise: before.agentFeePaise, collectionRunId: before.collectionRunId },
+          after: { status: before.status, agentId: agent.id, agentFeePaise: null, collectionRunId: null },
+          reason,
         },
+      })
+      await tx.agentNotice.createMany({
+        data: [
+          {
+            agentId: agent.id,
+            pickupId,
+            kind: 'job_reassigned_to_you',
+            message: `${pickupId} is now yours. The office moved it from ${fromName}.`,
+          },
+          {
+            agentId: before.agentId!,
+            pickupId,
+            kind: 'job_reassigned_away',
+            message: `${pickupId} has been moved to ${agent.fullName} by the office. You no longer need to visit.`,
+          },
+        ],
       })
       return true
     },
     { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
   )
-  if (!moved) return { error: 'This pickup changed a moment ago. Reload and try again.' }
+  if (!moved) return { error: 'This job changed a moment ago. Reload and try again.' }
   return { error: null }
 }
 
-export async function assignCollectorAction(formData: FormData) {
+export async function reassignPickupAction(formData: FormData) {
   const pickupId = String(formData.get('pickupId') ?? '')
   if (!pickupId) redirect('/dispatch')
 
-  const { error } = await assignCollector({ pickupId, agentId: String(formData.get('agentId') ?? '') })
+  const { error } = await reassignPickup({
+    pickupId,
+    agentId: String(formData.get('agentId') ?? ''),
+    reason: String(formData.get('reason') ?? ''),
+  })
 
   const href = `/dispatch/${encodeURIComponent(pickupId)}`
   if (error) redirect(`${href}?error=${encodeURIComponent(error)}`)
   revalidatePath(href)
   revalidatePath(`/pickups/${encodeURIComponent(pickupId)}`)
   revalidatePath('/dispatch')
-  redirect(`${href}?collector=1`)
+  redirect(`${href}?reassigned=1`)
 }

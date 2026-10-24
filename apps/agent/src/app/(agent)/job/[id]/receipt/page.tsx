@@ -89,6 +89,7 @@ export default async function Page({
     tagCode: i.tag?.code ?? null,
     boxCode: i.tag?.container?.code ?? null,
     untaggedReason: i.untaggedReason,
+    request: null,
   }))
   const untagged = lines.filter((l) => !l.tagCode)
   // FD13 — a line that left without a tag can still be tagged in the van, up
@@ -150,6 +151,7 @@ export default async function Page({
             boxes={[]}
             runNo={null}
             returnTo={`/job/${id}/receipt`}
+            canRequest={false}
           />
         ) : null}
 

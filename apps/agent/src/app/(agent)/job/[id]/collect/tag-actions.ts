@@ -24,6 +24,13 @@ import { MIN_UNTAGGED_REASON_CHARS, parseCode } from '@clbipp/core/tags'
 // ⚠ Allowed from the moment the vendor accepts until the hub drop-off — so an
 // agent who collected with a line untagged (FD13) can still tag it in the van.
 // After drop-off the hub owns tagging (`tagAtHub` in the admin app).
+//
+// 🔴 AF4 · FD22 REVERSES FD13's "never a hard stop". An agent can no longer
+// decide alone that a line leaves without a tag: they REQUEST it
+// (`requestTagExceptionAction`), and collection stays blocked until an admin
+// approves on /exceptions. The approval is what writes `untaggedReason`, so
+// confirmCollection's gate (tag OR reason) and every reader after it are
+// unchanged.
 
 type Ctx = { pickupId: string; itemId: string; back: string }
 
@@ -128,6 +135,11 @@ export async function bindItemTagAction(formData: FormData) {
     if (item.untaggedReason) {
       await tx.batteryItem.update({ where: { id: item.id }, data: { untaggedReason: null } })
     }
+    // AF4 — and a request the office has not answered yet is moot.
+    await tx.tagException.updateMany({
+      where: { batteryItemId: item.id, status: 'pending' },
+      data: { status: 'withdrawn' },
+    })
     return true
   })
   if (!bound) finish(ctx, { error: `${parsed.code} was just used on another battery. Use a fresh tag.` })
@@ -151,19 +163,41 @@ export async function unbindItemTagAction(formData: FormData) {
   finish(ctx, { ok: `${item.tag.code} removed from the line.` })
 }
 
-export async function skipItemTagAction(formData: FormData) {
+/**
+ * AF4 · FD22 — ask the office to let this line leave without a tag.
+ *
+ * Creates a PENDING `tag_exceptions` row and nothing else: `untaggedReason`
+ * stays null, so confirmCollection keeps refusing until an admin approves
+ * (`decideTagException` in the admin app writes the reason). Asking again
+ * withdraws the earlier pending request for the line — one pending per line,
+ * held here because Prisma cannot express a partial unique index.
+ *
+ * Only while the job is waiting to be collected (`offered`, accepted): after
+ * collection a line is either tagged or already approved.
+ */
+export async function requestTagExceptionAction(formData: FormData) {
   const ctx = readCtx(formData)
-  const { pickup, error } = await loadTaggablePickup(ctx)
+  const { user, pickup, error } = await loadTaggablePickup(ctx)
   if (!pickup) finish(ctx, { error: error ?? 'Job not found.' })
+  if (pickup.status !== 'offered') finish(ctx, { error: 'This load is already collected.' })
   const item = pickup.items.find((i) => i.id === ctx.itemId)
   if (!item) finish(ctx, { error: 'That line is not on this job.' })
   if (item.tag) finish(ctx, { error: `This line already carries ${item.tag.code}.` })
+  if (item.untaggedReason) finish(ctx, { ok: 'The office has already approved this line without a tag.' })
 
   const reason = String(formData.get('reason') ?? '').trim()
   if (reason.length < MIN_UNTAGGED_REASON_CHARS) {
-    finish(ctx, { error: `Say why this line has no tag (at least ${MIN_UNTAGGED_REASON_CHARS} characters) — the hub will tag it on receipt.` })
+    finish(ctx, { error: `Say why this line has no tag (at least ${MIN_UNTAGGED_REASON_CHARS} characters).` })
   }
 
-  await prisma.batteryItem.update({ where: { id: item.id }, data: { untaggedReason: reason.slice(0, 200) } })
-  finish(ctx, { ok: 'Recorded — the hub will tag this line when it checks the load in.' })
+  await prisma.$transaction(async (tx) => {
+    await tx.tagException.updateMany({
+      where: { batteryItemId: item.id, status: 'pending' },
+      data: { status: 'withdrawn' },
+    })
+    await tx.tagException.create({
+      data: { batteryItemId: item.id, pickupId: pickup.id, reason: reason.slice(0, 200), requestedBy: user.id },
+    })
+  })
+  finish(ctx, { ok: 'Sent to the office. Collection stays blocked until they approve, or you tag the line.' })
 }

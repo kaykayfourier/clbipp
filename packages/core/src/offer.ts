@@ -5,6 +5,7 @@
 import type { RecoveryPathway } from "@clbipp/database";
 
 import { formatPaise, isStorablePaise, rupeesToPaise } from "./documents";
+import { isLithium } from "./intake";
 
 // `Offer.estimatedPrice` is stored as an integer number of PAISE (see seed:
 // 18450000 = ₹1,84,500).
@@ -55,63 +56,43 @@ export function parseMaterialWeights(raw: unknown): MaterialWeight[] {
   return rows;
 }
 
-// ─── Pricing an offer (feedback round 2) ─────────────────────────────────────
-// The engine is RECOMMENDATION-ONLY for the pilot. The price is agreed on a
-// call to the office; the engine's total is kept internally beside it and never
-// shown to the vendor.
+// ─── Pricing an offer (feedback round 2 → AF5) ───────────────────────────────
+// The engine is RECOMMENDATION-ONLY for the pilot. Since AF5 · FD23 only the
+// OFFICE enters a changed price (the agent's typed "Agreed price" field is
+// gone — the company's worry was an agent mishearing or mistyping it), and the
+// agent re-offers only inside the band (./negotiation). The engine's total is
+// kept internally beside the offered price and never shown to the vendor.
 
-/** A typed offer more than this many times the recommendation is a typo. */
+/** A price more than this many times the recommendation is a typo. */
 export const MAX_OFFER_MULTIPLE = 10;
 export const MIN_PRICE_NOTE_CHARS = 10;
 export const MAX_PRICE_NOTE_CHARS = 500;
 
-export type ResolvedOfferPrice = {
-  /** What the vendor is offered, and paid on collection. */
-  offeredPaise: number;
-  /** The engine / rate-card total. Internal only. */
-  recommendedPaise: number;
-  note: string | null;
-};
+/** A typed rupee amount ("48,000", "51257.60") → integer paise, or why not. */
+export function parsePriceRupees(
+  raw: string | null | undefined,
+): { paise: number; error: null } | { paise: null; error: string } {
+  const text = (raw ?? "").trim().replace(/,/g, "");
+  const rupees = Number(text);
+  if (text === "" || !Number.isFinite(rupees) || rupees <= 0) {
+    return { paise: null, error: "Enter the price as an amount in rupees, greater than zero." };
+  }
+  const paise = rupeesToPaise(rupees);
+  if (!isStorablePaise(paise)) return { paise: null, error: "That price is too large. Check the amount." };
+  return { paise, error: null };
+}
 
 /**
- * Decide the offered amount from the recommendation and what the agent typed.
- * A blank price means "offer the recommendation". A typed price that differs
- * from it needs a note saying how it was agreed.
+ * The office's price, checked against the engine's recommendation: a typo
+ * guard (×MAX_OFFER_MULTIPLE), never a business rule — the office may go
+ * anywhere below it, including well under the engine.
  */
-export function resolveOfferPrice(input: {
-  recommendedPaise: number;
-  agreedRupees: string | null | undefined;
-  note: string | null | undefined;
-}): { value: ResolvedOfferPrice; error: null } | { value: null; error: string } {
-  const { recommendedPaise } = input;
-  if (!isStorablePaise(recommendedPaise)) {
-    return { value: null, error: "This load's price is too large to record. Check the readings on each item." };
+export function checkOfficePrice({ pricePaise, enginePaise }: { pricePaise: number; enginePaise: number }): string | null {
+  if (!isStorablePaise(pricePaise) || pricePaise <= 0) return "That price is too large. Check the amount.";
+  if (enginePaise > 0 && pricePaise > enginePaise * MAX_OFFER_MULTIPLE) {
+    return `That is more than ${MAX_OFFER_MULTIPLE} times the recommended price. Check the amount.`;
   }
-
-  const note = (input.note ?? "").trim().slice(0, MAX_PRICE_NOTE_CHARS) || null;
-  const raw = (input.agreedRupees ?? "").trim().replace(/,/g, "");
-  if (raw === "") {
-    return { value: { offeredPaise: recommendedPaise, recommendedPaise, note }, error: null };
-  }
-
-  const rupees = Number(raw);
-  if (!Number.isFinite(rupees) || rupees <= 0) {
-    return { value: null, error: "Enter the agreed price as an amount in rupees, greater than zero." };
-  }
-  const offeredPaise = rupeesToPaise(rupees);
-  if (!isStorablePaise(offeredPaise)) {
-    return { value: null, error: "That price is too large. Check the amount." };
-  }
-  if (recommendedPaise > 0 && offeredPaise > recommendedPaise * MAX_OFFER_MULTIPLE) {
-    return {
-      value: null,
-      error: `That is more than ${MAX_OFFER_MULTIPLE} times the recommended price. Check the amount.`,
-    };
-  }
-  if (offeredPaise !== recommendedPaise && (note === null || note.length < MIN_PRICE_NOTE_CHARS)) {
-    return { value: null, error: "Add a short note on how this price was agreed, e.g. who you spoke to." };
-  }
-  return { value: { offeredPaise, recommendedPaise, note }, error: null };
+  return null;
 }
 
 /**
@@ -126,3 +107,48 @@ export function vendorOfferRationale(includedLines: number, totalLines: number):
   const left = totalLines - includedLines;
   return `Based on our on-site inspection. Covers ${includedLines} of your ${lines(totalLines)}; ${left === 1 ? "the other line needs" : `the other ${left} need`} a closer look and ${left === 1 ? "is" : "are"} not included.`;
 }
+
+// ─── The engine's recommendation for a whole load (AF5) ──────────────────────
+// ONE reading of "what is the recommended total", for the agent's offer page,
+// presentOffer, and the admin Price panel. Until AF5 the HOLD rule existed
+// twice and disagreed: the page left out a line only when it was lithium AND
+// on HOLD, presentOffer left out any line carrying a HOLD flag — so in the one
+// case they differed (a non-lithium line with a stale engine quote) the vendor
+// was offered less than the total the agent had just read out. HOLD is an
+// engine verdict and the engine prices lithium only (D1), so the page's rule
+// is the right one.
+
+export type OfferItemForTotal = {
+  id: string;
+  chemistry: string | null;
+  unitPricePaise: number | null;
+  linePricePaise: number | null;
+  quoteData: unknown;
+};
+
+/** True when the engine put this lithium line on HOLD — left out of the offer. */
+export function isHeldItem(item: Pick<OfferItemForTotal, "chemistry" | "quoteData">): boolean {
+  if (!isLithium(item.chemistry)) return false;
+  const output = (item.quoteData as { output?: { decision?: { flags?: unknown } } } | null)?.output;
+  const flags = output?.decision?.flags;
+  return Array.isArray(flags) && flags.includes("HOLD");
+}
+
+export type RecommendedOfferTotal<T extends OfferItemForTotal> = {
+  /** Sum of the included lines' prices, paise. */
+  totalPaise: number;
+  included: T[];
+  held: T[];
+  unpriced: T[];
+  /** Every line priced and at least one included. */
+  canPresent: boolean;
+};
+
+export function recommendedOfferTotal<T extends OfferItemForTotal>(items: readonly T[]): RecommendedOfferTotal<T> {
+  const held = items.filter((i) => isHeldItem(i));
+  const included = items.filter((i) => !isHeldItem(i));
+  const unpriced = items.filter((i) => i.unitPricePaise === null || i.linePricePaise === null);
+  const totalPaise = included.reduce((sum, i) => sum + (i.linePricePaise ?? 0), 0);
+  return { totalPaise, included, held, unpriced, canPresent: unpriced.length === 0 && included.length > 0 };
+}
+

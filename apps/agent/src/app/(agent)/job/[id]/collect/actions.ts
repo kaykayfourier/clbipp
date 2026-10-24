@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { photoPathsBelongTo } from '@clbipp/core/intake'
+import { expectedVehicle, isVehicleCorrection, parseVehicleReg } from '@clbipp/core/vehicle'
 import { raisePayment } from '@clbipp/core'
 
 import { computeAgentFeePaise } from './agent-fee'
@@ -47,8 +48,16 @@ export async function confirmCollection(formData: FormData) {
       offer: { select: { acceptedAt: true, estimatedPrice: true } },
       _count: { select: { items: true } },
       items: {
-        select: { confirmedWeightKg: true, weightKg: true, untaggedReason: true, tag: { select: { code: true } } },
+        select: {
+          confirmedWeightKg: true,
+          weightKg: true,
+          untaggedReason: true,
+          tag: { select: { code: true } },
+          // AF4 — only to word the refusal; the gate is tag OR untaggedReason.
+          tagExceptions: { where: { status: 'pending' }, select: { id: true }, take: 1 },
+        },
       },
+      collectionRun: { select: { agentId: true, vehicle: true } },
     },
   })
   if (!pickup) return fail('Job not found.')
@@ -60,17 +69,32 @@ export async function confirmCollection(formData: FormData) {
   }
   if (!pickup.offer?.acceptedAt) return fail('The vendor has not accepted this offer yet.')
 
-  // 🔴 FV10 · FD13 — every line tagged, or its reason for not being recorded.
-  // The screen disables the button until then; this is the gate that holds
-  // when the screen is bypassed (the form is not the boundary, FD1).
-  const unaccounted = pickup.items.filter((i) => !i.tag && !i.untaggedReason).length
-  if (unaccounted > 0) {
-    return fail(
-      `${unaccounted} line${unaccounted === 1 ? ' has' : 's have'} no tag and no reason. Tag ${unaccounted === 1 ? 'it' : 'them'}, or record why, before collecting.`,
-    )
+  // 🔴 FV10 · FD13 → AF4 · FD22 — every line tagged, or approved by the OFFICE
+  // to leave untagged (the approval writes untaggedReason). The screen
+  // disables the button until then; this is the gate that holds when the
+  // screen is bypassed (the form is not the boundary, FD1).
+  const unaccounted = pickup.items.filter((i) => !i.tag && !i.untaggedReason)
+  if (unaccounted.length > 0) {
+    const waiting = unaccounted.filter((i) => i.tagExceptions.length > 0).length
+    const bare = unaccounted.length - waiting
+    const parts = [
+      waiting > 0 ? `${waiting} line${waiting === 1 ? ' is' : 's are'} waiting for the office to approve no tag` : null,
+      bare > 0 ? `${bare} line${bare === 1 ? ' has' : 's have'} no tag` : null,
+    ].filter(Boolean)
+    return fail(`${parts.join(' and ')}. Tag every line, or ask the office, before collecting.`)
   }
   const tagCodes = pickup.items.map((i) => i.tag?.code).filter((c): c is string => Boolean(c))
   const untaggedCount = pickup.items.length - tagCodes.length
+
+  // 🔴 AF2 · FD25 — the vehicle is mandatory, and the PREFILL is recomputed
+  // here rather than read from the form: a correction is "differs from what we
+  // expected", and what we expected is not the client's to say.
+  const vehicle = parseVehicleReg(formData.get('vehicle'))
+  if (!vehicle.ok) return fail(vehicle.error)
+  const agentProfile = await prisma.profile.findUnique({ where: { id: user.id }, select: { agentVehicle: true } })
+  const run = pickup.collectionRun?.agentId === user.id ? pickup.collectionRun : null
+  const expected = expectedVehicle({ runVehicle: run?.vehicle, profileVehicle: agentProfile?.agentVehicle })
+  const corrected = isVehicleCorrection(expected, vehicle.reg)
 
   const signaturePath = String(formData.get('signaturePath') ?? '')
   if (!signaturePath) return fail('A signature is required to confirm collection.')
@@ -102,10 +126,17 @@ export async function confirmCollection(formData: FormData) {
         // hands, which — now that inspection and collection can be days apart —
         // is no longer the same thing as "when did this reach `collected`" read
         // off a log that can run backwards.
-        data: { status: 'collected', agentFeePaise, collectedAt: new Date() },
+        data: { status: 'collected', agentFeePaise, collectedAt: new Date(), collectionVehicle: vehicle.reg },
       })
       if (updated.count === 0) {
         throw new Error('ALREADY_COLLECTED')
+      }
+
+      // AF2 — +1 round trip, only when the agent changed the prefill.
+      if (corrected && expected) {
+        await tx.vehicleCorrection.create({
+          data: { pickupId, stage: 'collection', fromReg: expected, toReg: vehicle.reg, correctedBy: user.id },
+        })
       }
 
       await tx.pickupReceipt.create({
@@ -151,7 +182,7 @@ export async function confirmCollection(formData: FormData) {
           actorRole: 'agent',
           // FV10 — the tags the load left with, on the chain-of-custody record
           // itself, so the timeline names what the hub will scan.
-          notes: `Collected — signed and confirmed with vendor. Tags: ${tagCodes.length > 0 ? tagCodes.join(', ') : 'none'}${untaggedCount > 0 ? ` (${untaggedCount} line${untaggedCount === 1 ? '' : 's'} untagged — reason recorded; the hub tags on receipt)` : ''}.`,
+          notes: `Collected — signed and confirmed with vendor. Tags: ${tagCodes.length > 0 ? tagCodes.join(', ') : 'none'}${untaggedCount > 0 ? ` (${untaggedCount} line${untaggedCount === 1 ? '' : 's'} untagged — approved by the office; the hub tags on receipt)` : ''}.`,
           lat,
           lng,
           photoUrls: photoPaths,
@@ -179,7 +210,8 @@ export async function confirmCollection(formData: FormData) {
       })
     }, {
       // Prisma's default interactive-transaction timeout is 5s, and this
-      // transaction now does EIGHT sequential round trips. settlePayment in
+      // transaction now does EIGHT sequential round trips (nine when AF2's
+      // vehicle correction is written). settlePayment in
       // @clbipp/core carries a measured note on exactly that number: against
       // a remote Supabase Postgres, eight round trips took 5.3s and the whole
       // thing rolled back. Atomicity did its job there, but an agent whose

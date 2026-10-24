@@ -119,7 +119,7 @@ export default async function OfferBreakdownPage({ searchParams }: PageProps) {
         </Card>
 
         {/* Accept CTA — a POST form, shared with /offer. See AcceptOfferButton. */}
-        <AcceptOfferButton pickupId={pickup.id} />
+        <AcceptOfferButton pickupId={pickup.id} pricePaise={offer.estimated_price} />
 
         <Link href={`/offer?id=${pickup.id}`} className="block">
           <Button variant="ghost" fullWidth>

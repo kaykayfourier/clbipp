@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { prisma } from '@clbipp/database'
+import { formatVehicleReg, isVehicleCorrection } from '@clbipp/core/vehicle'
 import { categoryLabel, chemistryLabel } from '@clbipp/core/intake'
 import { CHECK_METHOD_LABELS, MIN_CUSTODY_NOTE_CHARS, batchCheckSummary } from '@clbipp/core/custody-check'
 import { STAGE_LABELS, isLifecycleStage } from '@clbipp/ui'
@@ -55,6 +56,7 @@ export default async function CustodyCheckIn({
       batchNo: true,
       handedOffAt: true,
       receivingStaffName: true,
+      vehicle: true,
       facility: { select: { name: true } },
       agent: { select: { fullName: true } },
       pickups: {
@@ -64,6 +66,7 @@ export default async function CustodyCheckIn({
           status: true,
           vendor: { select: { fullName: true, companyName: true } },
           collectionRun: { select: { id: true, runNo: true } },
+          collectionVehicle: true,
           items: {
             orderBy: { createdAt: 'asc' },
             select: {
@@ -115,6 +118,7 @@ export default async function CustodyCheckIn({
         <Stat value={String(summary.unchecked)} label="Not yet checked" tone={summary.unchecked > 0 ? 'warning' : 'default'} />
         <Stat value={String(summary.missing)} label="Declared missing" tone={summary.missing > 0 ? 'warning' : 'default'} />
         <Stat value={boxes.length > 0 ? boxes.join(', ') : '—'} label="Boxes in this load" />
+        <Stat value={batch.vehicle ? formatVehicleReg(batch.vehicle) : '—'} label="Vehicle" />
       </div>
 
       <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -131,6 +135,10 @@ export default async function CustodyCheckIn({
                       <Link href={`/runs/${p.collectionRun.id}`} className="font-mono text-[11px] underline underline-offset-2">
                         {p.collectionRun.runNo}
                       </Link>
+                    ) : null}
+                    {/* AF2 — a load that arrived in a different van from the one it left in. */}
+                    {p.collectionVehicle && isVehicleCorrection(p.collectionVehicle, batch.vehicle ?? p.collectionVehicle) ? (
+                      <Chip tone="warning">Collected in {formatVehicleReg(p.collectionVehicle)}</Chip>
                     ) : null}
                     <Chip>{isLifecycleStage(p.status) ? STAGE_LABELS[p.status] : p.status}</Chip>
                     {p.status === 'collected' ? (

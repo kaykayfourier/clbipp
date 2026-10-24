@@ -105,6 +105,24 @@ export const ADMIN_AUDIT_ACTIONS = [
    * a collection run that takes the stop.
    */
   "pickup.assign_collector",
+  // ── additional_feedback (2026-10-24 · AF3–AF5) ──────────────────────────
+  // ⚠ Also restated in packages/database/prisma/verify-seed.ts.
+  /**
+   * A `scheduled` or `offered` pickup moved from one agent to another (AF3 ·
+   * FD21). Requires a typed `reason`. Replaces `pickup.assign_collector` on
+   * /dispatch/[id]; that verb stays for its old rows and for a run that takes
+   * an accepted stop.
+   */
+  "pickup.reassign",
+  /**
+   * The office set a price for a pickup (AF5 · FD23) — an `OfficePrice` row.
+   * Requires a typed `reason`. It does not touch the Offer; the agent applies it.
+   */
+  "price.office_set",
+  /** An untagged-battery request approved or rejected (AF4 · FD22). */
+  "tag_exception.decide",
+  /** An `OpsSettings` value changed, e.g. the negotiation band (AF5 · FD24). */
+  "settings.update",
 ] as const
 
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number]
@@ -126,6 +144,9 @@ export const ADMIN_AUDIT_SUBJECTS = [
   "item_tag",
   "transport_container",
   "collection_run",
+  // additional_feedback (AF4–AF5)
+  "tag_exception",
+  "ops_settings",
 ] as const
 
 export type AdminAuditSubject = (typeof ADMIN_AUDIT_SUBJECTS)[number]
@@ -151,6 +172,10 @@ export const REASON_REQUIRED_ACTIONS: readonly AdminAuditAction[] = [
   // A battery line nobody scanned, or one that is not there. The hub is being
   // spoken for by an admin (there is no hub-staff app), so the trail needs why.
   "custody.reconcile",
+  // Taking a job off one agent and giving it to another, and overriding the
+  // engine's price: both are someone else's work changed by the office.
+  "pickup.reassign",
+  "price.office_set",
 ]
 
 export function isReasonRequired(action: AdminAuditAction): boolean {

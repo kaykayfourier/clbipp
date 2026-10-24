@@ -6,8 +6,11 @@ import { categoryLabel } from '@clbipp/core/intake'
 import { formatPaise } from '@clbipp/core/format'
 import { STAGE_LABELS, isLifecycleStage } from '@clbipp/ui'
 
-import { assignCollectorAction, assignPickupAction } from '../actions'
+import { MIN_REASSIGN_REASON_CHARS, reassignEligibility } from '@clbipp/core/assignment'
+
+import { assignPickupAction, reassignPickupAction } from '../actions'
 import { rankedAgentsFor } from '@/lib/agent-selection'
+import { ASSIGNMENT_VERBS, assignmentHistory } from '@/lib/assignment-history'
 import { inspectorOf } from '@/lib/inspector'
 import { toCoord } from './coords'
 
@@ -39,10 +42,10 @@ export default async function DispatchDetail({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string; assigned?: string; collector?: string }>
+  searchParams: Promise<{ error?: string; assigned?: string; reassigned?: string }>
 }) {
   const { id } = await params
-  const { error, assigned, collector } = await searchParams
+  const { error, assigned, reassigned } = await searchParams
 
   const pickup = await prisma.pickup.findUnique({
     where: { id },
@@ -61,6 +64,7 @@ export default async function DispatchDetail({
       indicativeQuotePaise: true,
       collectionScheduledAt: true,
       offer: { select: { acceptedAt: true } },
+      collectionRun: { select: { runNo: true, status: true } },
       conditionFlags: true,
       vendor: {
         select: {
@@ -97,19 +101,32 @@ export default async function DispatchDetail({
   // workload and distance from the agent's last known operational position, all
   // gathered in one place (lib/agent-selection.ts) and ordered by the pure
   // ranker in @clbipp/core. The dispatcher still chooses.
-  // Accepted and not yet collected: the collector can be a different agent.
-  const collectorOpen = pickup.status === 'offered' && pickup.offer?.acceptedAt != null
+  // AF3 · FD21 — scheduled or offered, not on an open run: the job can move to
+  // another agent. reassignPickup refuses with the same rule.
+  const openRun =
+    pickup.collectionRun && (pickup.collectionRun.status === 'planned' || pickup.collectionRun.status === 'in_progress')
+      ? pickup.collectionRun.runNo
+      : null
+  const reassign = reassignEligibility({ status: pickup.status, openRunNo: openRun })
+  const reassignOpen = reassign.ok && pickup.agentId !== null
   const rankedAgents =
-    isOpen || collectorOpen
+    isOpen || reassignOpen
       ? await rankedAgentsFor({
           addressLat: toCoord(pickup.address?.lat),
           addressLng: toCoord(pickup.address?.lng),
           // The day "jobs that day" is counted against: the vendor's preferred
-          // day for a request, the booked collection day for a collection.
-          targetDay: (isOpen ? pickup.preferredDate : pickup.collectionScheduledAt) ?? new Date(),
+          // day for a request, the slot for a scheduled job, the booked
+          // collection day for an offer.
+          targetDay:
+            (isOpen
+              ? pickup.preferredDate
+              : pickup.status === 'offered'
+                ? pickup.collectionScheduledAt
+                : pickup.scheduledSlot) ?? new Date(),
         })
       : []
   const inspector = isOpen ? null : await inspectorOf(pickup.id)
+  const history = await assignmentHistory(pickup.id)
 
   const now = new Date()
   const units = pickup.items.reduce((sum, i) => sum + i.quantity, 0)
@@ -142,9 +159,9 @@ export default async function DispatchDetail({
         </Banner>
       ) : null}
 
-      {collector && collectorOpen ? (
+      {reassigned ? (
         <Banner tone="success">
-          {pickup.agent?.fullName ?? 'The agent'} will collect this load.
+          Reassigned to {pickup.agent?.fullName ?? 'the agent'}. Both agents have been notified in the app.
         </Banner>
       ) : null}
 
@@ -323,18 +340,55 @@ export default async function DispatchDetail({
               </Link>
             </Panel>
           )}
-          {collectorOpen ? (
-            <Panel title="Who collects">
-              <form action={assignCollectorAction} className="flex flex-col gap-4">
+          {reassignOpen ? (
+            <Panel title="Reassign">
+              <form action={reassignPickupAction} className="flex flex-col gap-4">
                 <input type="hidden" name="pickupId" value={pickup.id} />
-                <AgentSelector agents={rankedAgents} staleAgentId={pickup.agentId} markLabel="Collecting now" />
+                <AgentSelector agents={rankedAgents} staleAgentId={pickup.agentId} markLabel="Has this job" />
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="reason" className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+                    Reason
+                  </label>
+                  <textarea
+                    id="reason"
+                    name="reason"
+                    required
+                    minLength={MIN_REASSIGN_REASON_CHARS}
+                    rows={2}
+                    placeholder="Why is this job moving?"
+                    className="rounded-lg border border-console-line bg-surface px-3 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-green"
+                  />
+                  <p className="text-[11px] leading-relaxed text-text-secondary">Kept in the audit log. Not shown to the vendor.</p>
+                </div>
                 <button
                   type="submit"
                   className="w-full rounded-lg bg-primary-black px-4 py-3 text-sm font-bold text-primary-green transition-opacity hover:opacity-90"
                 >
-                  Assign collector
+                  Reassign
                 </button>
               </form>
+            </Panel>
+          ) : !reassign.ok && (pickup.status === 'arrived' || openRun) ? (
+            <Panel title="Reassign">
+              <p className="text-xs leading-relaxed text-text-secondary">{reassign.reason}</p>
+            </Panel>
+          ) : null}
+          {history.length > 0 ? (
+            <Panel title="Assignment history">
+              <ul className="flex flex-col gap-2.5">
+                {history.map((h) => (
+                  <li key={h.id} className="text-xs leading-relaxed">
+                    <span className="font-bold text-text-primary">{ASSIGNMENT_VERBS[h.action] ?? h.action}</span>
+                    <span className="text-text-primary">
+                      {h.fromName && h.action !== 'pickup.assign' ? ` · ${h.fromName} → ${h.toName ?? '—'}` : ` · ${h.toName ?? '—'}`}
+                    </span>
+                    <span className="block text-text-secondary">
+                      {formatIstDateTime(h.at)} · by {h.byName}
+                      {h.reason ? ` · “${h.reason}”` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </Panel>
           ) : null}
         </div>

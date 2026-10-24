@@ -19,7 +19,10 @@
     "./tags": "./src/tags.ts",
     "./run-planning": "./src/run-planning.ts",
     "./dispatch-priority": "./src/dispatch-priority.ts",
-    "./custody-check": "./src/custody-check.ts"
+    "./custody-check": "./src/custody-check.ts",
+    "./vehicle": "./src/vehicle.ts",
+    "./assignment": "./src/assignment.ts",
+    "./negotiation": "./src/negotiation.ts"
   },
   "scripts": {
     "test": "vitest run"

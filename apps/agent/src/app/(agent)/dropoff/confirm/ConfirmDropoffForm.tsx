@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { uploadFile } from '@clbipp/auth/storage'
 import { Banner, Button, Card, CardContent, SectionLabel } from '@clbipp/ui'
 
+import { VehicleField } from '@/components/vehicle-field'
+
 import { confirmDropoff } from './actions'
 
 // ─── Confirm hand-off form (Batch 7a) ────────────────────────────────────────
@@ -126,14 +128,18 @@ export function ConfirmDropoffForm({
   pickupIds,
   userId,
   facilities,
+  vehiclePrefill,
 }: {
   pickupIds: string[]
   userId: string
   facilities: FacilityOption[]
+  /** AF2 · FD25 — the pickups' collection vehicle. The action recomputes it. */
+  vehiclePrefill: string | null
 }) {
   const [facilityId, setFacilityId] = useState(facilities[0]?.id ?? '')
   const [staffName, setStaffName] = useState('')
   const [signaturePath, setSignaturePath] = useState<string | null>(null)
+  const [vehicleValid, setVehicleValid] = useState(vehiclePrefill !== null)
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
 
   useEffect(() => {
@@ -145,7 +151,7 @@ export function ConfirmDropoffForm({
     )
   }, [])
 
-  const ready = facilityId !== '' && staffName.trim().length > 0 && signaturePath !== null
+  const ready = facilityId !== '' && staffName.trim().length > 0 && signaturePath !== null && vehicleValid
 
   return (
     <form action={confirmDropoff} className="flex flex-col gap-4">
@@ -182,6 +188,8 @@ export function ConfirmDropoffForm({
           </CardContent>
         </Card>
       </div>
+
+      <VehicleField prefill={vehiclePrefill} onValidChange={setVehicleValid} />
 
       <div className="flex flex-col gap-2">
         <SectionLabel>Receiving staff</SectionLabel>

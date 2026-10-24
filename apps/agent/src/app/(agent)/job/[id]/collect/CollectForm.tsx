@@ -6,6 +6,8 @@ import { MAX_FILE_BYTES, uploadFile } from '@clbipp/auth/storage'
 import { formatPaise } from '@clbipp/core/format'
 import { Banner, Button, Card, CardContent, SectionLabel } from '@clbipp/ui'
 
+import { VehicleField } from '@/components/vehicle-field'
+
 import { confirmCollection } from './actions'
 
 // ─── The collect form (D7 · Batch 6) ─────────────────────────────────────────
@@ -128,6 +130,7 @@ export function CollectForm({
   vendorName,
   agentFeePaise,
   tagsComplete,
+  vehiclePrefill,
 }: {
   pickupId: string
   userId: string
@@ -135,10 +138,13 @@ export function CollectForm({
   agentFeePaise: number
   /** FV10 · FD13 — every line tagged or explained. The action re-checks. */
   tagsComplete: boolean
+  /** AF2 · FD25 — run vehicle, else the agent's profile. The action recomputes it. */
+  vehiclePrefill: string | null
 }) {
   const [signaturePath, setSignaturePath] = useState<string | null>(null)
   const [photos, setPhotos] = useState<string[]>([])
   const [contactConfirmed, setContactConfirmed] = useState(false)
+  const [vehicleValid, setVehicleValid] = useState(vehiclePrefill !== null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   // Best-effort. PickupReceipt.capturedLat/Lng are nullable for exactly this
@@ -174,7 +180,7 @@ export function CollectForm({
     if (landed.length > 0) setPhotos((prev) => [...prev, ...landed])
   }
 
-  const ready = signaturePath !== null && contactConfirmed && tagsComplete
+  const ready = signaturePath !== null && contactConfirmed && tagsComplete && vehicleValid
 
   return (
     <form action={confirmCollection} className="flex flex-col gap-4">
@@ -185,6 +191,8 @@ export function CollectForm({
       {photos.map((p) => (
         <input key={p} type="hidden" name="photoPaths" value={p} />
       ))}
+
+      <VehicleField prefill={vehiclePrefill} onValidChange={setVehicleValid} />
 
       <div className="flex flex-col gap-2">
         <SectionLabel>Hand-off photos — optional</SectionLabel>
@@ -265,9 +273,11 @@ export function CollectForm({
       </Button>
       {!ready && (
         <p className="text-center text-[11px] text-text-secondary">
-          {tagsComplete
-            ? 'Tick the box and get the signature.'
-            : 'Tag every line (or give a reason), then get the signature.'}
+          {!tagsComplete
+            ? 'Tag every line (or get the office’s approval), then get the signature.'
+            : !vehicleValid
+              ? 'Enter the vehicle number, tick the box and get the signature.'
+              : 'Tick the box and get the signature.'}
         </p>
       )}
     </form>

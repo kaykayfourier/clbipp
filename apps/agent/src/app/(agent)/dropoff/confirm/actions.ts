@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { photoPathsBelongTo } from '@clbipp/core/intake'
+import { isVehicleCorrection, normaliseVehicleReg, parseVehicleReg } from '@clbipp/core/vehicle'
 
 // ─── confirmDropoff (Batch 7a) ────────────────────────────────────────────────
 // Does NOT change any pickup's status — D5 is explicit that a batch drop-off is
@@ -33,6 +34,10 @@ export async function confirmDropoff(formData: FormData) {
   if (!facilityId) return fail('Choose a facility.')
   if (!receivingStaffName) return fail("Enter the receiving staff member's name.")
   if (!signaturePath) return fail('A signature is required to confirm the hand-off.')
+  // 🔴 AF2 · FD25 — mandatory. Corrections are judged per pickup below, against
+  // the vehicle each one was COLLECTED in, not against the form's prefill.
+  const vehicle = parseVehicleReg(formData.get('vehicle'))
+  if (!vehicle.ok) return fail(vehicle.error)
 
   const supabase = await createClient()
   const {
@@ -59,6 +64,7 @@ export async function confirmDropoff(formData: FormData) {
     select: {
       id: true,
       collectionRunId: true,
+      collectionVehicle: true,
       items: { select: { confirmedWeightKg: true, weightKg: true } },
       receipt: { select: { itemCount: true } },
     },
@@ -91,6 +97,7 @@ export async function confirmDropoff(formData: FormData) {
           signatureUrl: signaturePath,
           lat,
           lng,
+          vehicle: vehicle.reg,
         },
       })
 
@@ -104,6 +111,23 @@ export async function confirmDropoff(formData: FormData) {
       })
       if (updated.count === 0) {
         throw new Error('NOTHING_TO_HAND_OFF')
+      }
+
+      // AF2 — one row per pickup that arrived in a different vehicle from the
+      // one it left the vendor in. A pickup with no recorded collection vehicle
+      // (collected before AF2) has nothing to differ from.
+      const corrections = pickups.filter((p) => isVehicleCorrection(p.collectionVehicle, vehicle.reg))
+      if (corrections.length > 0) {
+        await tx.vehicleCorrection.createMany({
+          data: corrections.map((p) => ({
+            pickupId: p.id,
+            custodyBatchId: batch.id,
+            stage: 'dropoff' as const,
+            fromReg: normaliseVehicleReg(p.collectionVehicle)!,
+            toReg: vehicle.reg,
+            correctedBy: user.id,
+          })),
+        })
       }
 
       await tx.statusEvent.createMany({

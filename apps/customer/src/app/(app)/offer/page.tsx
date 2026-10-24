@@ -73,6 +73,22 @@ export default async function OfferPage({ searchParams }: PageProps) {
 
   const pathway = pathwayLabel(offer.pathway);
 
+  // AF5 · FD24 — after a decline the vendor can still accept, or wait for a new
+  // price. Read off the vendor's OWN timeline (status_events, RLS-scoped): the
+  // negotiation table itself is internal and never reaches this screen.
+  const { data: events } = await supabase
+    .from("status_events")
+    .select("notes")
+    .eq("pickup_id", id)
+    .eq("status", "offered")
+    .order("occurred_at", { ascending: false })
+    .limit(10);
+  const lastMove = (events ?? []).find(
+    (e) => e.notes?.startsWith("Vendor declined") || e.notes === "Offer revised",
+  );
+  const declined = Boolean(lastMove?.notes?.startsWith("Vendor declined"));
+  const revised = lastMove?.notes === "Offer revised";
+
   // Not hardcoded: the company has not given us a number yet (open question
   // M1), and the wrong one in a tel: link is worse than no link at all.
   const officePhone = process.env.NEXT_PUBLIC_OFFICE_PHONE ?? null;
@@ -88,6 +104,13 @@ export default async function OfferPage({ searchParams }: PageProps) {
 
         {error ? (
           <Banner variant="error">{error}</Banner>
+        ) : null}
+        {declined ? (
+          <Banner variant="info">
+            You declined this offer. You can still accept it, or wait for us to come back with a new price.
+          </Banner>
+        ) : revised ? (
+          <Banner variant="info">We have updated our offer.</Banner>
         ) : null}
 
         {/* Pathway badge */}
@@ -123,9 +146,9 @@ export default async function OfferPage({ searchParams }: PageProps) {
             </Button>
           </Link>
 
-          <AcceptOfferButton pickupId={pickup.id} />
+          <AcceptOfferButton pickupId={pickup.id} pricePaise={offer.estimated_price} />
 
-          <DeclineOfferButton pickupId={pickup.id} />
+          {declined ? null : <DeclineOfferButton pickupId={pickup.id} />}
 
           {/* FV6 — the human step. Always shown; with no number configured it
               renders disabled and says so, never a `tel:` link to nowhere. */}

@@ -3,161 +3,193 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
+import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
-import { createAdminClient } from '@clbipp/auth/admin'
-import { resolveOfferPrice, vendorOfferRationale } from '@clbipp/core'
+import {
+  MAX_PRICE_NOTE_CHARS,
+  MIN_PRICE_NOTE_CHARS,
+  parsePriceRupees,
+  recommendedOfferTotal,
+  vendorOfferRationale,
+} from '@clbipp/core'
+import { isStorablePaise } from '@clbipp/core/format'
+import { checkReoffer, getNegotiationBandBp, sanctionedPricePaise } from '@clbipp/core/negotiation'
 
-// ─── presentOffer (D7: arrived → offered) — Batch 5a · Ali ───────────────────
-// The multi-item consequence the wireframe never modelled: per-item prices
-// (each already computed and stored by result/actions.ts's saveQuoteResult,
-// or the non-lithium rate-card path in result/data.ts) sum into ONE Offer row
-// for the whole pickup. Same idempotent shape as job/[id]/actions.ts's
-// markArrived — re-presenting an already-offered pickup is a no-op success,
-// not a duplicate Offer or a duplicate status_events row.
+// ─── The offer, and every price after it (D7 · FV6 · AF5) ────────────────────
 //
-// HOLD items are excluded from the sum, not blocking. A single dead line
-// shouldn't hold six good ones off the vendor's screen — it's already been
-// (or still needs to be) escalated from its own result screen. Every item
-// still has to have been PRICED (unitPricePaise set) before presenting can
-// happen at all: an unpriced item means the agent hasn't finished the job.
-export async function presentOffer(
-  pickupId: string,
-  // ─── The agreed price (FV6, feedback round 2) ─────────────────────────────
-  // The engine is recommendation-only for the pilot: the price is agreed on a
-  // call to the office and typed here. Blank means "offer the recommendation".
-  //
-  // 🔴 NOT A SECOND PRICING PATH. Every item is still priced and stored; this
-  // changes only the total offered. The recommendation and the agent's note are
-  // kept on the offer's internal columns, never in `rationale`, which the
-  // vendor reads.
-  agreed?: { rupees: string | null; note: string | null } | null,
-): Promise<{ error: string | null }> {
+// presentOffer: `arrived → offered`. Per-item prices (each computed and stored
+// by the item's own quote action, or the rate card) sum into ONE Offer for the
+// pickup via recommendedOfferTotal() — the same function the screen and the
+// admin Price panel read, so all three agree on what was recommended.
+//
+// 🔴 AF5 · FD23 — THE AGENT NO LONGER TYPES A PRICE. The company's worry was an
+// agent mishearing or mistyping a figure agreed on the phone. Only the OFFICE
+// enters a changed price (setOfficePrice in the admin app); the agent presents
+// the office's price when there is one, the engine's recommendation when there
+// is not. The office price is read HERE, server-side: the hidden officePriceId
+// on the form only proves which one the agent was looking at, and a stale one
+// is refused rather than silently swapped.
+//
+// reofferPrice: AF5 · FD24 — a decline is not final. The agent may re-offer up
+// to the admin-set band above the sanctioned price (checkReoffer), or present a
+// newer office price. Every round is an `offer_rounds` row; `Offer.estimatedPrice`
+// stays the CURRENT price, a cache of the latest round (like pickups.status vs
+// status_events). An accepted price is fixed (FD7): every write is guarded on
+// `acceptedAt IS NULL`.
+//
+// 🔴 No amounts on status_events — the vendor's own token reads that table.
+//
+// Prisma rather than the service-role client this file used before AF5: the
+// offer, its round, the office price's acknowledgement and the status change
+// must land together, and only Prisma gives this app a transaction. Same
+// reasoning as confirmCollection. Ownership is still re-checked in code
+// (`agentId: user.id` in every WHERE), standing in for the RLS policy Prisma
+// bypasses (D10).
+
+const TX = { timeout: 20_000, maxWait: 10_000 }
+
+async function sessionAgent(): Promise<string | null> {
   const supabase = await createClient()
   const {
     data: { user },
-    error: userError,
   } = await supabase.auth.getUser()
-  if (userError || !user) return { error: 'Not authenticated.' }
+  return user?.id ?? null
+}
 
-  const admin = createAdminClient()
+const offerItemsSelect = {
+  id: true,
+  category: true,
+  chemistry: true,
+  pathway: true,
+  weightKg: true,
+  confirmedWeightKg: true,
+  unitPricePaise: true,
+  linePricePaise: true,
+  quoteData: true,
+} as const
 
-  const { data: pickup, error: pickupError } = await admin
-    .from('pickups')
-    .select('id, agent_id, vendor_id, status')
-    .eq('id', pickupId)
-    .single()
-  if (pickupError || !pickup) return { error: 'Job not found.' }
-  if (pickup.agent_id !== user.id) return { error: 'This job is not assigned to you.' }
+export async function presentOffer(
+  pickupId: string,
+  input: { officePriceId: string; note: string },
+): Promise<{ error: string | null }> {
+  const userId = await sessionAgent()
+  if (!userId) return { error: 'Not authenticated.' }
+
+  const pickup = await prisma.pickup.findFirst({
+    where: { id: pickupId, agentId: userId },
+    select: {
+      id: true,
+      status: true,
+      vendorId: true,
+      items: { select: offerItemsSelect },
+      officePrices: { orderBy: { setAt: 'desc' }, take: 1, select: { id: true, pricePaise: true, reason: true } },
+    },
+  })
+  if (!pickup) return { error: 'Job not found.' }
 
   // Already offered (or further along) — idempotent success, same posture as
-  // markArrived. Re-clicking "Present offer" after a slow network retry must
-  // not create a second Offer row or a second status_events entry.
-  const alreadyOffered = pickup.status !== 'arrived'
+  // markArrived: a re-tap after a slow network must not make a second round.
+  if (pickup.status !== 'arrived') return { error: null }
 
-  const { data: items, error: itemsError } = await admin
-    .from('battery_items')
-    .select('id, category, chemistry, quantity, weight_kg, confirmed_weight_kg, pathway, unit_price_paise, line_price_paise, quote_data')
-    .eq('pickup_id', pickupId)
-
-  if (itemsError) {
-    console.error('[presentOffer] items read failed:', itemsError)
-    return { error: 'Could not load the items. Try again.' }
+  if (pickup.items.length === 0) return { error: 'This job has no items to offer.' }
+  const rec = recommendedOfferTotal(pickup.items)
+  if (rec.unpriced.length > 0) {
+    return { error: `${rec.unpriced.length} item${rec.unpriced.length === 1 ? '' : 's'} still need pricing before you can present.` }
   }
-  if (!items || items.length === 0) return { error: 'This job has no items to offer.' }
-
-  const unpriced = items.filter((i) => i.unit_price_paise === null || i.line_price_paise === null)
-  if (unpriced.length > 0) {
-    return { error: `${unpriced.length} item${unpriced.length === 1 ? '' : 's'} still need pricing before you can present.` }
-  }
-
-  const isHold = (i: (typeof items)[number]): boolean => {
-    const output = (i.quote_data as { output?: { decision?: { flags?: string[] } } } | null)?.output
-    return Boolean(output?.decision?.flags?.includes('HOLD'))
-  }
-
-  const included = items.filter((i) => !isHold(i))
-  if (included.length === 0) {
+  if (rec.included.length === 0) {
     return { error: 'Every item on this job is on HOLD — nothing to present. Escalate each item first.' }
   }
+  if (!isStorablePaise(rec.totalPaise)) {
+    return { error: "This load's price is too large to record. Check the readings on each item." }
+  }
 
-  const recommendedPaise = included.reduce((sum, i) => sum + (i.line_price_paise ?? 0), 0)
+  const office = pickup.officePrices[0] ?? null
+  if ((office?.id ?? '') !== input.officePriceId.trim()) {
+    return { error: 'The office has just set a price. Check it before presenting.' }
+  }
+  const offeredPaise = office ? office.pricePaise : rec.totalPaise
+  const note = input.note.trim().slice(0, MAX_PRICE_NOTE_CHARS) || null
 
-  // Validated server-side; the form is not the boundary.
-  const price = resolveOfferPrice({
-    recommendedPaise,
-    agreedRupees: agreed?.rupees ?? null,
-    note: agreed?.note ?? null,
-  })
-  if (price.error !== null) return { error: price.error }
-
-  // ⚠ Per-item prices stay the engine's. An agreed total is a decision about the
-  // load as a whole; spreading it across items would invent per-battery numbers
-  // nobody calculated. Weights only here: this JSON sits on the vendor's offer
-  // row, so it carries no prices.
-  const materialBreakdown = included.map((i) => ({
+  // Weights only: this JSON sits on the vendor's offer row, so it carries no
+  // prices. Per-item prices stay the engine's — an agreed total is a decision
+  // about the load, and spreading it across items would invent numbers.
+  const materialBreakdown = rec.included.map((i) => ({
     itemId: i.id,
     category: i.category,
     chemistry: i.chemistry,
     pathway: i.pathway,
-    weight_kg: Number(i.confirmed_weight_kg ?? i.weight_kg ?? 0),
+    weight_kg: Number(i.confirmedWeightKg ?? i.weightKg ?? 0),
   }))
+  // One pathway for the whole offer: the highest-value included item's, or
+  // `recycle` when nothing has one (an all-non-lithium job).
+  const byValue = [...rec.included].sort((a, b) => (b.linePricePaise ?? 0) - (a.linePricePaise ?? 0))
+  const pathway = byValue[0]?.pathway ?? 'recycle'
+  const rationale = vendorOfferRationale(rec.included.length, pickup.items.length)
+  const priceNote = [office ? `Office: ${office.reason}` : null, note ? `Agent: ${note}` : null].filter(Boolean).join(' · ') || null
 
-  // Offer.pathway is one value for the whole pickup even though items can
-  // differ: the pathway of the highest-value included item, or `recycle` when
-  // nothing has one (an all-non-lithium job).
-  const byValue = [...included].sort((a, b) => (b.line_price_paise ?? 0) - (a.line_price_paise ?? 0))
-  const overallPathway = byValue[0]?.pathway ?? 'recycle'
-
-  const rationale = vendorOfferRationale(included.length, items.length)
-
-  if (!alreadyOffered) {
-    const { error: upsertError } = await admin.from('offers').upsert(
-      {
-        pickup_id: pickupId,
-        vendor_id: pickup.vendor_id,
-        pathway: overallPathway,
-        estimated_price: price.value.offeredPaise,
-        rationale,
-        material_breakdown: materialBreakdown,
-        deductions: [],
-        recommended_price_paise: price.value.recommendedPaise,
-        price_note: price.value.note,
-      },
-      { onConflict: 'pickup_id' },
-    )
-    if (upsertError) {
-      console.error('[presentOffer] offer upsert failed:', upsertError)
-      return { error: 'Could not save the offer. Try again.' }
-    }
-
-    const { error: statusError } = await admin
-      .from('pickups')
-      .update({
-        status: 'offered',
-        // FV3 · FD0. The inspection is finished at exactly this moment — every
-        // item is confirmed, scored and priced, which is what presenting
-        // requires. Recorded rather than derived from `status_events` because
-        // that log can legitimately run BACKWARDS (a reactivated pickup writes
-        // `requested` after `cancelled`), so "when was this inspected" cannot
-        // be answered by taking the last matching event.
-        inspected_at: new Date().toISOString(),
+  try {
+    await prisma.$transaction(async (tx) => {
+      const now = new Date()
+      // Guards the same race markArrived guards: only while still `arrived`.
+      const moved = await tx.pickup.updateMany({
+        where: { id: pickupId, agentId: userId, status: 'arrived' },
+        // FV3 · FD0 — the inspection is finished at exactly this moment.
+        data: { status: 'offered', inspectedAt: now },
       })
-      .eq('id', pickupId)
-      .eq('status', 'arrived') // guards the same race markArrived guards against
-    if (statusError) {
-      console.error('[presentOffer] status update failed:', statusError)
-      return { error: 'Could not update the job. Try again.' }
-    }
+      if (moved.count === 0) throw new Error('ALREADY_OFFERED')
 
-    const { error: eventError } = await admin.from('status_events').insert({
-      pickup_id: pickupId,
-      status: 'offered',
-      actor_id: user.id,
-      actor_role: 'agent',
-      // No amounts: the vendor's token can read this table.
-      notes: `Offer presented for ${included.length} of ${items.length} line(s)`,
-    })
-    if (eventError) console.error('[presentOffer] status_events insert failed:', eventError)
+      // Upsert: a reactivated pickup still has the offer row from before.
+      const fields = {
+        pathway,
+        estimatedPrice: offeredPaise,
+        rationale,
+        materialBreakdown,
+        deductions: [],
+        recommendedPricePaise: rec.totalPaise,
+        priceNote,
+        acceptedAt: null,
+      }
+      await tx.offer.upsert({
+        where: { pickupId },
+        create: { pickupId, vendorId: pickup.vendorId, ...fields },
+        update: fields,
+      })
+
+      const last = await tx.offerRound.findFirst({ where: { pickupId }, orderBy: { roundNo: 'desc' }, select: { roundNo: true } })
+      await tx.offerRound.updateMany({ where: { pickupId, outcome: null }, data: { outcome: 'superseded', outcomeAt: now } })
+      await tx.offerRound.create({
+        data: {
+          pickupId,
+          roundNo: (last?.roundNo ?? 0) + 1,
+          pricePaise: offeredPaise,
+          basis: office ? 'office' : 'engine',
+          officePriceId: office?.id ?? null,
+          note,
+          presentedBy: userId,
+          presentedAt: now,
+        },
+      })
+      if (office) {
+        await tx.officePrice.update({
+          where: { id: office.id },
+          data: { acknowledgedBy: userId, acknowledgedAt: now, agentNote: note },
+        })
+      }
+
+      await tx.statusEvent.create({
+        data: {
+          pickupId,
+          status: 'offered',
+          actorId: userId,
+          actorRole: 'agent',
+          notes: `Offer presented for ${rec.included.length} of ${pickup.items.length} line(s)`,
+        },
+      })
+    }, TX)
+  } catch (e) {
+    if (e instanceof Error && e.message === 'ALREADY_OFFERED') return { error: null }
+    console.error('[presentOffer] transaction failed:', e)
+    return { error: 'Could not save the offer. Nothing was changed — try again.' }
   }
 
   revalidatePath(`/job/${pickupId}`)
@@ -165,16 +197,136 @@ export async function presentOffer(
   return { error: null }
 }
 
-export async function presentOfferAndRedirect(pickupId: string, formData?: FormData): Promise<void> {
-  // Both fields are optional: a blank price presents the recommendation.
-  const rupees = formData?.get('agreedRupees')
-  const note = formData?.get('priceNote')
+// Plain form actions with the pickup id in a hidden field — not `.bind()`, so
+// each form carries a `$ACTION_ID_…` and can be driven over the real HTTP path.
+export async function presentOfferAndRedirect(formData: FormData): Promise<void> {
+  const pickupId = String(formData.get('pickupId') ?? '')
+  if (!pickupId) redirect('/')
   const result = await presentOffer(pickupId, {
-    rupees: rupees === null || rupees === undefined ? null : String(rupees),
-    note: note === null || note === undefined ? null : String(note),
+    officePriceId: String(formData.get('officePriceId') ?? ''),
+    note: String(formData.get('note') ?? ''),
   })
-  if (result.error) {
-    redirect(`/job/${pickupId}/offer?error=${encodeURIComponent(result.error)}`)
+  const base = `/job/${encodeURIComponent(pickupId)}/offer`
+  if (result.error) redirect(`${base}?error=${encodeURIComponent(result.error)}`)
+  redirect(base)
+}
+
+/**
+ * A new price in front of the vendor, before they accept.
+ *   mode 'agent'  — the agent's re-offer, inside the band, with a note.
+ *   mode 'office' — the office's newer price, as set; no band check.
+ */
+export async function reofferPrice(
+  pickupId: string,
+  input: { mode: 'agent' | 'office'; rupees: string; note: string; officePriceId: string },
+): Promise<{ error: string | null; ok?: string }> {
+  const userId = await sessionAgent()
+  if (!userId) return { error: 'Not authenticated.' }
+
+  const pickup = await prisma.pickup.findFirst({
+    where: { id: pickupId, agentId: userId },
+    select: {
+      status: true,
+      offer: { select: { estimatedPrice: true, acceptedAt: true } },
+      items: { select: offerItemsSelect },
+      officePrices: { orderBy: { setAt: 'desc' }, take: 1, select: { id: true, pricePaise: true, reason: true, acknowledgedAt: true } },
+    },
+  })
+  if (!pickup) return { error: 'Job not found.' }
+  if (pickup.status !== 'offered' || !pickup.offer) return { error: 'There is no open offer to change.' }
+  if (pickup.offer.acceptedAt) return { error: 'The vendor has accepted. That price is fixed.' }
+
+  const office = pickup.officePrices[0] ?? null
+  const note = input.note.trim().slice(0, MAX_PRICE_NOTE_CHARS) || null
+  let pricePaise: number
+  if (input.mode === 'office') {
+    if (!office || office.id !== input.officePriceId.trim()) {
+      return { error: 'The office has changed the price again. Check the new one.' }
+    }
+    if (office.acknowledgedAt) return { error: null, ok: 'That office price has already been presented.' }
+    pricePaise = office.pricePaise
+  } else {
+    const parsed = parsePriceRupees(input.rupees)
+    if (parsed.error !== null) return { error: parsed.error }
+    if (!note || note.length < MIN_PRICE_NOTE_CHARS) {
+      return { error: 'Add a short note: what the vendor asked for, or why the price changed.' }
+    }
+    const rec = recommendedOfferTotal(pickup.items)
+    const bandBp = await getNegotiationBandBp(prisma)
+    const check = checkReoffer({
+      pricePaise: parsed.paise,
+      currentPaise: pickup.offer.estimatedPrice,
+      sanctionedPaise: sanctionedPricePaise({ enginePaise: rec.totalPaise, officePricePaise: office?.pricePaise }),
+      bandBp,
+    })
+    if (!check.ok) return { error: check.error }
+    pricePaise = parsed.paise
   }
-  redirect(`/job/${pickupId}/offer`)
+
+  const current = pickup.offer.estimatedPrice
+  try {
+    await prisma.$transaction(async (tx) => {
+      const now = new Date()
+      // 🔴 FD7 — guarded on "not accepted" AND on the price we read, so a
+      // vendor accepting, or a second re-offer, in the same moment wins cleanly.
+      const changed = await tx.offer.updateMany({
+        where: { pickupId, acceptedAt: null, estimatedPrice: current, pickup: { agentId: userId, status: 'offered' } },
+        data: {
+          estimatedPrice: pricePaise,
+          priceNote: input.mode === 'office' ? `Office: ${office!.reason}${note ? ` · Agent: ${note}` : ''}` : `Agent re-offer: ${note}`,
+        },
+      })
+      if (changed.count === 0) throw new Error('OFFER_CHANGED')
+
+      const last = await tx.offerRound.findFirst({ where: { pickupId }, orderBy: { roundNo: 'desc' }, select: { roundNo: true } })
+      await tx.offerRound.updateMany({ where: { pickupId, outcome: null }, data: { outcome: 'superseded', outcomeAt: now } })
+      await tx.offerRound.create({
+        data: {
+          pickupId,
+          roundNo: (last?.roundNo ?? 0) + 1,
+          pricePaise,
+          basis: input.mode === 'office' ? 'office' : 'agent',
+          officePriceId: input.mode === 'office' ? office!.id : null,
+          note,
+          presentedBy: userId,
+          presentedAt: now,
+        },
+      })
+      if (input.mode === 'office') {
+        await tx.officePrice.update({
+          where: { id: office!.id },
+          data: { acknowledgedBy: userId, acknowledgedAt: now, agentNote: note },
+        })
+      }
+      // The vendor's timeline says the offer changed — never by how much.
+      await tx.statusEvent.create({
+        data: { pickupId, status: 'offered', actorId: userId, actorRole: 'agent', notes: 'Offer revised' },
+      })
+    }, TX)
+  } catch (e) {
+    if (e instanceof Error && e.message === 'OFFER_CHANGED') {
+      return { error: 'The offer changed a moment ago (the vendor may have accepted). Check the screen.' }
+    }
+    console.error('[reofferPrice] transaction failed:', e)
+    return { error: 'Could not change the offer. Nothing was changed — try again.' }
+  }
+
+  revalidatePath(`/job/${pickupId}`)
+  revalidatePath(`/job/${pickupId}/offer`)
+  return { error: null, ok: 'New price sent. The vendor sees it now.' }
+}
+
+export async function reofferPriceAndRedirect(formData: FormData): Promise<void> {
+  const pickupId = String(formData.get('pickupId') ?? '')
+  if (!pickupId) redirect('/')
+  const mode = String(formData.get('mode') ?? '') === 'office' ? 'office' : 'agent'
+  const result = await reofferPrice(pickupId, {
+    mode,
+    rupees: String(formData.get('rupees') ?? ''),
+    note: String(formData.get('note') ?? ''),
+    officePriceId: String(formData.get('officePriceId') ?? ''),
+  })
+  const base = `/job/${encodeURIComponent(pickupId)}/offer`
+  if (result.error) redirect(`${base}?error=${encodeURIComponent(result.error)}`)
+  redirect(result.ok ? `${base}?ok=${encodeURIComponent(result.ok)}` : base)
 }

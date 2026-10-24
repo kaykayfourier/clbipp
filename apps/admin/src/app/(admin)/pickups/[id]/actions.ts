@@ -1,11 +1,14 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
 import { prisma } from '@clbipp/database'
 import type { RecoveryPathway } from '@clbipp/database'
 import { isPathwayValue, MIN_PATHWAY_REASON_CHARS, destinationOf } from '@clbipp/core/pathway'
 import type { AdminAuditAction, AdminAuditSubject } from '@clbipp/core/audit'
+import { checkOfficePrice, parsePriceRupees, recommendedOfferTotal } from '@clbipp/core'
+import { formatPaise } from '@clbipp/core/format'
 
 import { requireAdmin } from '@/lib/admin-identity'
 
@@ -110,3 +113,124 @@ export async function setItemPathway(input: {
   revalidatePath('/manifests/new')
   return { ok: true }
 }
+
+// ─── setOfficePrice (AF5 · FD23) ─────────────────────────────────────────────
+// The office's price for a pickup — the ONLY way a price other than the
+// engine's recommendation now enters an offer (the agent's typed "Agreed price"
+// is gone). The admin sees the recommendation on the Price panel, enters an
+// amount and a reason; their name is the session.
+//
+// 🔴 It does NOT touch the Offer. It appends an `office_prices` row and tells
+// the agent (agent_notices); the agent's offer screen picks it up by itself and
+// the AGENT presents it (presentOffer / reofferPrice), which is what records
+// the acknowledgement. So the vendor never sees a price the agent standing in
+// front of them has not seen first.
+//
+// Allowed while there is a price to set: `arrived` with every line priced
+// (before the first offer), or `offered` and not accepted (FD7 — an accepted
+// price is fixed). A reason is required (`isReasonRequired('price.office_set')`).
+const PRICE_ACTION: AdminAuditAction = 'price.office_set'
+const PRICE_SUBJECT: AdminAuditSubject = 'pickup'
+const MIN_OFFICE_REASON_CHARS = 8
+
+export async function setOfficePrice(input: {
+  pickupId: string
+  rupees: string
+  reason: string
+}): Promise<{ error: string | null }> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { error: auth.error }
+
+  const reason = input.reason.trim().slice(0, 500)
+  if (reason.length < MIN_OFFICE_REASON_CHARS) {
+    return { error: `Give a reason of at least ${MIN_OFFICE_REASON_CHARS} characters — the agent reads it.` }
+  }
+  const parsed = parsePriceRupees(input.rupees)
+  if (parsed.error !== null) return { error: parsed.error }
+
+  const pickup = await prisma.pickup.findUnique({
+    where: { id: input.pickupId },
+    select: {
+      id: true,
+      status: true,
+      agentId: true,
+      offer: { select: { estimatedPrice: true, acceptedAt: true } },
+      items: { select: { id: true, chemistry: true, unitPricePaise: true, linePricePaise: true, quoteData: true } },
+    },
+  })
+  if (!pickup) return { error: 'That pickup does not exist.' }
+  const rec = recommendedOfferTotal(pickup.items)
+  const open =
+    (pickup.status === 'arrived' && rec.canPresent) ||
+    (pickup.status === 'offered' && pickup.offer !== null && pickup.offer.acceptedAt === null)
+  if (!open) {
+    return {
+      error:
+        pickup.status === 'offered'
+          ? 'The vendor has accepted. That price is fixed.'
+          : pickup.status === 'arrived'
+            ? 'The agent has not priced every line yet.'
+            : 'A price can be set only while the agent is on site or the offer is waiting for the vendor.',
+    }
+  }
+  const bound = checkOfficePrice({ pricePaise: parsed.paise, enginePaise: rec.totalPaise })
+  if (bound) return { error: bound }
+  if (pickup.offer && pickup.status === 'offered' && pickup.offer.estimatedPrice === parsed.paise) {
+    return { error: 'That is the price the vendor already has.' }
+  }
+
+  await prisma.$transaction(
+    async (tx) => {
+      const row = await tx.officePrice.create({
+        data: {
+          pickupId: pickup.id,
+          enginePaise: rec.totalPaise,
+          previousPaise: pickup.status === 'offered' ? (pickup.offer?.estimatedPrice ?? null) : null,
+          pricePaise: parsed.paise,
+          reason,
+          setBy: auth.admin.id,
+        },
+      })
+      await tx.adminAudit.create({
+        data: {
+          actorId: auth.admin.id,
+          action: PRICE_ACTION,
+          subjectType: PRICE_SUBJECT,
+          subjectId: pickup.id,
+          before: { offerPaise: pickup.offer?.estimatedPrice ?? null, enginePaise: rec.totalPaise },
+          after: { officePriceId: row.id, pricePaise: parsed.paise },
+          reason,
+        },
+      })
+      if (pickup.agentId) {
+        await tx.agentNotice.create({
+          data: {
+            agentId: pickup.agentId,
+            pickupId: pickup.id,
+            kind: 'office_price_set',
+            message: `The office set ${formatPaise(parsed.paise)} for ${pickup.id}. Present it from the offer screen.`,
+          },
+        })
+      }
+    },
+    { timeout: 20_000, maxWait: 10_000 },
+  )
+
+  revalidatePath(`/pickups/${pickup.id}`)
+  revalidatePath('/audit')
+  return { error: null }
+}
+
+export async function setOfficePriceAction(formData: FormData) {
+  const pickupId = String(formData.get('pickupId') ?? '')
+  if (!pickupId) redirect('/pickups')
+  const { error } = await setOfficePrice({
+    pickupId,
+    rupees: String(formData.get('rupees') ?? ''),
+    reason: String(formData.get('reason') ?? ''),
+  })
+  const href = `/pickups/${encodeURIComponent(pickupId)}`
+  if (error) redirect(`${href}?error=${encodeURIComponent(error)}`)
+  redirect(`${href}?price=set`)
+}
+

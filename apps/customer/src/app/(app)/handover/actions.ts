@@ -69,8 +69,16 @@ async function voidOfferAcceptance(
 // Idempotent twice over: an offer that is already accepted is left alone (the
 // timestamp is not re-stamped), and a pickup already past `offered` reports
 // success so a refresh on the confirmation page still renders.
+// 🔴 AF5 · FD24 — the vendor accepts the PRICE THEY SAW. Since the agent can
+// re-offer (and the office set a new price) while /offer is open, a bare
+// "accept" could otherwise agree to a figure the vendor never read. The button
+// carries the price it rendered; the update matches only that price on an
+// unaccepted offer, and anything else sends the vendor back to the new one.
+const OFFER_CHANGED = 'The offer was updated. Check the new price.'
+
 export async function acceptOffer(
-  pickupId: string
+  pickupId: string,
+  seenPricePaise: number | null
 ): Promise<{ error: string | null }> {
   const supabase = await createClient()
   const {
@@ -110,7 +118,7 @@ export async function acceptOffer(
   // Can't accept an offer that doesn't exist (guards direct /handover?id= hits).
   const { data: offer } = await admin
     .from('offers')
-    .select('pickup_id, accepted_at')
+    .select('pickup_id, accepted_at, estimated_price')
     .eq('pickup_id', pickupId)
     .maybeSingle()
 
@@ -120,16 +128,30 @@ export async function acceptOffer(
   // agent app reads this timestamp as "when the vendor agreed" and Batch 6
   // gates collection on it.
   if (offer.accepted_at) return { error: null }
+  if (seenPricePaise === null || offer.estimated_price !== seenPricePaise) return { error: OFFER_CHANGED }
 
-  const { error: updateError } = await admin
+  const acceptedAt = new Date().toISOString()
+  const { data: accepted, error: updateError } = await admin
     .from('offers')
-    .update({ accepted_at: new Date().toISOString() })
+    .update({ accepted_at: acceptedAt })
     .eq('pickup_id', pickupId)
+    .is('accepted_at', null)
+    .eq('estimated_price', seenPricePaise)
+    .select('pickup_id')
 
   if (updateError) {
     console.error('[acceptOffer] offer acceptance failed:', updateError)
     return { error: 'Could not accept the offer. Please try again.' }
   }
+  if (!accepted || accepted.length === 0) {
+    // Lost a race: either a double-submit already accepted it (success) or the
+    // price changed between the read above and this write.
+    const { data: now } = await admin.from('offers').select('accepted_at').eq('pickup_id', pickupId).maybeSingle()
+    return now?.accepted_at ? { error: null } : { error: OFFER_CHANGED }
+  }
+
+  // The round the vendor accepted. Non-fatal: the acceptance is on the offer.
+  await markLatestRound(admin, pickupId, 'accepted', acceptedAt, 'acceptOffer')
 
   // Audit event. The status is unchanged, so this is a SECOND `offered` row —
   // the agent's offer and the vendor's acceptance of it. `buildStages` is
@@ -174,7 +196,8 @@ export async function acceptOfferAndConfirm(formData: FormData) {
   const pickupId = String(formData.get('pickupId') ?? '')
   if (!pickupId) redirect('/dashboard')
 
-  const { error } = await acceptOffer(pickupId)
+  const seen = Number(formData.get('pricePaise'))
+  const { error } = await acceptOffer(pickupId, Number.isSafeInteger(seen) && seen > 0 ? seen : null)
 
   // Back to the offer with the reason, rather than onward to a confirmation
   // screen confirming something that didn't happen. acceptOffer has already
@@ -222,6 +245,16 @@ export async function declineOffer(
   if (pickup.status !== 'offered' || !offer) return { error: 'There is no offer to decline.' }
   if (offer.accepted_at) return { error: 'You have already accepted this offer.' }
 
+  // AF5 — a second press on the same price is not a second decision.
+  const { data: latest } = await admin
+    .from('offer_rounds')
+    .select('outcome')
+    .eq('pickup_id', pickupId)
+    .order('round_no', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (latest?.outcome === 'declined') return { error: null }
+
   const { error: eventError } = await admin.from('status_events').insert({
     pickup_id: pickupId,
     status: 'offered',
@@ -233,7 +266,34 @@ export async function declineOffer(
     console.error('[declineOffer] status_events insert failed:', eventError)
     return { error: 'Could not record that. Please try again.' }
   }
+  // AF5 · FD24 — the round the vendor declined. A decline is not final: the
+  // agent may re-offer, and the vendor can still accept this price.
+  await markLatestRound(admin, pickupId, 'declined', new Date().toISOString(), 'declineOffer')
   return { error: null }
+}
+
+// ─── markLatestRound (AF5) ───────────────────────────────────────────────────
+// The vendor's response, on the round they were looking at. offer_rounds is
+// RLS-closed with zero policies, so only the service role can write it — which
+// is this client. Non-fatal by design: the decision itself is already on the
+// offer / the timeline; this is the negotiation record beside it.
+async function markLatestRound(
+  admin: ReturnType<typeof createAdminClient>,
+  pickupId: string,
+  outcome: 'accepted' | 'declined',
+  at: string,
+  caller: string
+): Promise<void> {
+  const { data: latest } = await admin
+    .from('offer_rounds')
+    .select('id')
+    .eq('pickup_id', pickupId)
+    .order('round_no', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!latest) return
+  const { error } = await admin.from('offer_rounds').update({ outcome, outcome_at: at }).eq('id', latest.id)
+  if (error) console.error(`[${caller}] offer round update failed:`, error)
 }
 
 async function stopPickup(

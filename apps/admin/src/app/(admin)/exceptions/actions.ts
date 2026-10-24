@@ -227,3 +227,113 @@ export async function resolveExceptionAction(formData: FormData) {
   if (already) redirect(`/exceptions?already=${encodeURIComponent(exceptionId)}`)
   redirect(`/exceptions?resolved=${encodeURIComponent(exceptionId)}`)
 }
+
+// ─── Decide an untagged-battery request (AF4 · FD22) ─────────────────────────
+// The agent asked to collect a line without a tag; collection is blocked until
+// this runs. Approve → write `BatteryItem.untaggedReason` (the agent's reason),
+// which is the one thing confirmCollection's gate reads, so nothing downstream
+// changes. Reject → the agent must tag the line; the note is what they read.
+//
+// 🔴 Separate from resolveException above and from its "advances nothing" rule
+// only in subject: this ALSO advances nothing — no status, no status event.
+// It unblocks a gate the agent still has to walk through themselves.
+const TAG_DECIDE_ACTION: AdminAuditAction = 'tag_exception.decide'
+const TAG_DECIDE_SUBJECT: AdminAuditSubject = 'tag_exception'
+const MIN_REJECT_NOTE_CHARS = 4
+
+export async function decideTagException(input: {
+  requestId: string
+  decision: string
+  note: string
+}): Promise<{ error: string | null; message: string }> {
+  const gate = await requireAdmin()
+  if (!gate.ok) return { error: gate.error, message: '' }
+  const admin = gate.admin
+
+  const decision = input.decision === 'approve' ? 'approved' : input.decision === 'reject' ? 'rejected' : null
+  if (!decision) return { error: 'Approve or reject.', message: '' }
+  const note = input.note.trim().slice(0, MAX_NOTES_CHARS)
+  if (decision === 'rejected' && note.length < MIN_REJECT_NOTE_CHARS) {
+    return { error: 'Tell the agent why — the note is what they read.', message: '' }
+  }
+
+  const request = await prisma.tagException.findUnique({
+    where: { id: input.requestId },
+    select: {
+      id: true,
+      status: true,
+      reason: true,
+      requestedBy: true,
+      batteryItemId: true,
+      pickup: { select: { id: true, agentId: true, items: { orderBy: { createdAt: 'asc' }, select: { id: true } } } },
+    },
+  })
+  if (!request) return { error: 'That request does not exist.', message: '' }
+  if (request.status !== 'pending') {
+    return { error: null, message: `Already ${request.status}. No change made.` }
+  }
+  const lineNo = request.pickup.items.findIndex((i) => i.id === request.batteryItemId) + 1
+  const where = `${request.pickup.id} line ${lineNo}`
+
+  const decided = await prisma.$transaction(
+    async (tx) => {
+      // Guarded on `pending`: a double-submit, a second admin, or the agent
+      // tagging the line meanwhile (which withdraws it) updates zero rows.
+      const updated = await tx.tagException.updateMany({
+        where: { id: request.id, status: 'pending' },
+        data: { status: decision, decidedBy: admin.id, decidedAt: new Date(), decisionNote: note || null },
+      })
+      if (updated.count === 0) return false
+
+      if (decision === 'approved') {
+        // Only if the line is STILL untagged — a tag bound since the request
+        // was sent makes the approval moot, and a reason beside a tag is noise.
+        await tx.batteryItem.updateMany({
+          where: { id: request.batteryItemId, tag: { is: null } },
+          data: { untaggedReason: request.reason },
+        })
+      }
+
+      await tx.adminAudit.create({
+        data: {
+          actorId: admin.id,
+          action: TAG_DECIDE_ACTION,
+          subjectType: TAG_DECIDE_SUBJECT,
+          subjectId: request.id,
+          before: { status: 'pending' },
+          after: { status: decision, batteryItemId: request.batteryItemId, pickupId: request.pickup.id },
+          reason: note || null,
+        },
+      })
+
+      // To whoever has the job NOW (it may have been reassigned since).
+      await tx.agentNotice.create({
+        data: {
+          agentId: request.pickup.agentId ?? request.requestedBy,
+          pickupId: request.pickup.id,
+          kind: 'tag_exception_decided',
+          message:
+            decision === 'approved'
+              ? `The office approved ${where} without a tag. You can collect.`
+              : `The office says tag ${where}${note ? `: “${note}”` : '.'}`,
+        },
+      })
+      return true
+    },
+    { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
+  )
+  if (!decided) return { error: null, message: 'Already decided, or the agent tagged the line. No change made.' }
+  return { error: null, message: decision === 'approved' ? `Approved ${where}.` : `Rejected ${where}. The agent must tag it.` }
+}
+
+export async function decideTagExceptionAction(formData: FormData) {
+  const { error, message } = await decideTagException({
+    requestId: String(formData.get('requestId') ?? ''),
+    decision: String(formData.get('decision') ?? ''),
+    note: String(formData.get('note') ?? ''),
+  })
+  if (error) redirect(`/exceptions?error=${encodeURIComponent(error)}`)
+  revalidatePath('/exceptions')
+  revalidatePath('/audit')
+  redirect(`/exceptions?tag=${encodeURIComponent(message)}`)
+}

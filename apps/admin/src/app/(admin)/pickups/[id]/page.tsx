@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@clbipp/database'
 import { createSignedUrls } from '@clbipp/auth/storage-server'
 import { formatPaise } from '@clbipp/core/format'
+import { formatVehicleReg } from '@clbipp/core/vehicle'
 import {
   categoryLabel,
   chemistryLabel,
@@ -31,7 +32,11 @@ import { PageHead, StatusPill } from '@/components/console'
 import { DESTINATION_LABELS, destinationOf } from '@clbipp/core/pathway'
 
 import { PathwayOverride } from './PathwayOverride'
+import { PricePanel, type PricePanelData } from './PricePanel'
+import { recommendedOfferTotal } from '@clbipp/core'
 import { inspectorOf } from '@/lib/inspector'
+import { ASSIGNMENT_VERBS, assignmentHistory } from '@/lib/assignment-history'
+import { reassignEligibility } from '@clbipp/core/assignment'
 
 // B05 · Pickup detail — Batch 5, owner C — Ali.
 //
@@ -61,8 +66,15 @@ const ADMIN_ROLE_LABELS: Record<string, string> = {
   admin: 'Recorded by admin',
 }
 
-export default async function PickupDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function PickupDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ error?: string; price?: string }>
+}) {
   const { id } = await params
+  const { error: actionError, price: priceSet } = await searchParams
 
   const pickup = await prisma.pickup.findUnique({
     where: { id },
@@ -104,6 +116,12 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           weightPhotoUrl: true,
           untaggedReason: true,
           tag: { select: { code: true, boundAtHub: true, container: { select: { code: true, label: true } } } },
+          // AF4 — the latest untagged-battery request for this line.
+          tagExceptions: {
+            orderBy: { requestedAt: 'desc' },
+            take: 1,
+            select: { status: true, reason: true, decisionNote: true, decider: { select: { fullName: true } } },
+          },
           custodyCheck: { select: { outcome: true, method: true, note: true } },
           pathwayReason: true,
           confirmedCondition: true,
@@ -117,6 +135,7 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           traceId: true,
           unitPricePaise: true,
           linePricePaise: true,
+          quoteData: true,
           exceptions: {
             select: { id: true, kind: true, cause: true, detail: true, openedAt: true, resolution: true, resolvedAt: true, notes: true },
             orderBy: { openedAt: 'desc' },
@@ -134,11 +153,37 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
           createdAt: true,
         },
       },
+      // AF5 — the office's prices and every round the vendor saw.
+      officePrices: {
+        orderBy: { setAt: 'desc' },
+        select: {
+          id: true,
+          pricePaise: true,
+          previousPaise: true,
+          enginePaise: true,
+          reason: true,
+          setAt: true,
+          setter: { select: { fullName: true } },
+          acknowledgedAt: true,
+          acknowledgedBy: true,
+          agentNote: true,
+        },
+      },
+      offerRounds: {
+        orderBy: { roundNo: 'asc' },
+        select: { roundNo: true, pricePaise: true, basis: true, outcome: true, note: true, presentedAt: true, presentedBy: true },
+      },
       statusEvents: {
         orderBy: { occurredAt: 'asc' },
         select: { id: true, status: true, actorRole: true, notes: true, lat: true, lng: true, photoUrls: true, occurredAt: true },
       },
-      custodyBatch: { select: { id: true, batchNo: true, handedOffAt: true, facility: { select: { name: true } } } },
+      custodyBatch: { select: { id: true, batchNo: true, handedOffAt: true, vehicle: true, facility: { select: { name: true } } } },
+      // AF2 · FD25
+      collectionVehicle: true,
+      vehicleCorrections: {
+        orderBy: { correctedAt: 'asc' },
+        select: { id: true, stage: true, fromReg: true, toReg: true, correctedBy: true, correctedAt: true },
+      },
       collectionRun: { select: { id: true, runNo: true, status: true } },
       runSequence: true,
       receipt: { select: { receiptNo: true, pdfUrl: true } },
@@ -152,7 +197,73 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
 
   // Feedback round 2: the collector can differ from the inspector.
   const inspector = await inspectorOf(pickup.id)
-  const canChangeCollector = pickup.status === 'offered' && pickup.offer?.acceptedAt != null
+  const correctorIds = [...new Set(pickup.vehicleCorrections.map((c) => c.correctedBy))]
+  const correctors = correctorIds.length
+    ? new Map(
+        (await prisma.profile.findMany({ where: { id: { in: correctorIds } }, select: { id: true, fullName: true } })).map(
+          (p) => [p.id, p.fullName],
+        ),
+      )
+    : new Map<string, string>()
+  // AF3 · FD21 — the same rule /dispatch/[id] renders its Reassign panel with.
+  const canReassign =
+    pickup.agent !== null &&
+    reassignEligibility({
+      status: pickup.status,
+      openRunNo:
+        pickup.collectionRun && (pickup.collectionRun.status === 'planned' || pickup.collectionRun.status === 'in_progress')
+          ? pickup.collectionRun.runNo
+          : null,
+    }).ok
+  const history = await assignmentHistory(pickup.id)
+
+  // AF5 · the Price panel. One reading of the recommendation (recommendedOfferTotal),
+  // the same one the agent's offer screen and presentOffer use.
+  const rec = recommendedOfferTotal(pickup.items)
+  const priceActorIds = [
+    ...new Set(
+      [...pickup.officePrices.map((o) => o.acknowledgedBy), ...pickup.offerRounds.map((r) => r.presentedBy)].filter(
+        (x): x is string => x !== null,
+      ),
+    ),
+  ]
+  const priceActors = new Map(
+    priceActorIds.length
+      ? (await prisma.profile.findMany({ where: { id: { in: priceActorIds } }, select: { id: true, fullName: true } })).map((p) => [p.id, p.fullName])
+      : [],
+  )
+  const priceData: PricePanelData = {
+    pickupId: pickup.id,
+    enginePaise: rec.totalPaise,
+    unpricedLines: rec.unpriced.length,
+    offer: pickup.offer
+      ? { estimatedPrice: pickup.offer.estimatedPrice, acceptedAt: pickup.offer.acceptedAt, pathway: pickup.offer.pathway, rationale: pickup.offer.rationale, priceNote: pickup.offer.priceNote }
+      : null,
+    officePrices: pickup.officePrices.map((o) => ({
+      id: o.id,
+      pricePaise: o.pricePaise,
+      previousPaise: o.previousPaise,
+      enginePaise: o.enginePaise,
+      reason: o.reason,
+      setAt: o.setAt,
+      setterName: o.setter.fullName,
+      acknowledgedAt: o.acknowledgedAt,
+      acknowledgedByName: o.acknowledgedBy ? (priceActors.get(o.acknowledgedBy) ?? null) : null,
+      agentNote: o.agentNote,
+    })),
+    rounds: pickup.offerRounds.map((r) => ({
+      roundNo: r.roundNo,
+      pricePaise: r.pricePaise,
+      basis: r.basis,
+      outcome: r.outcome,
+      note: r.note,
+      presentedAt: r.presentedAt,
+      presenterName: r.presentedBy ? (priceActors.get(r.presentedBy) ?? null) : null,
+    })),
+    canSet:
+      (pickup.status === 'arrived' && rec.canPresent) ||
+      (pickup.status === 'offered' && pickup.offer !== null && pickup.offer.acceptedAt === null),
+  }
 
   // Sign every photo path this screen might show in one batch, rather than one
   // round trip per item/event — a pickup with a dozen items and a dozen status
@@ -224,41 +335,18 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
             </div>
           </Section>
 
-          <Section title="Offer">
-            {pickup.offer ? (
-              <Card variant="outline">
-                <CardContent className="flex flex-col gap-3">
-                  <div className="flex flex-col">
-                    <DetailRow label="Pathway" value={pickup.offer.pathway} />
-                    <DetailRow label="Offered" value={formatPaise(pickup.offer.estimatedPrice)} strong />
-                    {/* Internal: the engine is recommendation-only for the pilot.
-                        The vendor never sees this figure or the note. */}
-                    {pickup.offer.recommendedPricePaise !== null ? (
-                      <DetailRow
-                        label="Engine recommended"
-                        value={
-                          pickup.offer.recommendedPricePaise === pickup.offer.estimatedPrice
-                            ? `${formatPaise(pickup.offer.recommendedPricePaise)} (offered as is)`
-                            : formatPaise(pickup.offer.recommendedPricePaise)
-                        }
-                      />
-                    ) : null}
-                    {pickup.offer.priceNote ? <DetailRow label="Agent's note" value={pickup.offer.priceNote} /> : null}
-                    <DetailRow
-                      label="Vendor response"
-                      value={pickup.offer.acceptedAt ? `Accepted ${formatDateTime(pickup.offer.acceptedAt)}` : 'Awaiting vendor'}
-                      last
-                    />
-                  </div>
-                  <div className="border-t border-console-line pt-2.5">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-text-disabled">Shown to the vendor</p>
-                    <p className="mt-1 text-xs leading-relaxed text-text-secondary">{pickup.offer.rationale}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <p className="text-xs text-text-secondary">No offer presented yet.</p>
-            )}
+          <Section title="Price">
+            {actionError ? (
+              <p role="alert" className="rounded-lg border border-error-border bg-error-bg px-3 py-2 text-xs text-error-text">
+                {actionError}
+              </p>
+            ) : null}
+            {priceSet ? (
+              <p className="rounded-lg border border-success-border bg-success-bg px-3 py-2 text-xs text-success-text">
+                Office price set. The agent has been told and presents it.
+              </p>
+            ) : null}
+            <PricePanel data={priceData} formatDateTime={formatDateTime} />
           </Section>
 
           <Section title="Chain of custody">
@@ -314,12 +402,12 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
                   <DetailRow label="Vehicle" value={pickup.agent.agentVehicle ?? '—'} />
                   <DetailRow label="Rating" value={pickup.agent.agentRating ? `★ ${Number(pickup.agent.agentRating).toFixed(1)}` : '—'} />
                   <DetailRow label="Agent fee" value={pickup.agentFeePaise !== null ? formatPaise(pickup.agentFeePaise) : '—'} last />
-                  {canChangeCollector ? (
+                  {canReassign ? (
                     <Link
                       href={`/dispatch/${encodeURIComponent(pickup.id)}`}
                       className="mt-2 text-xs font-bold text-text-primary underline underline-offset-2"
                     >
-                      Change who collects
+                      Reassign
                     </Link>
                   ) : null}
                 </CardContent>
@@ -330,6 +418,23 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
               </p>
             )}
           </Section>
+
+          {history.length > 0 ? (
+            <Section title="Assignment history">
+              <Card variant="outline">
+                <CardContent className="flex flex-col">
+                  {history.map((h, i) => (
+                    <DetailRow
+                      key={h.id}
+                      label={`${ASSIGNMENT_VERBS[h.action] ?? h.action} · ${formatDateTime(h.at)}`}
+                      value={`${h.fromName && h.action !== 'pickup.assign' ? `${h.fromName} → ` : ''}${h.toName ?? '—'} · by ${h.byName}${h.reason ? ` · “${h.reason}”` : ''}`}
+                      last={i === history.length - 1}
+                    />
+                  ))}
+                </CardContent>
+              </Card>
+            </Section>
+          ) : null}
 
           <Section title="Address">
             <Card variant="outline">
@@ -362,6 +467,30 @@ export default async function PickupDetail({ params }: { params: Promise<{ id: s
                   />
                   <DetailRow label="Stop" value={pickup.runSequence !== null ? `#${pickup.runSequence}` : '—'} />
                   <DetailRow label="Run status" value={pickup.collectionRun.status.replace('_', ' ')} last />
+                </CardContent>
+              </Card>
+            </Section>
+          ) : null}
+
+          {/* AF2 · FD25 — the vehicle at each hand-over, and every change from the prefill. */}
+          {pickup.collectionVehicle || pickup.custodyBatch?.vehicle || pickup.vehicleCorrections.length > 0 ? (
+            <Section title="Vehicle">
+              <Card variant="outline">
+                <CardContent className="flex flex-col">
+                  <DetailRow label="Collected in" value={pickup.collectionVehicle ? formatVehicleReg(pickup.collectionVehicle) : '—'} />
+                  <DetailRow
+                    label="Dropped off in"
+                    value={pickup.custodyBatch?.vehicle ? formatVehicleReg(pickup.custodyBatch.vehicle) : '—'}
+                    last={pickup.vehicleCorrections.length === 0}
+                  />
+                  {pickup.vehicleCorrections.map((c, i) => (
+                    <DetailRow
+                      key={c.id}
+                      label={c.stage === 'collection' ? 'Changed at collection' : 'Changed at drop-off'}
+                      value={`${formatVehicleReg(c.fromReg)} → ${formatVehicleReg(c.toReg)} · ${correctors.get(c.correctedBy) ?? 'agent'} · ${formatDateTime(c.correctedAt)}`}
+                      last={i === pickup.vehicleCorrections.length - 1}
+                    />
+                  ))}
                 </CardContent>
               </Card>
             </Section>
@@ -459,6 +588,7 @@ type ItemWithExceptions = {
   weightPhotoUrl: string | null
   untaggedReason: string | null
   tag: { code: string; boundAtHub: boolean; container: { code: string; label: string } | null } | null
+  tagExceptions: Array<{ status: string; reason: string; decisionNote: string | null; decider: { fullName: string } | null }>
   custodyCheck: { outcome: string; method: string; note: string | null } | null
   pathwayReason: unknown
   confirmedCondition: string | null
@@ -586,7 +716,7 @@ function ItemCard({
         {/* FV10–FV12 — the physical chain: tag, box, and the hub's check-in.
             Shown once the line has been collected (it carries a tag or a
             recorded reason for not). */}
-        {item.tag || item.untaggedReason ? (
+        {item.tag || item.untaggedReason || item.tagExceptions[0]?.status === 'pending' ? (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-console-line pt-2.5 text-[11px]">
             <span className="text-text-secondary">
               Tag{' '}
@@ -594,8 +724,10 @@ function ItemCard({
                 <Link href={`/tags?code=${encodeURIComponent(item.tag.code)}`} className="font-mono font-bold text-text-primary underline underline-offset-2">
                   {item.tag.code}
                 </Link>
-              ) : (
+              ) : item.untaggedReason ? (
                 <span className="text-warning-text">none — “{item.untaggedReason}”</span>
+              ) : (
+                <span className="text-warning-text">none yet</span>
               )}
               {item.tag?.boundAtHub ? ' (applied at the hub)' : ''}
             </span>
@@ -608,6 +740,16 @@ function ItemCard({
                 >
                   {item.tag.container.code}
                 </Link>
+              </span>
+            ) : null}
+            {item.tagExceptions[0] && item.tagExceptions[0].status !== 'withdrawn' ? (
+              <span className="text-text-secondary">
+                No-tag request{' '}
+                <span className={item.tagExceptions[0].status === 'pending' ? 'font-bold text-warning-text' : 'text-text-primary'}>
+                  {item.tagExceptions[0].status}
+                  {item.tagExceptions[0].decider ? ` by ${item.tagExceptions[0].decider.fullName}` : ''}
+                </span>
+                {item.tagExceptions[0].decisionNote ? ` — “${item.tagExceptions[0].decisionNote}”` : ''}
               </span>
             ) : null}
             <span className="text-text-secondary">
