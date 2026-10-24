@@ -363,6 +363,17 @@ the company; `/containers/[id]` shows what is in a box; certificates show
 second-life kg on screen; on-screen text was cut and moved into
 **`docs/USER_GUIDE.md`** (the explanations now live there, not on screens).
 
+🎯 **ADDITIONAL FEEDBACK (AF0–AF6) — IN PROGRESS since 2026-10-24.** Source:
+`docs/CLBIPP_Additional_Feedback_Changes_Short.docx` (six changes). Plan, status
+and decisions **FD20–FD25** (ours, provisional) are in **§12 of
+`docs/PLAN_FEEDBACK_V2.md` — read it before touching any of this.** AF1 (phone
+required at signup, EPR optional) is built and pushed. Still to build: AF0 one
+additive migration `additional_feedback` (🔴 shared DB — announce first), AF2
+vehicle number at collection + drop-off, AF3 admin reassignment + in-app agent
+notices, AF4 untagged battery blocks collection until an admin approves (🔴
+reverses FD13), AF5 office-entered price + recorded negotiation rounds within an
+admin-set band (🔴 the agent no longer types a price), AF6 docs + smoke.
+
 **Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV16, decisions
 **FD0–FD19**, an as-built section per batch (§10 for FV9–FV16), and §8 (the
 availability gaps: off duty is now built, working hours and a roster are not).

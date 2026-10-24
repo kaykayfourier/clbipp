@@ -5,10 +5,14 @@ plus the pilot-run conversation of 2026-09-09 (engine may be off for the pilot;
 they want a human step retained), plus `docs/field agent selection.txt` (the
 company's expansion of §2.2 into a ranked agent selector).
 
-Decisions here are numbered **FD0–FD19** and follow the same rule as AD0–AD12:
+Decisions here are numbered **FD0–FD25** and follow the same rule as AD0–AD12:
 once settled, not re-litigated mid-build. Note the collision hazard the repo
 already warns about — quote the decision with its set (**FD**, not AD or D).
-⚠ **FD0–FD6 are settled. FD7–FD19 are OURS and provisional** — see §2.5 and §9.2.
+⚠ **FD0–FD6 are settled. FD7–FD25 are OURS and provisional** — see §2.5, §9.2
+and §12.2.
+
+> 🎯 **CURRENT WORK (2026-10-24): §12 — the additional feedback, batches AF0–AF6.**
+> AF1 (signup) is built and pushed; AF0 (the migration) is next. Start there.
 
 ---
 
@@ -1036,3 +1040,115 @@ single feature**.
 - The seed was not shrunk: smoke, `verify-seed` and the runbook depend on each
   fixture. The seed map in `docs/USER_GUIDE.md` §8 is the answer to "which
   pickup shows what".
+
+---
+
+## §12 Additional feedback (AF0–AF6) — THE CURRENT WORK (planned 2026-10-24)
+
+Source: `docs/CLBIPP_Additional_Feedback_Changes_Short.docx`, from the meeting
+after round 2. Six changes plus four "decisions to confirm". The company does not
+answer open questions, so Aamir made the calls on 2026-10-24 as **FD20–FD25** —
+🔴 **ours and provisional, same standing as FD7–FD19**.
+
+### 12.1 Status
+
+| Batch | What | State |
+|---|---|---|
+| AF1 | Signup: phone required, EPR optional | ✅ **built + pushed** (`63eeded`, 2026-10-24). Production smoke not yet run after the push. |
+| AF0 | One migration `additional_feedback` + seed | ⏳ next. 🔴 Shared DB: Aamir announces to the team before `db execute` + `reset-demo`. |
+| AF2 | Vehicle number at collection + drop-off | ⏳ |
+| AF3 | Reassignment + in-app agent notices | ⏳ |
+| AF4 | Untagged battery needs admin approval | ⏳ |
+| AF5 | Office price + agent↔vendor negotiation rounds | ⏳ 🔶 price-capable (no engine price moves) |
+| AF6 | Docs + smoke assertions | ⏳ |
+
+⚠ **The shared seed was walked through a demo on 2026-10-08** (102 is
+`arrived` on a run, 103 `offered`, 104 `collected`), so `npm run smoke` reports
+7/48 customer failures on `/dashboard`, `/track/103`, `/track/104`, `/offer` and
+`/offer-breakdown` until AF0's reseed. Those are fixture drift, not regressions.
+Smoke against the remote DB takes ~7 min: redirect it to a file, never pipe it
+through `head`.
+
+### 12.2 Decisions FD20–FD25 (ours, provisional)
+
+| # | Decision |
+|---|---|
+| FD20 | **No phone OTP** (Plan v2 D2: paid SMS + DLT). Format-validated, `phone_verified` stays false. Required at signup and OAuth onboarding; `/profile` cannot clear it. Old phone-less accounts are not forced. |
+| FD21 | **Only an admin reassigns**, pre-collection only: `scheduled` or `offered` (any sub-state). Not `arrived` (agent on site), not a stop on an open run (cancel the run). Typed reason required. Both agents get an **in-app notice**. 🔶 **Web push flagged for later** (12.5). |
+| FD22 | **An untagged line BLOCKS COLLECTION** until an admin approves the agent's request; reject = tag it. 🔴 **Reverses FD13's "never a hard stop".** Approval writes `BatteryItem.untaggedReason`, so every downstream reader stays unchanged. |
+| FD23 | **Only the office enters a changed price.** The agent's typed "Agreed price" field is REMOVED (the company's worry: the agent mishears or mistypes). Admin opens the pickup, sees the engine recommendation, presses **Change price**, enters amount + reason (their name is the session). The agent's screen updates by itself; the agent adds a note and presents it. No office price → the agent presents the engine recommendation, as today. |
+| FD24 | **A decline is not final** (the vendor may press it by mistake). The agent may **re-offer up to an admin-set band above the sanctioned price** — the latest office price, else the engine's figure; default **10%**, set on `/config`. Above the band, the office sets the price (FD23 flow). **Every round is recorded**, first offer to final. The vendor's Accept is the confirmation; an accepted price stays fixed (FD7). The vendor never sees the engine or office figures. |
+| FD25 | **Vehicle number mandatory at collection AND drop-off**, prefilled (run vehicle → agent profile at collection; collection vehicle at drop-off). Any difference from the prefill is written to a corrections log. |
+
+### 12.3 Data — one additive migration (AF0)
+
+`packages/database/prisma/migrations/20261024120000_additional_feedback/migration.sql`
+(latest existing: `20261007120000_offer_price_record`). Generate with
+`npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --script`
+— 🔴 **never a `--shadow-database-url`** — hand-annotate, apply with
+`npx prisma db execute --file … --schema prisma/schema.prisma`, then
+`npx prisma generate` and restart dev servers.
+
+- `pickups.collection_vehicle TEXT NULL` · `custody_batches.vehicle TEXT NULL`
+- `vehicle_corrections` — pickup_id, custody_batch_id?, stage (`collection|dropoff`), from_reg, to_reg, corrected_by, corrected_at
+- `tag_exceptions` — battery_item_id, pickup_id, reason, requested_by/at, status (`pending|approved|rejected|withdrawn`), decided_by/at, decision_note. One pending per line, enforced in the action (no partial index — Prisma cannot express one; same posture as `EngineConfig.isActive`).
+- `office_prices` — pickup_id, engine_paise, previous_paise? (offer price at that moment), price_paise, reason, set_by/at, acknowledged_by/at, agent_note. Latest row per pickup = current.
+- `offer_rounds` — pickup_id, round_no (unique per pickup), price_paise, basis (`engine|office|agent`), office_price_id?, note, presented_by?, presented_at, outcome (`accepted|declined|superseded`)?, outcome_at. **Backfill round 1 for every existing offer in the migration** (basis `engine` when `estimated_price = recommended_price_paise` or that is null, else `agent`; outcome `accepted` when `accepted_at` is set).
+- `agent_notices` — agent_id, pickup_id?, kind (`job_reassigned_to_you|job_reassigned_away|office_price_set|tag_exception_decided`), message, created_at, read_at
+- `ops_settings` — one typed row, `id = 'default'`, `negotiation_band_bp INT NOT NULL DEFAULT 1000`, updated_by, updated_at. A missing row **fails closed to 0%** (every change goes through the office).
+- 🔴 **RLS ENABLED, ZERO POLICIES, on all six new tables, inside the migration** — `grants.sql` grants `anon` SELECT on every future table. Mirror in `supabase/policies.sql`. Readers are Prisma (agent/admin) or the service role (customer writes to `offer_rounds`); the vendor's token reads none of it.
+- `Offer.estimatedPrice` stays the CURRENT price — a cache of the latest round, like `status` vs `status_events`. Keep writing `recommendedPricePaise` / `priceNote` for existing readers.
+- Seed (`reset-demo.ts`) + `verify-seed.ts`: the `ops_settings` row; an **approved** `tag_exceptions` row for PKP-105's untagged line (it carries `untaggedReason` today); round 1 for every seeded offer; vehicle numbers on seeded collected/dropped-off pickups. One verify check per fixture.
+
+### 12.4 Batches
+
+**AF1 — Signup ✅ (as built).** `profileDetailsBaseSchema.phone` required
+(blank → "Enter your mobile number.", then `normaliseIndianPhone`);
+`fleetFieldsShape.eprRegId` optional (blank → `undefined`, never `''`).
+Signup + onboarding share both. `PhoneField` in `apps/customer/src/app/(auth)/field.tsx`
+used on both signup forms and onboarding; EPR labelled "(optional)".
+`updatePhone` refuses a blank. `SignUpInput.phone` is required.
+
+**AF2 — Vehicle number.**
+- `packages/core/src/vehicle.ts` + `./vehicle` in `packages/core/package.json` `exports`: `normaliseVehicleReg()` (uppercase, strip spaces/dashes; `^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{1,4}$` or BH `^\d{2}BH\d{4}[A-Z]{1,2}$`), `expectedVehicle({ runVehicle, profileVehicle })`. Tests.
+- Agent: show the vehicle on job detail; `job/[id]/collect/page.tsx` + `CollectForm.tsx` gain a required prefilled field; `confirmCollection` (`collect/actions.ts`) recomputes the expected value SERVER-SIDE, writes `collectionVehicle` in the existing `updateMany`, and a correction row only on a difference. ⚠ That transaction is at 8 round trips (timeout already 20 s) — +1 only on a difference.
+- Agent drop-off: `dropoff/confirm/{page,ConfirmDropoffForm,actions}.tsx` — field prefilled from the pickups' collection vehicle; `CustodyBatch.vehicle`; `createMany` corrections for pickups whose collection vehicle differs.
+- Admin: `/pickups/[id]` (collection + drop-off vehicle + corrections), `/custody/[batchId]`. Custody PDF (`packages/pdf`, route `apps/agent/src/app/api/documents/custody/[batchId]/route.ts`) prints the vehicle.
+
+**AF3 — Reassignment + agent notices.**
+- `packages/core/src/assignment.ts` + export: `reassignEligibility({ status, acceptedAt, openRunNo })` → ok | reason. Tests.
+- `packages/core/src/audit.ts`: add `pickup.reassign` + `price.office_set` (both into `REASON_REQUIRED_ACTIONS`), `tag_exception.decide`, `settings.update`; subject `ops_settings`. Keep `pickup.assign_collector` (old rows, and runs' `reassigns` path in `runs/actions.ts` writes it). Update `verify-seed`'s restated list.
+- `apps/admin/src/app/(admin)/dispatch/actions.ts`: `reassignPickup` REPLACES `assignCollector` (currently lines ~286–384). Shape of `assignPickup`: `requireAdmin` → agent re-verified (`agentStateAtConfirm`: off duty / safety) → tx { `updateMany` guarded on the OLD `agentId`, clears `agentFeePaise`/run fields; status event with the CURRENT status naming both agents and NO reason (vendor token reads `status_events`); `adminAudit` `pickup.reassign` before/after/reason; two `agentNotice` rows }. TX_TIMEOUT_MS/TX_MAX_WAIT_MS as in the file.
+- `/dispatch/[id]`: the "Who collects" panel becomes **Reassign** for scheduled + offered (ranked `AgentSelector` + reason). `apps/admin/src/lib/assignment-history.ts` reads audit rows (`pickup.assign`/`.reassign`/`.assign_collector`) → "Assignment history" on `/dispatch/[id]` and `/pickups/[id]`.
+- Agent: `apps/agent/src/lib/notices.ts` + `markNoticeRead` POST action; a notices card at the top of the day view `apps/agent/src/app/(agent)/page.tsx` ("Got it" + link). The original agent's queue drops the job by itself (every list keys on `agentId`; every action re-checks it).
+- There is NO notification infrastructure anywhere today; Realtime exists only for `status_events` (`packages/auth/src/realtime.ts`).
+
+**AF4 — Untagged-battery approval.**
+- `apps/agent/.../job/[id]/collect/tag-actions.ts`: `skipItemTagAction` → `requestTagException`: creates a PENDING row, does NOT set `untaggedReason`, withdraws an earlier pending row for the line; only at `offered` + accepted. `bindItemTagAction` withdraws a pending row in its transaction. Reason length: `MIN_UNTAGGED_REASON_CHARS` (`@clbipp/core/tags`).
+- `TagLoad.tsx`: per-line pending ("Waiting for the office" + call button) / approved / rejected (office's note). New agent `RefreshWhile` client component (`router.refresh()` every 10 s while something is pending) — reused by AF5.
+- `confirmCollection`: gate logic unchanged (tag OR `untaggedReason`); the error counts lines still awaiting approval.
+- Admin `/exceptions` (`page.tsx` + `actions.ts`): a new top section **"Untagged batteries"** — pending requests (pickup, line, agent, reason) with Approve / Reject (note required to reject). `decideTagException`: guarded on `pending`; approve sets `untaggedReason` only if the line is still untagged; audit + agent notice. Engine-flag section and its "advances nothing" rule untouched. `/pickups/[id]` item rows show the request state.
+- ⚠ Smoke asserts `'Untagged — hub tags on receipt'` on the agent receipt for PKP-105 (`scripts/smoke.mjs` ~line 551) — keep or update that copy.
+
+**AF5 — Office price + negotiation (🔶 PRICE-CAPABLE; no engine price moves — say so in the commit).**
+- `packages/core/src/offer.ts`: extract `recommendedOfferTotal(items)`. The HOLD rule exists twice today and DIFFERS — the agent offer page excludes `isLithium && HOLD`, `presentOffer` excludes any HOLD. One function for page, action and admin panel. `MAX_OFFER_MULTIPLE`, `MIN_PRICE_NOTE_CHARS`, `isStorablePaise` already exist. New `packages/core/src/negotiation.ts` + export: `sanctionedPricePaise({ enginePaise, officePricePaise })`, `checkReoffer({ pricePaise, sanctionedPaise, bandBp })`, `NEGOTIATION_BAND_MAX_BP = 5000`. Tests.
+- Admin `/pickups/[id]` **Price panel**: engine recommendation, current offer + state, office-price history (who, reason, original → final, agent's acknowledgement + note), negotiation rounds, "first offer → final (+x%)". **Change price** → amount + reason → `setOfficePrice` (new `pickups/[id]/actions.ts`): allowed at `arrived` with every item priced, or `offered` before acceptance; bounded by `isStorablePaise` + `MAX_OFFER_MULTIPLE`; audit `price.office_set`; agent notice; **does NOT touch `Offer`** — the agent applies it.
+- Admin `/config`: "Negotiation band" section → `setNegotiationBand` (0–50%, audit `settings.update`).
+- Agent `job/[id]/offer/{page,actions}.tsx` (currently: typed `agreedRupees` + `priceNote` → `resolveOfferPrice`; `presentOffer` is idempotent once `offered`):
+  - **Pre-present:** office price → "Office price ₹X · set by <name> · reason" + acknowledgement note + **Present ₹X**; none → **Present recommended ₹Y**. `presentOffer` reads the office price SERVER-SIDE and refuses when the hidden `officePriceId` is not the latest ("the office changed it again"). Writes acknowledgement, round 1 and `Offer` together.
+  - **Offered, not accepted:** rounds list + the vendor's last response; **Re-offer** (amount + note) → `reofferPrice`: `checkReoffer` against the band, supersede the open round, write round n+1 and `Offer.estimatedPrice` guarded on `acceptedAt IS NULL`, status event "Offer revised" with NO amount. A newer office price is applied the same way (basis `office`, no band check). Both states use `RefreshWhile`.
+- Customer `apps/customer/src/app/(app)/handover/actions.ts`: ⚠ **`declineOffer` ALREADY does not cancel** (it writes an `offered` status event, "Office to follow up") — §11's table and USER_GUIDE said otherwise; USER_GUIDE fixed 2026-10-24. Add: mark the open round `declined`. `acceptOffer` takes the price the vendor saw (from `AcceptOfferButton`), updates only where `estimated_price` matches AND `accepted_at IS NULL`, else "The offer was updated. Check the new price."; marks the round `accepted`. `/offer` copy after a decline: can still accept, or wait for a new price. 🔴 Don't touch the `/offer` ↔ `/handover` redirect guards.
+
+**AF6 — Docs + smoke.** This section's as-built notes; `docs/USER_GUIDE.md` (flows + seed map + §7 open questions); `CLAUDE.md` headline rules; `docs/LANE_OWNERSHIP.md`; `docs/MANUAL_TEST_QUEUE.md` (auto-refresh, two-device negotiation, vehicle entry on a phone); `scripts/smoke.mjs` strings (Reassign panel, Price panel, Untagged batteries, vehicle fields, Negotiation band).
+
+### 12.5 Not built, deliberately
+
+- 🔶 **Web push to agents' phones** — the upgrade from in-app notices: `web-push` dependency, VAPID keys in Vercel, a subscription table, a `sw.js` push handler. iOS only for an installed PWA (16.4+); production-only, untestable on `npm run dev`.
+- Reassigning at `arrived`; reassigning a whole run.
+- Offer expiry (FD7, 7 days) still counts from the FIRST presentation, not the latest round.
+- Negotiation analytics per agent (first vs final) — data in `offer_rounds`, no screen.
+- Admin edit of `Profile.agentVehicle`; prompting old phone-less accounts for a number.
+
+### 12.6 Verification
+
+Per batch: `npm run test`, typecheck the touched app (`npx tsc --noEmit -p apps/<app>`), lint. After AF0: reseed (announced) → `npm run verify-seed`; each new table returns 0 rows to a real vendor JWT. Drive each new action through the real HTTP path (`$ACTION_ID`): reassign (A's day view loses it, B's shows it + notice, audit has the reason) · untagged (collect refused while pending, allowed after approval, reject forces a tag) · office price (stale `officePriceId` refused) · re-offer (refused above the band; vendor accept refused at a stale price) · vehicle (correction row on a change). At the end: `lsof -ti:3000,3001,3002` → `npm run build` (`ƒ Proxy (Middleware)` × 3) → the three smokes + six wrong-role pairings → after the push, the three production smokes.

@@ -42,10 +42,14 @@ extra stages.
 
 ## 2. Vendor app
 
+- **Sign up.** A mobile number is required (the agent calls it on the day); it
+  is not verified by SMS. A fleet account gives company, GST, PAN and address;
+  the EPR registration ID is optional.
 - **Book a pickup.** Add each battery line with a photo. No price is shown at
   booking: the price comes after the agent's inspection.
 - **The offer.** Shows the price we will pay. **Accept** it, **Decline** it
-  (this cancels the pickup; you can rebook it later), or **Talk to us**.
+  (this does not cancel: the agent or the office can come back with another
+  price, and you can still accept), or **Talk to us**.
 - **Getting paid.** After the agent collects, choose UPI or bank. The amount is
   exactly the offer you accepted. Receipt and invoice are on the payment screen.
 - **Tracking.** Every pickup has a timeline you can share with a link.

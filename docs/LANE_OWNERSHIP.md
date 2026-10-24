@@ -1182,3 +1182,15 @@ do-it-and-note-it:
 | Vendor offer copy, Decline, certificate second-life | A (customer app) | Aamir | |
 | Admin: collector reassignment, box page, compliance, market bounds | A + B + C | Aamir | `pickup.assign_collector` added to `@clbipp/core/audit` and to `verify-seed`'s restated list. |
 | On-screen text cut across all three apps | A + C | Aamir | Text only; no feature removed. Explanations moved to `docs/USER_GUIDE.md`. |
+
+## 2026-10-24 — Additional feedback (AF0–AF6), Aamir + Claude
+
+Six changes from `docs/CLBIPP_Additional_Feedback_Changes_Short.docx`; plan and
+decisions FD20–FD25 in §12 of `docs/PLAN_FEEDBACK_V2.md`. Lanes crossed under
+do-it-and-note-it:
+
+| Batch | Nominal owner | Actually done by | Notes |
+|---|---|---|---|
+| AF1 — phone required, EPR optional at signup | A (signup/auth) + B (`validation.ts`) | Aamir | ✅ `63eeded`, pushed. |
+| AF0 — `additional_feedback` migration + seed | B | — | Planned. |
+| AF2–AF5 — vehicle, reassignment, untagged approval, office price + negotiation | A (writes) + B (core, PDF) + C (screens) | — | Planned. |
