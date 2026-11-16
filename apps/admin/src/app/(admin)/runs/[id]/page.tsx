@@ -2,13 +2,27 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { prisma } from '@clbipp/database'
+import { MIN_REASSIGN_REASON_CHARS, runReassignEligibility } from '@clbipp/core/assignment'
 import { RUN_STATUS_LABELS } from '@clbipp/core/run-planning'
 import { STAGE_LABELS, isLifecycleStage } from '@clbipp/ui'
 
+import { rankedAgentsFor } from '@/lib/agent-selection'
 import { dbDateKey, formatDateKey, formatIstDateTime } from '@/lib/ist'
-import { Chip, Notice, PageHead, Panel, Stat, secondaryButtonClass } from '@/components/console'
+import {
+  Chip,
+  FieldLabel,
+  Notice,
+  PageHead,
+  Panel,
+  Stat,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '@/components/console'
 
-import { cancelCollectionRunAction } from '../actions'
+import { AgentSelector } from '../../dispatch/[id]/AgentSelector'
+import { toCoord } from '../../dispatch/[id]/coords'
+import { cancelCollectionRunAction, reassignCollectionRunAction } from '../actions'
 
 // FV11 · One collection run — feedback §4.1 + §4.3.
 //
@@ -26,10 +40,10 @@ export default async function RunDetail({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ created?: string; cancelled?: string; error?: string }>
+  searchParams: Promise<{ created?: string; cancelled?: string; reassigned?: string; error?: string }>
 }) {
   const { id } = await params
-  const { created, cancelled, error } = await searchParams
+  const { created, cancelled, reassigned, error } = await searchParams
 
   const run = await prisma.collectionRun.findUnique({
     where: { id },
@@ -43,6 +57,7 @@ export default async function RunDetail({
       createdAt: true,
       startedAt: true,
       completedAt: true,
+      agentId: true,
       agent: { select: { fullName: true, phone: true } },
       containers: {
         orderBy: { loadedAt: 'asc' },
@@ -61,6 +76,7 @@ export default async function RunDetail({
           scheduledSlot: true,
           location: true,
           custodyBatchId: true,
+          address: { select: { lat: true, lng: true } },
           vendor: { select: { fullName: true, companyName: true } },
           items: {
             select: {
@@ -79,6 +95,21 @@ export default async function RunDetail({
   const lines = run.pickups.flatMap((p) => p.items)
   const tagged = lines.filter((l) => l.tag).length
   const checkedIn = lines.filter((l) => l.custodyCheck?.outcome === 'received').length
+
+  // Round 3 — the whole run can move to another agent while it is planned.
+  // reassignCollectionRun refuses with the same rule. Agents ranked for the
+  // centre of the run's stops, as the run builder ranks them.
+  const reassign = runReassignEligibility({ runStatus: run.status, runNo: run.runNo, stops: run.pickups })
+  const coords = run.pickups
+    .map((p) => ({ lat: toCoord(p.address?.lat), lng: toCoord(p.address?.lng) }))
+    .filter((c): c is { lat: number; lng: number } => c.lat !== null && c.lng !== null)
+  const agents = reassign.ok
+    ? await rankedAgentsFor({
+        addressLat: coords.length ? coords.reduce((s, c) => s + c.lat, 0) / coords.length : null,
+        addressLng: coords.length ? coords.reduce((s, c) => s + c.lng, 0) / coords.length : null,
+        targetDay: run.runDate,
+      })
+    : []
 
   return (
     <>
@@ -103,6 +134,11 @@ export default async function RunDetail({
       {cancelled ? (
         <Notice tone="warning">
           Run cancelled. Stops keep their agent and slot.
+        </Notice>
+      ) : null}
+      {reassigned ? (
+        <Notice tone="success">
+          Run reassigned to {run.agent.fullName}. Both agents have a notice.
         </Notice>
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -181,6 +217,40 @@ export default async function RunDetail({
               </ul>
             )}
           </Panel>
+
+          {reassign.ok ? (
+            <Panel title="Reassign run">
+              <form action={reassignCollectionRunAction} className="flex flex-col gap-4">
+                <input type="hidden" name="runId" value={run.id} />
+                <AgentSelector agents={agents} staleAgentId={run.agentId} markLabel="Has this run" />
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel htmlFor="reason">Reason</FieldLabel>
+                  <textarea
+                    id="reason"
+                    name="reason"
+                    required
+                    minLength={MIN_REASSIGN_REASON_CHARS}
+                    rows={2}
+                    placeholder="Why is this run moving?"
+                    className={inputClass}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel htmlFor="vehicle">Vehicle (optional)</FieldLabel>
+                  <input id="vehicle" name="vehicle" placeholder="Defaults to the new agent's vehicle" className={inputClass} />
+                </div>
+                <button type="submit" className={primaryButtonClass}>
+                  Reassign run
+                </button>
+                <p className="text-[11px] leading-relaxed text-text-secondary">
+                  Every stop moves with its slot. Kept in the audit log, not shown to the vendor.
+                </p>
+              </form>
+            </Panel>
+          ) : run.status === 'planned' || run.status === 'in_progress' ? (
+            // Always say WHY on an open run — /dispatch links here from a stop.
+            <Notice tone="warning">{reassign.reason}</Notice>
+          ) : null}
 
           <Panel title="Run">
             <dl className="flex flex-col gap-2 text-xs">

@@ -395,14 +395,29 @@ The rules it put in place, which new code must not undo:
   agent app again.
 - 🔴 **Reassign only through `reassignEligibility()`** (`@clbipp/core/assignment`,
   AF3 · FD21): `scheduled` or `offered`, not `arrived`, not a stop on an open
-  run; reason required (`pickup.reassign`, on the audit row only — the status
+  run — 🎯 **a whole run moves instead** (round 3, `runReassignEligibility()` +
+  `reassignCollectionRun` on `/runs/[id]`: `planned` runs only, every live stop
+  reassignable, one `run.reassign` + one `pickup.reassign` per stop); reason required (`pickup.reassign`, on the audit row only — the status
   event names both agents and no reason). Both agents get an `agent_notices`
   row; the day view shows unread ones. No push (§12.5).
 - ⚠ **Vehicle numbers are compared only through `normaliseVehicleReg`**
-  (`@clbipp/core/vehicle`, AF2 · FD25), which pads district/number so a
-  re-typed prefill is not a correction. A `vehicle_corrections` row is written
-  only when a prefill existed and differs; the prefill is recomputed
-  server-side, never taken from the form.
+  (`@clbipp/core/vehicle`, AF2 · FD25), which pads district/number so the same
+  plate typed differently is not a correction. 🔴 **The vehicle field starts
+  BLANK, with no hint and no example number** (company, round 3, 2026-11-17: a
+  prefill gets tapped past unchecked). The vehicle on record is still worked out
+  SERVER-SIDE, never sent to the form, and a `vehicle_corrections` row is
+  written only when one existed and the typed plate differs. Don't add a
+  prefill, placeholder registration or "changed from" hint back.
+
+🎯 **ROUND 3 (2026-11-17) — the company's reaction to AF0–AF6.** As built in
+**§13 of `docs/PLAN_FEEDBACK_V2.md`**; ⚠ uncommitted at the time of writing.
+(1) The vehicle field starts **blank** — no prefill, no hint, no example
+number — and is still mandatory at both steps (company instruction, supersedes
+FD25's prefill; rule below). (2) "Reassign failed on PKP-102 in the demo" was
+the demo script's fault, not a bug: 102 is a stop on the seeded run, which is
+already `in_progress`. **Demo reassignment on 112.** The refusal on
+`/dispatch/[id]` is now a warning linking to the run. (3) **Reassign a whole
+run** — additive, team decision (see the reassign rule above).
 
 **Read `docs/PLAN_FEEDBACK_V2.md` first** — batches FV1–FV16, decisions
 **FD0–FD19**, an as-built section per batch (§10 for FV9–FV16), and §8 (the
@@ -845,7 +860,7 @@ npm run dev:admin    # Admin console dev server   (:3002) — all three at once
                      # (dev:admin live since 2026-08-26, Admin Batch 0)
 npm run build        # Build every app + package
 npm run lint         # ESLint across the workspace
-npm run test         # All tests (Vitest) — currently 475 (core 408, auth 40, engine 27)
+npm run test         # All tests (Vitest) — currently 482 (core 415, auth 40, engine 27)
 
 # Logged-in route check. `npm run build` never renders a page with a session, so
 # this is what catches a server component that throws at request time.

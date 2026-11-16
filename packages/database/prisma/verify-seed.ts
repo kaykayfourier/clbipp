@@ -153,7 +153,7 @@ async function main() {
     // first one that happened to.
     ["pickup.assign","config.publish","market.override","exception.resolve","custody.advance","manifest.dispatch","manifest.confirm","pickup.certify","lifecycle.override","supplier.margin","item.pathway",
      // feedback_logistics (FV10–FV15)
-     "tag.issue","container.register","container.status","run.create","run.cancel","custody.reconcile","agent.duty","pickup.assign_collector",
+     "tag.issue","container.register","container.status","run.create","run.cancel","run.reassign","custody.reconcile","agent.duty","pickup.assign_collector",
      // additional_feedback (AF3–AF5)
      "pickup.reassign","price.office_set","tag_exception.decide","settings.update"].includes(a.action)),
     `${audits.length} rows`)

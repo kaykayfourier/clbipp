@@ -2,25 +2,24 @@
 
 import { useState } from 'react'
 
-import { formatVehicleReg, isVehicleCorrection, normaliseVehicleReg } from '@clbipp/core/vehicle'
+import { normaliseVehicleReg } from '@clbipp/core/vehicle'
 import { SectionLabel } from '@clbipp/ui'
 
-// ─── Vehicle number (AF2 · FD25) ─────────────────────────────────────────────
-// Mandatory at collection and at hub drop-off, prefilled. The server action
-// recomputes the prefill itself and decides what counts as a correction — the
-// hint here only tells the agent what will be recorded.
+// ─── Vehicle number (AF2 · FD25, blank since round 3) ────────────────────────
+// Mandatory at collection and at hub drop-off, and deliberately EMPTY. The
+// company's round-3 feedback: a prefilled number gets tapped past without
+// anyone looking at the plate, so the agent types what is on the van in front
+// of them. No prefill, no hint, and no example registration anywhere on this
+// field — not even as a placeholder or in the format error, since any number
+// shown here is one an agent can copy instead of checking.
+//
+// The server action still knows the vehicle on record (run, profile, or the
+// collection vehicle at drop-off) and logs a `vehicle_corrections` row when
+// the typed number differs. That comparison never reaches the phone.
 
-export function VehicleField({
-  prefill,
-  onValidChange,
-}: {
-  /** Canonical registration the server worked out, or null. */
-  prefill: string | null
-  onValidChange: (valid: boolean) => void
-}) {
-  const [value, setValue] = useState(prefill ? formatVehicleReg(prefill) : '')
-  const reg = normaliseVehicleReg(value)
-  const changed = reg !== null && isVehicleCorrection(prefill, reg)
+export function VehicleField({ onValidChange }: { onValidChange: (valid: boolean) => void }) {
+  const [value, setValue] = useState('')
+  const invalid = value.trim() !== '' && normaliseVehicleReg(value) === null
 
   return (
     <div className="flex flex-col gap-2">
@@ -33,19 +32,14 @@ export function VehicleField({
           setValue(e.target.value)
           onValidChange(normaliseVehicleReg(e.target.value) !== null)
         }}
-        placeholder="DL 1LR 4471"
+        placeholder="Type the number on your vehicle"
         autoCapitalize="characters"
         autoComplete="off"
         required
         className="h-12 w-full rounded-[10px] border border-border bg-background px-3 text-base uppercase text-text-primary"
       />
-      {value.trim() !== '' && reg === null && (
-        <p className="text-[11px] font-semibold text-error">Use the format DL 1LR 4471.</p>
-      )}
-      {changed && prefill && (
-        <p className="text-[11px] text-text-secondary">
-          Changed from {formatVehicleReg(prefill)}. The change is recorded.
-        </p>
+      {invalid && (
+        <p className="text-[11px] font-semibold text-error">That is not a full vehicle number. Check the plate.</p>
       )}
     </div>
   )

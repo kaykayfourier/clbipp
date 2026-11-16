@@ -36,7 +36,59 @@ export function reassignEligibility({
     return { ok: false, reason: 'Only a scheduled job, or one with an offer that is not yet collected, can be reassigned.' }
   }
   if (openRunNo) {
-    return { ok: false, reason: `This job is a stop on ${openRunNo}. Cancel the run first, or change the stop from the run.` }
+    return {
+      ok: false,
+      reason: `This job is a stop on ${openRunNo}. Reassign the whole run from its page (only before a box is loaded), or cancel the run first.`,
+    }
+  }
+  return { ok: true }
+}
+
+// ─── Reassigning a whole run (round 3, 2026-11-17) ───────────────────────────
+// A single stop never leaves its run (the run is one agent's van and day), but
+// the run itself can move, intact, to another agent. The company asked for it
+// as an option alongside per-job reassignment; nothing forces its use.
+//
+// Only a `planned` run: once the agent loads a box it is `in_progress` and
+// there are batteries in THEIR van — that is a physical hand-over, not a
+// reassignment (the same line cancelCollectionRun draws). And every live stop
+// must itself be reassignable (scheduled or offered): one stop the agent is
+// standing at, or has already collected, holds the whole run. A cancelled stop
+// is ignored — it is not anyone's job any more.
+
+export type RunReassignEligibility = ReassignEligibility
+
+export function runReassignEligibility({
+  runStatus,
+  runNo,
+  stops,
+}: {
+  runStatus: string
+  runNo: string
+  stops: ReadonlyArray<{ id: string; status: string }>
+}): RunReassignEligibility {
+  if (runStatus === 'in_progress') {
+    return {
+      ok: false,
+      reason: `${runNo} is on the road. The agent has loaded a box, so the batteries are in their vehicle.`,
+    }
+  }
+  if (runStatus !== 'planned') {
+    return { ok: false, reason: `${runNo} is ${runStatus === 'completed' ? 'complete' : runStatus}.` }
+  }
+  const live = stops.filter((s) => s.status !== 'cancelled')
+  if (live.length === 0) return { ok: false, reason: `${runNo} has no live stops to move.` }
+  for (const s of live) {
+    const stop = reassignEligibility({ status: s.status })
+    if (!stop.ok) {
+      return {
+        ok: false,
+        reason:
+          s.status === 'arrived'
+            ? `The agent is on site at ${s.id}, so the run cannot move.`
+            : `${s.id} is past the point where a job can be reassigned, so the run cannot move.`,
+      }
+    }
   }
   return { ok: true }
 }

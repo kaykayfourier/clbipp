@@ -739,10 +739,11 @@ const AGENT_APP_CONTENT = {
     'Confirm hand-off',
     'Receiving staff',
     'Agent-attested only',
-    // AF2 · FD25 — mandatory, prefilled from 105's collection vehicle.
+    // AF2 · round 3 — mandatory and BLANK: the company asked for no prefill,
+    // so 105's collection vehicle must not be asserted (or rendered) here.
     'Vehicle number',
     'name="vehicle"',
-    'DL 01 LR 4471',
+    'Type the number on your vehicle',
   ],
 }
 
@@ -1077,7 +1078,9 @@ const ADMIN_APP_CONTENT = {
   // ── feedback_logistics (FV10–FV12) ─────────────────────────────────────────
   '/runs': ['Collection runs', '5EED', 'On the road'],
   '/runs/new': ['Plan a collection run', 'Suggested same-day groups', 'PKP-2026-000115', 'Use this group'],
-  [`/runs/${ADMIN_RUN}`]: ['5EED', SEED_BOX, AGENT_COLLECTED, 'Suggested order'],
+  // Round 3 — the seeded run has a box loaded, so it CANNOT be reassigned, and
+  // the page must say why rather than show nothing (/dispatch links here).
+  [`/runs/${ADMIN_RUN}`]: ['5EED', SEED_BOX, AGENT_COLLECTED, 'Suggested order', 'is on the road'],
   [`/custody/${ADMIN_BATCH}`]: ['Hub check-in', 'CB-2026-000301', SEED_TAG_106, 'Scan a tag', 'Scanned', 'Vehicle', 'DL 01 LR 4471'],
   '/containers': ['Transport boxes', SEED_BOX, 'Blue crate 60 L #1', 'Register a box'],
   '/tags': ['Battery tags', '-SEED', 'Issue a sheet'],

@@ -13,7 +13,6 @@ import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
 import { formatPaise } from '@clbipp/core/format'
 import { chemistryLabel } from '@clbipp/core/intake'
-import { expectedVehicle } from '@clbipp/core/vehicle'
 import { AppShell, Banner, Button, PagePadding } from '@clbipp/ui'
 
 import { RefreshWhile } from '@/components/refresh-while'
@@ -145,9 +144,8 @@ export default async function Page({
   const tagsComplete = lines.length > 0 && lines.every((l) => l.tagCode || l.untaggedReason)
   const waitingOnOffice = lines.some((l) => !l.tagCode && !l.untaggedReason && l.request?.status === 'pending')
   const run = pickup.collectionRun && pickup.collectionRun.agentId === user.id ? pickup.collectionRun : null
-  // AF2 · FD25 — the prefill. confirmCollection works it out again itself.
-  const profile = await prisma.profile.findUnique({ where: { id: user.id }, select: { agentVehicle: true } })
-  const vehiclePrefill = expectedVehicle({ runVehicle: run?.vehicle, profileVehicle: profile?.agentVehicle })
+  // AF2 · round 3 — no vehicle prefill. The field starts blank on purpose and
+  // confirmCollection alone compares the typed number with the one on record.
 
   return (
     <AppShell title="Collect" showBack backHref={`/job/${id}/offer`} hideNav>
@@ -169,7 +167,6 @@ export default async function Page({
           vendorName={pickup.vendor.fullName}
           agentFeePaise={computeAgentFeePaise(pickup._count.items)}
           tagsComplete={tagsComplete}
-          vehiclePrefill={vehiclePrefill}
         />
       </PagePadding>
     </AppShell>

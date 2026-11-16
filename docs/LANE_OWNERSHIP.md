@@ -1198,3 +1198,15 @@ do-it-and-note-it:
 | AF4 — untagged-battery requests and `/exceptions` decisions | A (writes) + C (`/exceptions` screen) | Aamir | 🔴 Reverses FD13. |
 | AF5 — office price, Price panel, negotiation band, re-offer, accept-at-seen-price | A (writes) + B (`offer.ts`, `negotiation.ts`, `/config`) + C (Price panel) | Aamir | 🔶 Price-capable, no engine price moves. `presentOffer` (Ali's Batch 5a) rewritten on a Prisma transaction; `resolveOfferPrice` (round 2) removed. |
 | AF6 — docs + smoke | A | Aamir | |
+
+## 2026-11-17 — Round 3 (the company's reaction to AF0–AF6), Aamir + Claude
+
+Two tweaks from the company plus one team addition; as-built record in §13 of
+`docs/PLAN_FEEDBACK_V2.md`.
+
+| Area | Nominal owner | Actually done by | Notes |
+|---|---|---|---|
+| Vehicle field blank, no prefill or hint (agent collect + drop-off) | A (agent writes) | Aamir | Corrections log unchanged, now judged server-side only. Smoke string swapped. |
+| `/dispatch/[id]` refusal as a warning with a run link | A | Aamir | After the 102 demo miss. |
+| Reassign a whole run — `runReassignEligibility` (core), `reassignCollectionRun` + `/runs/[id]` panel, `run.reassign` audit verb | A (writes) + B (core, `verify-seed` list) + C (`/runs/[id]`, `/audit` label) | Aamir | Additive. `verify-seed`'s restated audit list updated. |
+

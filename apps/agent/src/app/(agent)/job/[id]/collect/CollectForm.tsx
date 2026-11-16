@@ -130,7 +130,6 @@ export function CollectForm({
   vendorName,
   agentFeePaise,
   tagsComplete,
-  vehiclePrefill,
 }: {
   pickupId: string
   userId: string
@@ -138,13 +137,11 @@ export function CollectForm({
   agentFeePaise: number
   /** FV10 · FD13 — every line tagged or explained. The action re-checks. */
   tagsComplete: boolean
-  /** AF2 · FD25 — run vehicle, else the agent's profile. The action recomputes it. */
-  vehiclePrefill: string | null
 }) {
   const [signaturePath, setSignaturePath] = useState<string | null>(null)
   const [photos, setPhotos] = useState<string[]>([])
   const [contactConfirmed, setContactConfirmed] = useState(false)
-  const [vehicleValid, setVehicleValid] = useState(vehiclePrefill !== null)
+  const [vehicleValid, setVehicleValid] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   // Best-effort. PickupReceipt.capturedLat/Lng are nullable for exactly this
@@ -192,7 +189,7 @@ export function CollectForm({
         <input key={p} type="hidden" name="photoPaths" value={p} />
       ))}
 
-      <VehicleField prefill={vehiclePrefill} onValidChange={setVehicleValid} />
+      <VehicleField onValidChange={setVehicleValid} />
 
       <div className="flex flex-col gap-2">
         <SectionLabel>Hand-off photos — optional</SectionLabel>

@@ -90,6 +90,13 @@ export const ADMIN_AUDIT_ACTIONS = [
   /** A planned run cancelled before it started. The stops keep their agent. */
   "run.cancel",
   /**
+   * A whole planned run moved, intact, to another agent (round 3,
+   * 2026-11-17). Requires a typed `reason`. Each live stop ALSO gets its own
+   * `pickup.reassign` row (same reason), so a pickup's assignment history stays
+   * complete however it moved.
+   */
+  "run.reassign",
+  /**
    * A hub check-in line recorded BY HAND — received without a scan, or
    * declared missing (FV12 · FD15). Requires a typed `reason`. A scan writes no
    * audit row: the check row itself records who and when, and a scan asserts
@@ -175,6 +182,7 @@ export const REASON_REQUIRED_ACTIONS: readonly AdminAuditAction[] = [
   // Taking a job off one agent and giving it to another, and overriding the
   // engine's price: both are someone else's work changed by the office.
   "pickup.reassign",
+  "run.reassign",
   "price.office_set",
 ]
 

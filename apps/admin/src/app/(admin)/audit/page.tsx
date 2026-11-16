@@ -80,6 +80,7 @@ const ACTION_LABELS: Record<AdminAuditAction, string> = {
   'container.status': 'Transport box retired / reinstated',
   'run.create': 'Collection run built',
   'run.cancel': 'Collection run cancelled',
+  'run.reassign': 'Collection run reassigned',
   'custody.reconcile': 'Hub check-in recorded by hand',
   'agent.duty': 'Agent duty changed',
   'pickup.assign_collector': 'Collector assigned',

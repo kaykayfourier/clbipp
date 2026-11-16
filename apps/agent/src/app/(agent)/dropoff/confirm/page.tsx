@@ -8,7 +8,6 @@ import { redirect } from 'next/navigation'
 
 import { prisma } from '@clbipp/database'
 import { createClient } from '@clbipp/auth/server'
-import { dropoffPrefill, vehicleRegFromText } from '@clbipp/core/vehicle'
 import { AppShell, Banner, Card, CardContent, PagePadding, SectionLabel } from '@clbipp/ui'
 
 import { ConfirmDropoffForm } from './ConfirmDropoffForm'
@@ -41,7 +40,6 @@ export default async function Page({
     }),
     prisma.facility.findMany({ where: { isActive: true }, select: { id: true, name: true, location: true } }),
   ])
-  const profile = await prisma.profile.findUnique({ where: { id: user.id }, select: { agentVehicle: true } })
 
   if (pickups.length === 0) redirect('/dropoff')
 
@@ -50,9 +48,8 @@ export default async function Page({
     0,
   )
   const itemCount = pickups.reduce((sum, p) => sum + (p.receipt?.itemCount ?? p.items.length), 0)
-  // AF2 · FD25 — the van the loads left in; the profile only when none recorded one.
-  const vehiclePrefill =
-    dropoffPrefill(pickups.map((p) => p.collectionVehicle)) ?? vehicleRegFromText(profile?.agentVehicle)
+  // AF2 · round 3 — no vehicle prefill: the agent types the plate. The action
+  // compares it with each pickup's collection vehicle and logs any difference.
 
   return (
     <AppShell title="Confirm hand-off" showBack backHref="/dropoff" hideNav>
@@ -79,7 +76,6 @@ export default async function Page({
             pickupIds={pickups.map((p) => p.id)}
             userId={user.id}
             facilities={facilities}
-            vehiclePrefill={vehiclePrefill}
           />
         )}
       </PagePadding>

@@ -12,6 +12,7 @@ import { assignPickupAction, reassignPickupAction } from '../actions'
 import { rankedAgentsFor } from '@/lib/agent-selection'
 import { ASSIGNMENT_VERBS, assignmentHistory } from '@/lib/assignment-history'
 import { inspectorOf } from '@/lib/inspector'
+import { Notice } from '@/components/console'
 import { toCoord } from './coords'
 
 import { AgentSelector } from './AgentSelector'
@@ -64,7 +65,7 @@ export default async function DispatchDetail({
       indicativeQuotePaise: true,
       collectionScheduledAt: true,
       offer: { select: { acceptedAt: true } },
-      collectionRun: { select: { runNo: true, status: true } },
+      collectionRun: { select: { id: true, runNo: true, status: true } },
       conditionFlags: true,
       vendor: {
         select: {
@@ -370,7 +371,17 @@ export default async function DispatchDetail({
             </Panel>
           ) : !reassign.ok && (pickup.status === 'arrived' || openRun) ? (
             <Panel title="Reassign">
-              <p className="text-xs leading-relaxed text-text-secondary">{reassign.reason}</p>
+              {/* Round 3: a demo missed this as small grey text. A warning, and
+                  for a run stop a link to where the run CAN be reassigned. */}
+              <Notice tone="warning">{reassign.reason}</Notice>
+              {openRun && pickup.collectionRun ? (
+                <Link
+                  href={`/runs/${pickup.collectionRun.id}`}
+                  className="mt-3 inline-block text-xs font-semibold text-text-primary underline underline-offset-2"
+                >
+                  Open {openRun} to reassign the run
+                </Link>
+              ) : null}
             </Panel>
           ) : null}
           {history.length > 0 ? (

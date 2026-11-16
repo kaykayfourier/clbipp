@@ -808,16 +808,15 @@ right. **Reseed first** (announced) — 104 and 105 are the fixtures.
    the vendor reloads and sees "We have updated our offer". Vendor taps
    **Accept** on a page loaded BEFORE the re-offer → ✅ "The offer was updated.
    Check the new price." and nothing is accepted.
-3. **Reassign.** Admin `/dispatch/PKP-2026-000104` → **Reassign** to Neha with a
+3. **Reassign.** Admin `/dispatch/PKP-2026-000104` (or 112 after dispatching
+   it to Ravi — never 102, a run stop) → **Reassign** to Neha with a
    reason. ✅ Ravi's day view shows the "moved to Neha Verma" notice and no job
    row; Neha's shows "is now yours" and the job. **Got it** clears each.
 4. **Office price on a phone.** Admin sets a price on `/pickups/PKP-2026-000104`
    → the agent's offer screen shows "New price from the office" by itself;
    present it; the Price panel shows it as presented, with the agent's note.
-5. **Vehicle entry on a phone.** Collect and drop off with the on-screen
-   keyboard: the field opens in capitals, the prefill can be edited, a bad value
-   shows "Use the format DL 1LR 4471", a different vehicle shows "Changed from …
-   The change is recorded." ✅ The admin pickup page lists the change.
+5. ~~**Vehicle entry on a phone.**~~ ⚠ Superseded by round 3 item 1 below
+   (the field is blank now, with no prefill and no hint).
 6. **Decline as a vendor.** Press **Decline**, cancel the prompt (nothing
    happens), press again and confirm → ✅ "You declined this offer. You can still
    accept it…", no second Decline button, and the pickup is NOT cancelled.
@@ -826,4 +825,23 @@ right. **Reseed first** (announced) — 104 and 105 are the fixtures.
    to 10.
 8. **Read the new screens once** — Price panel, Untagged batteries, the agent's
    rounds list — for text that spills out of its box.
+
+## Round 3 (2026-11-17)
+
+Server paths driven over HTTP (§13 of `docs/PLAN_FEEDBACK_V2.md`). Left for a
+person:
+
+1. **Vehicle entry on a phone.** Collect (104 after acceptance) and drop off
+   (105) with the on-screen keyboard. ✅ The field is EMPTY, opens in capitals,
+   shows no number anywhere (no placeholder reg, nothing under it); Confirm
+   stays disabled until a full number is typed; a partial one shows "That is
+   not a full vehicle number. Check the plate." Type a different plate from the
+   agent's → ✅ the admin pickup page lists the correction.
+2. **Reassign run, on screen.** Build a run (101 + 115, Ravi) → **Reassign run**
+   → Neha. ✅ The success banner names Neha; Ravi's phone shows the notice and
+   no run; Neha's shows the run and both stops. Cancel the run afterwards and
+   `demo-stage --reset` 101 and 115.
+3. **The refusal is visible.** `/dispatch/PKP-2026-000102` → ✅ an amber warning,
+   not grey text, and "Open RUN-… to reassign the run" lands on a run page that
+   says it is on the road.
 

@@ -128,18 +128,15 @@ export function ConfirmDropoffForm({
   pickupIds,
   userId,
   facilities,
-  vehiclePrefill,
 }: {
   pickupIds: string[]
   userId: string
   facilities: FacilityOption[]
-  /** AF2 · FD25 — the pickups' collection vehicle. The action recomputes it. */
-  vehiclePrefill: string | null
 }) {
   const [facilityId, setFacilityId] = useState(facilities[0]?.id ?? '')
   const [staffName, setStaffName] = useState('')
   const [signaturePath, setSignaturePath] = useState<string | null>(null)
-  const [vehicleValid, setVehicleValid] = useState(vehiclePrefill !== null)
+  const [vehicleValid, setVehicleValid] = useState(false)
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
 
   useEffect(() => {
@@ -189,7 +186,7 @@ export function ConfirmDropoffForm({
         </Card>
       </div>
 
-      <VehicleField prefill={vehiclePrefill} onValidChange={setVehicleValid} />
+      <VehicleField onValidChange={setVehicleValid} />
 
       <div className="flex flex-col gap-2">
         <SectionLabel>Receiving staff</SectionLabel>

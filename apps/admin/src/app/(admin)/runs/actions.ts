@@ -16,6 +16,8 @@ import {
   slotTimes,
 } from '@clbipp/core/run-planning'
 
+import { MIN_REASSIGN_REASON_CHARS, runReassignEligibility } from '@clbipp/core/assignment'
+
 import { requireAdmin } from '@/lib/admin-identity'
 import { agentStateAtConfirm } from '@/lib/agent-selection'
 import { dateKeyToDbDate, istDateKey, istInstant } from '@/lib/ist'
@@ -323,6 +325,184 @@ export async function cancelCollectionRun(runId: string): Promise<{ error: strin
     { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
   )
   return moved ? { error: null } : { error: 'That run changed a moment ago. Reload.' }
+}
+
+// ─── Reassign a whole run (round 3, 2026-11-17) ──────────────────────────────
+// Additive: the company asked for it as an option beside per-job reassignment
+// (AF3), which still refuses a single run stop. The run moves INTACT — same
+// stops, order, slots and date — to one other agent. `runReassignEligibility()`
+// in @clbipp/core/assignment is the rule; the panel on /runs/[id] renders with
+// it and this refuses with it.
+//
+// Only a `planned` run: once a box is loaded the batteries are in the first
+// agent's vehicle. What is cleared on each stop: the fee (earned at collection
+// by whoever collects). The run's vehicle becomes the new agent's unless the
+// admin typed one — the old one is in the wrong person's driveway.
+//
+// 🔴 The REASON goes on the audit rows only (one `run.reassign`, plus one
+// `pickup.reassign` per stop so each pickup's assignment history stays whole).
+// Status events carry no reason: the vendor's token reads status_events.
+const RUN_REASSIGN_ACTION: AdminAuditAction = 'run.reassign'
+const PICKUP_REASSIGN_ACTION: AdminAuditAction = 'pickup.reassign'
+
+export async function reassignCollectionRun(input: {
+  runId: string
+  agentId: string
+  reason: string
+  vehicle: string
+}): Promise<{ error: string | null }> {
+  const gate = await requireAdmin()
+  if (!gate.ok) return { error: gate.error }
+  const admin = gate.admin
+
+  const runId = input.runId.trim()
+  const agentId = input.agentId.trim()
+  const reason = input.reason.trim()
+  if (!agentId) return { error: 'Choose the agent to give this run to.' }
+  if (reason.length < MIN_REASSIGN_REASON_CHARS) {
+    return { error: `Say why the run is being reassigned (at least ${MIN_REASSIGN_REASON_CHARS} characters).` }
+  }
+
+  const run = await prisma.collectionRun.findUnique({
+    where: { id: runId },
+    select: {
+      id: true,
+      runNo: true,
+      status: true,
+      runDate: true,
+      agentId: true,
+      vehicle: true,
+      agent: { select: { fullName: true } },
+      pickups: { select: { id: true, status: true, agentId: true, agentFeePaise: true } },
+    },
+  })
+  if (!run) return { error: 'That run does not exist.' }
+  const eligible = runReassignEligibility({ runStatus: run.status, runNo: run.runNo, stops: run.pickups })
+  if (!eligible.ok) return { error: eligible.reason }
+  if (run.agentId === agentId) return { error: `${run.agent.fullName} already has this run.` }
+
+  // Re-verified at the write, never trusted from the form — the same checks
+  // createCollectionRun and reassignPickup make, against the run's own day.
+  const agent = await prisma.profile.findUnique({
+    where: { id: agentId },
+    select: { id: true, role: true, fullName: true, agentVehicle: true },
+  })
+  if (!agent || agent.role !== 'agent') return { error: 'Choose an agent.' }
+  const confirm = await agentStateAtConfirm(agent.id, run.runDate)
+  if (!confirm.exists) return { error: 'That agent does not exist.' }
+  if (confirm.offDuty) {
+    return { error: `${agent.fullName} is marked off duty. Mark them on duty from the agent roster first, or pick another agent.` }
+  }
+  if (!confirm.safetyTrained) {
+    return { error: `${agent.fullName} has no safety training on file and cannot handle the batteries.` }
+  }
+
+  const live = run.pickups.filter((p) => p.status !== 'cancelled')
+  const liveIds = live.map((p) => p.id)
+  const fromName = run.agent.fullName
+  const vehicle = input.vehicle.trim() || agent.agentVehicle || null
+
+  try {
+    const moved = await prisma.$transaction(
+      async (tx) => {
+        // Guarded on the status and agent we read: a box loaded, or another
+        // admin moving the run, meanwhile updates zero rows here.
+        const updated = await tx.collectionRun.updateMany({
+          where: { id: run.id, status: 'planned', agentId: run.agentId },
+          data: { agentId: agent.id, vehicle },
+        })
+        if (updated.count === 0) return false
+
+        // Every live stop, or none: one stop the old agent has meanwhile
+        // arrived at would otherwise be left behind on a run that is not theirs.
+        const stops = await tx.pickup.updateMany({
+          where: {
+            id: { in: liveIds },
+            collectionRunId: run.id,
+            agentId: run.agentId,
+            status: { in: ['scheduled', 'offered'] },
+          },
+          data: { agentId: agent.id, agentFeePaise: null },
+        })
+        if (stops.count !== live.length) throw new Error('RACE')
+
+        await tx.statusEvent.createMany({
+          data: live.map((p) => ({
+            pickupId: p.id,
+            // The CURRENT status: a fact about who has the job, not a stage.
+            status: p.status,
+            actorId: admin.id,
+            actorRole: 'admin',
+            notes: `Reassigned from ${fromName} to ${agent.fullName} with collection run ${run.runNo}.`,
+          })),
+        })
+        await tx.adminAudit.createMany({
+          data: [
+            {
+              actorId: admin.id,
+              action: RUN_REASSIGN_ACTION,
+              subjectType: RUN_SUBJECT,
+              subjectId: run.id,
+              before: { agentId: run.agentId, vehicle: run.vehicle, stops: liveIds },
+              after: { agentId: agent.id, vehicle, stops: liveIds },
+              reason,
+            },
+            ...live.map((p) => ({
+              actorId: admin.id,
+              action: PICKUP_REASSIGN_ACTION,
+              subjectType: PICKUP_SUBJECT,
+              subjectId: p.id,
+              before: { status: p.status, agentId: p.agentId, agentFeePaise: p.agentFeePaise, collectionRunId: run.id },
+              after: { status: p.status, agentId: agent.id, agentFeePaise: null, collectionRunId: run.id },
+              reason,
+            })),
+          ],
+        })
+        // One notice each, not one per stop: the run is the thing that moved.
+        // No pickupId, so neither links to a job screen.
+        const stopList = liveIds.join(', ')
+        await tx.agentNotice.createMany({
+          data: [
+            {
+              agentId: agent.id,
+              kind: 'job_reassigned_to_you',
+              message: `Run ${run.runNo} is now yours (${live.length} stop${live.length === 1 ? '' : 's'}: ${stopList}). The office moved it from ${fromName}.`,
+            },
+            {
+              agentId: run.agentId,
+              kind: 'job_reassigned_away',
+              message: `Run ${run.runNo} has been moved to ${agent.fullName} by the office. You no longer need to visit ${stopList}.`,
+            },
+          ],
+        })
+        return true
+      },
+      { timeout: TX_TIMEOUT_MS, maxWait: TX_MAX_WAIT_MS },
+    )
+    if (!moved) return { error: 'This run changed a moment ago. Reload and try again.' }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'RACE') {
+      return { error: 'A stop on this run changed a moment ago (the agent may have arrived). Reload and try again.' }
+    }
+    throw err
+  }
+  return { error: null }
+}
+
+export async function reassignCollectionRunAction(formData: FormData) {
+  const runId = String(formData.get('runId') ?? '')
+  if (!runId) redirect('/runs')
+  const { error } = await reassignCollectionRun({
+    runId,
+    agentId: String(formData.get('agentId') ?? ''),
+    reason: String(formData.get('reason') ?? ''),
+    vehicle: String(formData.get('vehicle') ?? ''),
+  })
+  if (error) redirect(`/runs/${runId}?error=${encodeURIComponent(error)}`)
+  revalidatePath('/runs')
+  revalidatePath('/dispatch')
+  revalidatePath('/pickups')
+  redirect(`/runs/${runId}?reassigned=1`)
 }
 
 export async function createCollectionRunAction(formData: FormData) {

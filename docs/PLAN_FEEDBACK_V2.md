@@ -1145,7 +1145,7 @@ used on both signup forms and onboarding; EPR labelled "(optional)".
 ### 12.5 Not built, deliberately
 
 - 🔶 **Web push to agents' phones** — the upgrade from in-app notices: `web-push` dependency, VAPID keys in Vercel, a subscription table, a `sw.js` push handler. iOS only for an installed PWA (16.4+); production-only, untestable on `npm run dev`.
-- Reassigning at `arrived`; reassigning a whole run.
+- Reassigning at `arrived`. (~~Reassigning a whole run~~ — built in round 3, §13.)
 - Offer expiry (FD7, 7 days) still counts from the FIRST presentation, not the latest round.
 - Negotiation analytics per agent (first vs final) — data in `offer_rounds`, no screen.
 - Admin edit of `Profile.agentVehicle`; prompting old phone-less accounts for a number.
@@ -1308,4 +1308,116 @@ wrong-role pairings bounce. Production smokes: after the push.
 - `RefreshWhile` polls every 10 s while waiting; there is still no push (12.5).
 - A vendor's own token could already read `offers.recommended_price_paise`
   (§11); the new tables are closed to it.
+
+## §13 Round 3 — the company's reaction to AF0–AF6 (2026-11-17, Aamir + Claude)
+
+The AF changes were presented on 2026-11-13 (a short-notice session). The
+company came back with two tweaks, typed in by Aamir rather than sent as a
+document, and the team added one feature of its own. **Not pushed at the time of
+writing** — see 13.5.
+
+### 13.1 Vehicle number: a blank field (company instruction — supersedes FD25's prefill)
+
+> "Do not have a default vehicle number already typed in. This can lead to
+> agents passing over it without actually checking … do not show a vehicle
+> number in grey text under it … let them simply type the vehicle number they
+> have on them now."
+
+- `apps/agent/src/components/vehicle-field.tsx` starts EMPTY. No prefill, no
+  "Changed from …" hint, and the placeholder is now "Type the number on your
+  vehicle" — the old placeholder `DL 1LR 4471` was Ravi's real seeded
+  registration, i.e. exactly the grey number they asked to remove. The format
+  error no longer quotes an example number either.
+- The prefill is no longer computed on `collect/page.tsx` or
+  `dropoff/confirm/page.tsx` at all, so it never reaches the browser (it was in
+  the page payload even when hidden).
+- 🔴 **Still mandatory at both steps (FD25 stands).** Client: `required` and the
+  confirm button stays disabled until the value parses. Server:
+  `parseVehicleReg` refuses blank/malformed in `confirmCollection` and the
+  drop-off action.
+- **The corrections log is unchanged.** The server still knows the vehicle on
+  record (run → profile at collection; each pickup's collection vehicle at
+  drop-off) and writes `vehicle_corrections` when the typed plate differs. Only
+  its meaning moves: "typed something different from the record", not "edited
+  the prefill".
+- ⚠ **Left alone, deliberately:** agent job detail still SHOWS the expected
+  vehicle (AF6 asked to "show and capture" it). The round-3 instruction is about
+  the input. If the company means "nowhere before collection", that is a
+  one-block removal in `job/[id]/page.tsx` plus its smoke assertion
+  (`'DL 01 LR 4471'` on `/job/PKP-2026-000102`).
+- Smoke: `/dropoff/confirm` no longer asserts the prefilled reg; it asserts the
+  new placeholder.
+
+### 13.2 Why "Reassign" failed in the 2026-11-13 demo
+
+Not a defect. The first demo flow Claude wrote said to reassign **PKP-102**
+without checking the seed, and the seed puts 102 on `RUN-…-5EED` — which is
+also `in_progress` (box BX-A001W loaded). FD21 refuses a single run stop by
+design. The correction to **PKP-112** came in a later message, after the flow
+being followed. Compounding it, the refusal on `/dispatch/[id]` was a line of
+small grey text.
+
+Fixes: the refusal is now a warning `Notice`, and for a run stop it links to
+the run ("Open RUN-… to reassign the run"). The demo uses **112** (dispatch to
+Ravi, then reassign to Neha) — driven over HTTP on 2026-11-17, every step green,
+then reset with `demo-stage --reset`.
+
+### 13.3 Reassign a whole run (team decision, additive)
+
+A single stop still never leaves its run. The whole run can now move, intact,
+to one other agent from `/runs/[id]` (**Reassign run** panel). Optional — no
+existing flow changed.
+
+- **Rule:** `runReassignEligibility()` in `@clbipp/core/assignment` (7 tests).
+  Only a `planned` run — once a box is loaded (`in_progress`) the batteries are
+  in the first agent's vehicle, the same line `cancelCollectionRun` draws.
+  Every live stop must itself pass `reassignEligibility` (scheduled/offered); one
+  stop at `arrived` or past collection holds the whole run, and the message
+  names it. Cancelled stops are ignored.
+- **Action:** `reassignCollectionRun` in `(admin)/runs/actions.ts`. Same shape
+  as `reassignPickup`: `requireAdmin` → reason ≥ 8 chars → agent re-verified at
+  the write (`agentStateAtConfirm` against the run's date: off duty, safety) →
+  one transaction: run `agentId` + vehicle (guarded on `planned` + old agent),
+  every live stop's `agentId` with the fee cleared (all or none — a count
+  mismatch rolls back), a status event per stop at its CURRENT status naming
+  both agents and **no reason**, one `run.reassign` audit row plus one
+  `pickup.reassign` per stop (same reason, so each pickup's Assignment history
+  stays whole), and ONE notice per agent (no `pickupId`, so no link). Five
+  round trips. Slots, order and date are kept.
+- **Vehicle:** the run's vehicle becomes the new agent's profile vehicle unless
+  the admin types one (optional field).
+- **Audit vocabulary:** `run.reassign` added to `ADMIN_AUDIT_ACTIONS` and
+  `REASON_REQUIRED_ACTIONS`, to `verify-seed`'s restated list, and labelled on
+  `/audit`.
+- The run page also explains why an open run CANNOT move (an `in_progress` run
+  showed nothing at all before — the seeded run is one, and `/dispatch/PKP-102`
+  now links to it). Smoke asserts `'is on the road'` on the seeded run.
+- `reassignEligibility`'s run-stop message now points at the run.
+
+**Verified over HTTP (2026-11-17, local dev against the shared project):** built
+a throwaway run (101 + 115, Ravi) → panel present → reassigned to Neha → run page
+names Neha; 101's history carries the reason; Ravi has the "moved to Neha"
+notice, `/run/<id>` 307s and `/job/115` 404s for him; Neha has "is now yours (2
+stops …", both 200. Refused: same agent again, a short reason. The seeded
+`in_progress` run shows the refusal and no form. Cleaned up: run cancelled,
+101 and 115 reset to `requested`. ⚠ The test runs' audit rows and notices remain
+until the next reseed.
+
+### 13.4 Not built
+
+- Reassigning an `in_progress` run (a mid-route hand-over of loaded boxes is a
+  physical custody event, not a reassignment).
+- Moving some stops of a run to another agent (split a run).
+- A run-level link in the agent notice (notices link to jobs only).
+
+### 13.5 State at the end of the session
+
+All three changes are in the working tree, **uncommitted and unpushed**. Checks
+run: `npm run test` 482 green (core 415, auth 40, engine 27) · `tsc --noEmit`
+clean for admin and agent · `npm run lint` clean for admin and agent · `npm run
+build` green with `ƒ Proxy (Middleware)` × 3. **Not yet run:** the local smokes
+(agent + admin at least; `lsof -ti:3000,3001,3002` first) — run them before
+pushing (`docs/BEFORE_YOU_PUSH.md`), then the production smokes after. Reseed
+(announced) before the next demo: the round-3 HTTP tests left notices and audit
+rows behind.
 

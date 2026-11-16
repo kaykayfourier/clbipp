@@ -88,11 +88,12 @@ button at the bottom; it always takes you to the next step.
 9. **Collection:** put one tag from your sheet on each line. No tag for a line?
    **Ask the office**, with the reason; collection stays blocked until they
    approve (the screen updates by itself, and there is a call button). If they
-   say "tag it", tag it. Enter the **vehicle number** (filled in from your run or
-   your profile; change it if you came in a different vehicle). Then the vendor's
-   signature and photos, and confirm.
-10. **Drop off at the hub** at the end of the day. The vehicle number is filled in
-    from the collection; change it if the load came in a different one.
+   say "tag it", tag it. Type the **vehicle number** off the plate of the vehicle
+   you are in. The field starts empty on purpose, so it is read, not tapped past.
+   Then the vendor's signature and photos, and confirm.
+10. **Drop off at the hub** at the end of the day. Type the vehicle number again,
+    off the plate. If it differs from the vehicle on record, the office sees the
+    change.
 
 **Notices.** Messages from the office appear at the top of your day view: a job
 moved to you or away from you, a new office price, a decision on an untagged
@@ -112,8 +113,9 @@ box you scanned.
   can be moved to another agent from its dispatch page: pick from the ranked list
   and give a reason (kept in the audit log, never shown to the vendor). Both
   agents get a notice in their app. Not possible once the agent has arrived, or
-  for a stop on an open run (cancel the run first). **Assignment history** on the
-  dispatch and pickup pages lists every assignment with who and why.
+  for a single stop on a run (the page links to the run instead). **Assignment
+  history** on the dispatch and pickup pages lists every assignment with who and
+  why.
 - **Price** (on a pickup's page). The engine's recommendation, the price offered
   now and the vendor's response, every office price (who set it, why, and when
   the agent presented it), and every negotiation round from the first offer to
@@ -122,7 +124,11 @@ box you scanned.
   the vendor has accepted.
 - **Runs.** A same-day route for one agent and one van. Pick the stops; requests
   get assigned to that agent, and accepted collections inspected by someone else
-  get that agent as their collector.
+  get that agent as their collector. **Reassign run** (on a run's page) moves the
+  whole run, with every stop and slot, to another agent: pick from the ranked
+  list, give a reason, optionally a vehicle (it defaults to the new agent's).
+  Only before the agent loads a box, and not if they are already at one of its
+  stops. Both agents get a notice; each stop's history shows the move.
 - **Tags.** Print sheets of tags for agents to carry. Look up any tag or box
   code to see the battery line, pickup and box it belongs to.
 - **Boxes.** Register reusable boxes and print their labels. Click a box to see
@@ -143,8 +149,9 @@ box you scanned.
   sends every change to the office). **Market** holds metal prices; **Audit**
   lists every office action.
 - **Vehicles.** A pickup's page shows the vehicle it was collected in and dropped
-  off in, and any change the agent made to the filled-in number. The hub check-in
-  page shows the batch's vehicle.
+  off in, and when the number the agent typed differs from the one on record
+  (their run or profile at collection, the collection vehicle at drop-off). The
+  hub check-in page shows the batch's vehicle.
 
 ## 5. Prices: where each number comes from
 
@@ -200,8 +207,9 @@ These are built as options or left open until the company decides:
    without a tag. Is a hard stop right, or should the agent be able to proceed and
    the office review afterwards?
 8. **Reassigning.** Allowed before the agent arrives, and for an offer not yet
-   collected. Should the office also be able to reassign a job the agent is
-   standing at, or a whole run?
+   collected; a whole run can move before a box is loaded. Should the office
+   also be able to reassign a job the agent is standing at, or a run already on
+   the road?
 
 ## 8. Testing with the demo data
 
@@ -223,7 +231,7 @@ day view read 0.
 | Pickup | Stage | Use it to try |
 |---|---|---|
 | 101 | requested | Dispatch a request; also groups with 115 into a run |
-| 102 | scheduled | Arrived → safety → intake, as Ravi |
+| 102 | scheduled | Arrived → safety → intake, as Ravi. ⚠ A stop on the seeded run (already on the road), so it CANNOT be reassigned — use 112 |
 | 103 | arrived | Intake and pricing (checklist already done); the offer screen before presenting; Reassign says why it cannot |
 | 104 | offered | Vendor accepts or declines; agent re-offers; office sets a price (admin Price panel); Reassign |
 | 105 | collected | Hub drop-off with the vehicle number; one line left untagged with the office's approval; its tagged line is in box BX-A001W |
@@ -232,7 +240,7 @@ day view read 0.
 | 108 | recovered | Certify |
 | 109 | certified | A finished certificate |
 | 110 | cancelled | Rebook a cancelled pickup |
-| 111, 112 | requested | Dispatch; 111 is far away (not grouped) |
+| 111, 112 | requested | Dispatch; 111 is far away (not grouped). 112: dispatch, then **reassign** |
 | 114 | requested | A rebooked pickup still carrying its old agent |
 | 115 | requested | Same-day group with 101 |
 | 116 | tested | Second life (see below) |
@@ -241,6 +249,14 @@ day view read 0.
 amount and a reason) → agent@test → 104 → Offer: the office price appears;
 present it → vendor declines → agent re-offers inside the limit → vendor
 accepts. The Price panel then shows every round.
+
+**To try a reassignment (112):** Admin → Dispatch → 112 → assign to Ravi →
+open 112 again → Reassign → Neha, with a reason. Ravi's day view loses the job
+and shows a notice; Neha's shows it. Not 102: it is a stop on a run.
+
+**To try reassigning a run:** Runs → New → tick 101 and 115 → Ravi → build →
+Reassign run → Neha, with a reason. (The seeded run cannot move: a box is
+already loaded, and its page says so.)
 
 **To try an untagged battery:** take a job to *offered* and have the vendor
 accept, then on the agent's collect screen → "No tag available? Ask the office"
